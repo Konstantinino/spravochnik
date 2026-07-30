@@ -1,0 +1,103 @@
+{
+  "questions": [
+    {
+      "id": 2001,
+      "question": "Свидетельство ОГРН (заявка на участие)",
+      "answer": "ОГРН — это основной государственный регистрационный номер, который получают все юридические лица и индивидуальные предприниматели в России при регистрации. Выдавали до 2012 года вместо листа записи",
+      "photos": [
+        "AgACAgIAAxkBAAJE42jk4dcuc8BwGMJz4Eww2xYRFSURAAJm9zEbIn4pS_SGXdQIYcQuAQADAgADeQADNgQ"
+      ],
+      "documents": []
+    },
+    {
+      "id": 2002,
+      "question": "Инструкции",
+      "answer": "",
+      "parent_id": null,
+      "has_children": true,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2003,
+      "question": "Регистрация на ЭТП РЭСТ",
+      "answer": "https://just.r-est.ru/disk/инструкция_для_поставщиков/Регистрация.pdf",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2004,
+      "question": "Аккредитация на ЭТП РЭСТ",
+      "answer": "https://just.r-est.ru/disk/инструкция_для_поставщиков/Аккредитация.pdf",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2005,
+      "question": "Пополнение ДС на ЭТП РЭСТ",
+      "answer": "https://just.r-est.ru/disk/инструкция_для_поставщиков/Пополнение%20денежных%20средств.pdf",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2006,
+      "question": "Вывод ДС на ЭТП РЭСТ",
+      "answer": "https://just.r-est.ru/disk/инструкция_для_поставщиков/Вывод%20денежных%20средств.pdf",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2007,
+      "question": "Подача заявки на ЭТП РЭСТ. Технически",
+      "answer": "https://just.r-est.ru/disk/инструкция_для_поставщиков/Подача%20заявки.pdf",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2008,
+      "question": "Отзыв и переподача заявки на ЭТП РЭСТ",
+      "answer": "https://just.r-est.ru/disk/инструкция_для_поставщиков/Отзыв%20заявки%20и%20переподача%20заявки.pdf",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2009,
+      "question": "Подписание договора на ЭТП РЭСТ",
+      "answer": "https://just.r-est.ru/disk/инструкция_для_поставщиков/Подписание%20договора.pdf",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2010,
+      "question": "Добавление ЭЦП в учётную запись на ЭТП РЭСТ",
+      "answer": "https://just.r-est.ru/disk/инструкция_для_поставщиков/Добавление%20ЭЦП.pdf",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    },
+    {
+      "id": 2011,
+      "question": "Запрос закрывающих документов на ЭТП РЭСТ",
+      "answer": "https://r-est.ru/booking-documents",
+      "parent_id": 2002,
+      "has_children": false,
+      "photos": [],
+      "documents": []
+    }
+  ]
+}

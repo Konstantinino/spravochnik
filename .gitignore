@@ -1,0 +1,19 @@
+# Зависимости и сборка
+node_modules/
+app/node_modules/
+
+# Артефакты Vite / Electron
+app/dist/
+app/dist-electron/
+
+# Установщик и распакованная сборка (тяжёлые файлы)
+app/release/
+
+# Логи и служебное
+*.log
+.DS_Store
+Thumbs.db
+*.local
+
+# Временная ASCII-сборка
+C:/spravochnik-build/

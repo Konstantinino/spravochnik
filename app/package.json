@@ -1,0 +1,73 @@
+{
+  "name": "spravochnik",
+  "version": "1.0.0",
+  "description": "Корпоративный справочник",
+  "main": "dist-electron/main.js",
+  "author": "Spravochnik",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview",
+    "electron:dev": "vite",
+    "dist": "npm run build && electron-builder --win nsis",
+    "dist:ascii": "node scripts/dist-ascii.js",
+    "pack": "npm run build && electron-builder --win dir"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "electron": "^35.2.1",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.3",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "ru.rest.spravochnik",
+    "productName": "Spravochnik",
+    "executableName": "Spravochnik",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/data",
+        "to": "data",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Spravochnik-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Spravochnik",
+      "installerLanguages": ["ru_RU"],
+      "language": "1049"
+    }
+  }
+}

@@ -5,6 +5,32 @@ export type DepartmentId =
   | 'spp'
   | 'templates'
 
+export type UserRole = 'user' | 'editor' | 'admin'
+
+export interface PublicUser {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+}
+
+export type SyncStatusCode =
+  | 'idle'
+  | 'no_token'
+  | 'connecting'
+  | 'syncing'
+  | 'uploading'
+  | 'up_to_date'
+  | 'pending'
+  | 'error'
+
+export interface SyncStatus {
+  code: SyncStatusCode
+  label: string
+  detail?: string
+  hasPendingChanges: boolean
+}
+
 export interface GuideDocument {
   file_id: string
   file_name: string
@@ -65,3 +91,9 @@ export const DEPARTMENTS: Department[] = [
     listKey: 'templates',
   },
 ]
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  user: 'Читатель',
+  editor: 'Редактор',
+  admin: 'Админ',
+}

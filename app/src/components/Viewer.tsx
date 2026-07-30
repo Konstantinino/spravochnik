@@ -5,13 +5,15 @@ import { isTelegramFileId, mediaSrcFromMarkdownUrl } from '../lib/markdown'
 
 interface ViewerProps {
   item: GuideItem | null
+  canEdit: boolean
+  onEdit: () => void
 }
 
 function MediaUnavailable({ label }: { label: string }) {
   return <div className="media-unavailable">{label}</div>
 }
 
-export function Viewer({ item }: ViewerProps) {
+export function Viewer({ item, canEdit, onEdit }: ViewerProps) {
   if (!item) {
     return (
       <div className="viewer viewer--empty">
@@ -30,7 +32,14 @@ export function Viewer({ item }: ViewerProps) {
 
   return (
     <article className="viewer">
-      <h1 className="viewer__title">{item.question}</h1>
+      <div className="viewer__header">
+        <h1 className="viewer__title">{item.question}</h1>
+        {canEdit && (
+          <button type="button" className="btn btn-secondary" onClick={onEdit}>
+            Изменить
+          </button>
+        )}
+      </div>
       <div className="viewer__body markdown-body">
         {item.answer?.trim() ? (
           <ReactMarkdown

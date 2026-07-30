@@ -1,39 +1,79 @@
 import { useEffect, useRef, useState } from 'react'
-import type { GuideItem } from '../types'
+import type { DepartmentId, GuideItem } from '../types'
+import { DEPARTMENTS } from '../types'
 import { getFolders } from '../lib/data'
 
-interface AddModalProps {
+interface TopicEditorModalProps {
   open: boolean
+  mode: 'add' | 'edit'
   items: GuideItem[]
+  departmentId: DepartmentId
+  initial?: GuideItem | null
   onClose: () => void
   onSave: (payload: {
+    departmentId: DepartmentId
     question: string
     answer: string
     parent_id: number | null
+    id?: number
   }) => Promise<void>
+  onDepartmentPreview: (id: DepartmentId) => Promise<GuideItem[]>
 }
 
-export function AddModal({ open, items, onClose, onSave }: AddModalProps) {
+export function TopicEditorModal({
+  open,
+  mode,
+  items,
+  departmentId,
+  initial,
+  onClose,
+  onSave,
+  onDepartmentPreview,
+}: TopicEditorModalProps) {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
   const [parentId, setParentId] = useState<string>('')
+  const [targetDept, setTargetDept] = useState<DepartmentId>(departmentId)
+  const [folderItems, setFolderItems] = useState<GuideItem[]>(items)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    if (open) {
-      setQuestion('')
-      setAnswer('')
-      setParentId('')
-      setError(null)
-      setSaving(false)
+    if (!open) return
+    setQuestion(initial?.question ?? '')
+    setAnswer(initial?.answer ?? '')
+    setParentId(initial?.parent_id != null ? String(initial.parent_id) : '')
+    setTargetDept(departmentId)
+    setFolderItems(items)
+    setError(null)
+    setSaving(false)
+  }, [open, initial, departmentId, items])
+
+  useEffect(() => {
+    if (!open || mode === 'edit') return
+    let cancelled = false
+    void (async () => {
+      try {
+        const next = await onDepartmentPreview(targetDept)
+        if (!cancelled) {
+          setFolderItems(next)
+          setParentId('')
+        }
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-  }, [open])
+  }, [targetDept, open, mode, onDepartmentPreview])
 
   if (!open) return null
 
-  const folders = getFolders(items)
+  const folders = getFolders(folderItems)
+  const deptLabel =
+    DEPARTMENTS.find((d) => d.id === targetDept)?.label ?? 'Отдел'
 
   async function insertPhoto() {
     setError(null)
@@ -71,9 +111,11 @@ export function AddModal({ open, items, onClose, onSave }: AddModalProps) {
     setError(null)
     try {
       await onSave({
+        departmentId: targetDept,
         question: question.trim(),
         answer,
         parent_id: parentId ? Number(parentId) : null,
+        id: initial?.id,
       })
       onClose()
     } catch (err) {
@@ -88,16 +130,32 @@ export function AddModal({ open, items, onClose, onSave }: AddModalProps) {
         className="modal"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="add-modal-title"
+        aria-labelledby="topic-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal__header">
-          <h2 id="add-modal-title">Новая тема</h2>
+          <h2 id="topic-modal-title">{mode === 'add' ? 'Новая тема' : 'Редактирование'}</h2>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Закрыть">
             ✕
           </button>
         </div>
         <form className="modal__body" onSubmit={handleSubmit}>
+          {mode === 'add' && (
+            <label className="field">
+              <span>Отдел</span>
+              <select
+                value={targetDept}
+                onChange={(e) => setTargetDept(e.target.value as DepartmentId)}
+              >
+                {DEPARTMENTS.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <label className="field">
             <span>Название</span>
             <input
@@ -109,9 +167,9 @@ export function AddModal({ open, items, onClose, onSave }: AddModalProps) {
           </label>
 
           <label className="field">
-            <span>Папка (необязательно)</span>
+            <span>Размещение</span>
             <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
-              <option value="">Корень отдела</option>
+              <option value="">{deptLabel}</option>
               {folders.map((f) => (
                 <option key={f.id} value={String(f.id)}>
                   {f.question}

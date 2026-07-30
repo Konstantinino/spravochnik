@@ -10,34 +10,40 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-
-const DATA_FILES = [
-  'guide.json',
-  'guide_lawyers.json',
-  'guide_managers.json',
-  'guide_spp.json',
-  'templates.json',
-] as const
-
-type DepartmentId =
-  | 'support'
-  | 'lawyers'
-  | 'managers'
-  | 'spp'
-  | 'templates'
-
-const DEPARTMENTS: {
-  id: DepartmentId
-  label: string
-  fileName: string
-  listKey: 'questions' | 'templates'
-}[] = [
-  { id: 'support', label: 'Тех. поддержка', fileName: 'guide.json', listKey: 'questions' },
-  { id: 'lawyers', label: 'Юристы', fileName: 'guide_lawyers.json', listKey: 'questions' },
-  { id: 'managers', label: 'Менеджеры', fileName: 'guide_managers.json', listKey: 'questions' },
-  { id: 'spp', label: 'СПП', fileName: 'guide_spp.json', listKey: 'questions' },
-  { id: 'templates', label: 'Шаблоны', fileName: 'templates.json', listKey: 'templates' },
-]
+import {
+  DATA_FILES,
+  DEPARTMENTS,
+  departmentById,
+  getMediaDir,
+  getSeedDataDir,
+  getUserDataRoot,
+  type DepartmentId,
+  type UserRole,
+} from './paths'
+import {
+  addWhitelistEmail,
+  clearSession,
+  ensureAuthFiles,
+  getCurrentUser,
+  getWhitelist,
+  listUsersPublic,
+  loginUser,
+  readSettings,
+  registerUser,
+  removeWhitelistEmail,
+  requireRole,
+  setWhitelist,
+  setYandexToken,
+  updateUserRole,
+} from './auth-store'
+import {
+  getSyncStatus,
+  markLocalChange,
+  onSyncStatus,
+  pullFromYandex,
+  pushToYandex,
+  refreshStatusFromSettings,
+} from './yandex-sync'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -51,21 +57,6 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ])
-
-function getUserDataRoot(): string {
-  return path.join(app.getPath('userData'), 'Spravochnik')
-}
-
-function getMediaDir(): string {
-  return path.join(getUserDataRoot(), 'media')
-}
-
-function getSeedDataDir(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'data')
-  }
-  return path.join(__dirname, '../resources/data')
-}
 
 function ensureDataReady(): void {
   const root = getUserDataRoot()
@@ -87,12 +78,7 @@ function ensureDataReady(): void {
       }
     }
   }
-}
-
-function departmentById(id: DepartmentId) {
-  const dept = DEPARTMENTS.find((d) => d.id === id)
-  if (!dept) throw new Error(`Неизвестный отдел: ${id}`)
-  return dept
+  ensureAuthFiles()
 }
 
 function readGuideFile(fileName: string): unknown {
@@ -112,7 +98,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 1000,
     minHeight: 700,
-    title: 'Справочник',
+    title: 'REST INFO',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -140,6 +126,77 @@ function registerIpc(): void {
 
   ipcMain.handle('get-data-path', () => getUserDataRoot())
 
+  ipcMain.handle('auth:current-user', () => getCurrentUser())
+  ipcMain.handle('auth:login', (_e, payload: { email: string; password: string }) =>
+    loginUser(payload),
+  )
+  ipcMain.handle(
+    'auth:register',
+    (_e, payload: { name: string; email: string; password: string; passwordConfirm: string }) => {
+      if (payload.password !== payload.passwordConfirm) {
+        throw new Error('Пароли не совпадают')
+      }
+      return registerUser(payload)
+    },
+  )
+  ipcMain.handle('auth:logout', () => {
+    clearSession()
+    return null
+  })
+
+  ipcMain.handle('admin:list-users', () => {
+    requireRole(getCurrentUser(), ['admin'])
+    return listUsersPublic()
+  })
+  ipcMain.handle('admin:set-role', (_e, payload: { userId: string; role: UserRole }) => {
+    requireRole(getCurrentUser(), ['admin'])
+    const users = updateUserRole(payload.userId, payload.role)
+    markLocalChange()
+    return users
+  })
+  ipcMain.handle('admin:get-whitelist', () => {
+    requireRole(getCurrentUser(), ['admin'])
+    return getWhitelist()
+  })
+  ipcMain.handle('admin:set-whitelist', (_e, emails: string[]) => {
+    requireRole(getCurrentUser(), ['admin'])
+    const list = setWhitelist(emails)
+    markLocalChange()
+    return list
+  })
+  ipcMain.handle('admin:add-whitelist', (_e, email: string) => {
+    requireRole(getCurrentUser(), ['admin'])
+    const list = addWhitelistEmail(email)
+    markLocalChange()
+    return list
+  })
+  ipcMain.handle('admin:remove-whitelist', (_e, email: string) => {
+    requireRole(getCurrentUser(), ['admin'])
+    const list = removeWhitelistEmail(email)
+    markLocalChange()
+    return list
+  })
+  ipcMain.handle('admin:get-settings', () => {
+    requireRole(getCurrentUser(), ['admin'])
+    const s = readSettings()
+    return { yandexToken: s.yandexToken, hasPendingChanges: s.hasPendingChanges }
+  })
+  ipcMain.handle('admin:set-yandex-token', (_e, token: string) => {
+    requireRole(getCurrentUser(), ['admin'])
+    const s = setYandexToken(token)
+    refreshStatusFromSettings()
+    void pullFromYandex()
+    return { yandexToken: s.yandexToken, hasPendingChanges: s.hasPendingChanges }
+  })
+
+  ipcMain.handle('sync:status', () => getSyncStatus())
+  ipcMain.handle('sync:pull', async () => pullFromYandex())
+  ipcMain.handle('sync:push', async () => {
+    const user = getCurrentUser()
+    requireRole(user, ['editor', 'admin'])
+    return pushToYandex()
+  })
+
   ipcMain.handle('load-guide', (_event, departmentId: DepartmentId) => {
     const dept = departmentById(departmentId)
     return readGuideFile(dept.fileName)
@@ -162,6 +219,7 @@ function registerIpc(): void {
         }
       },
     ) => {
+      requireRole(getCurrentUser(), ['editor', 'admin'])
       const dept = departmentById(payload.departmentId)
       const data = readGuideFile(dept.fileName) as Record<string, unknown>
       const listKey = dept.listKey
@@ -191,11 +249,55 @@ function registerIpc(): void {
 
       data[listKey] = list
       writeGuideFile(dept.fileName, data)
+      markLocalChange()
+      return data
+    },
+  )
+
+  ipcMain.handle(
+    'update-item',
+    (
+      _event,
+      payload: {
+        departmentId: DepartmentId
+        item: {
+          id: number
+          question: string
+          answer: string
+          parent_id?: number | null
+          has_children?: boolean
+          photos?: string[]
+          documents?: { file_id: string; file_name: string }[]
+        }
+      },
+    ) => {
+      requireRole(getCurrentUser(), ['editor', 'admin'])
+      const dept = departmentById(payload.departmentId)
+      const data = readGuideFile(dept.fileName) as Record<string, unknown>
+      const listKey = dept.listKey
+      const list = (data[listKey] as Array<Record<string, unknown>>) || []
+      const idx = list.findIndex((item) => item.id === payload.item.id)
+      if (idx < 0) throw new Error('Тема не найдена')
+
+      list[idx] = {
+        ...list[idx],
+        question: payload.item.question,
+        answer: payload.item.answer,
+        parent_id: payload.item.parent_id ?? list[idx].parent_id ?? null,
+        has_children: payload.item.has_children ?? list[idx].has_children ?? false,
+        photos: payload.item.photos ?? list[idx].photos ?? [],
+        documents: payload.item.documents ?? list[idx].documents ?? [],
+      }
+
+      data[listKey] = list
+      writeGuideFile(dept.fileName, data)
+      markLocalChange()
       return data
     },
   )
 
   ipcMain.handle('pick-and-save-image', async (event) => {
+    requireRole(getCurrentUser(), ['editor', 'admin'])
     const win = BrowserWindow.fromWebContents(event.sender)
     const options = {
       title: 'Выберите фото',
@@ -232,15 +334,22 @@ function registerIpc(): void {
     }
     return `spravochnik://${cleaned}`
   })
+
+  // Forward sync status to all windows
+  onSyncStatus((status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('sync:status-changed', status)
+    }
+  })
 }
 
 app.whenReady().then(() => {
   ensureDataReady()
+  refreshStatusFromSettings()
 
   protocol.handle('spravochnik', (request) => {
     try {
       const url = new URL(request.url)
-      // spravochnik://media/filename.jpg  -> host=media, pathname=/filename.jpg
       const relative = path.posix.join(url.hostname, url.pathname.replace(/^\/+/, ''))
       if (!relative.startsWith('media/')) {
         return new Response('Not found', { status: 404 })
@@ -257,6 +366,11 @@ app.whenReady().then(() => {
 
   registerIpc()
   createWindow()
+
+  // Background sync after UI is up
+  setTimeout(() => {
+    void pullFromYandex()
+  }, 800)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

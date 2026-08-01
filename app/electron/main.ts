@@ -35,8 +35,11 @@ import {
   setWhitelist,
   setYandexToken,
   updateUserRole,
+  writeSession,
+  clearEphemeralSessionOnStartup,
 } from './auth-store'
 import {
+  discardLocalChanges,
   getSyncStatus,
   markLocalChange,
   onSyncStatus,
@@ -127,21 +130,38 @@ function registerIpc(): void {
   ipcMain.handle('get-data-path', () => getUserDataRoot())
 
   ipcMain.handle('auth:current-user', () => getCurrentUser())
-  ipcMain.handle('auth:login', (_e, payload: { email: string; password: string }) =>
-    loginUser(payload),
+  ipcMain.handle(
+    'auth:login',
+    (_e, payload: { email: string; password: string; rememberMe?: boolean }) =>
+      loginUser(payload),
   )
   ipcMain.handle(
     'auth:register',
-    (_e, payload: { name: string; email: string; password: string; passwordConfirm: string }) => {
+    (
+      _e,
+      payload: {
+        name: string
+        email: string
+        password: string
+        passwordConfirm: string
+        rememberMe?: boolean
+      },
+    ) => {
       if (payload.password !== payload.passwordConfirm) {
         throw new Error('Пароли не совпадают')
       }
-      return registerUser(payload)
+      const user = registerUser(payload)
+      writeSession(user.id, Boolean(payload.rememberMe))
+      return user
     },
   )
   ipcMain.handle('auth:logout', () => {
     clearSession()
     return null
+  })
+  ipcMain.handle('sync:has-token', () => {
+    const s = readSettings()
+    return { hasToken: Boolean(s.yandexToken.trim()) }
   })
 
   ipcMain.handle('admin:list-users', () => {
@@ -179,18 +199,31 @@ function registerIpc(): void {
   ipcMain.handle('admin:get-settings', () => {
     requireRole(getCurrentUser(), ['admin'])
     const s = readSettings()
-    return { yandexToken: s.yandexToken, hasPendingChanges: s.hasPendingChanges }
+    return { hasPendingChanges: s.hasPendingChanges, hasToken: Boolean(s.yandexToken) }
   })
-  ipcMain.handle('admin:set-yandex-token', (_e, token: string) => {
-    requireRole(getCurrentUser(), ['admin'])
+
+  // Token is set before login so whitelist/accounts can sync from Disk first
+  ipcMain.handle('sync:set-token', (_e, token: string) => {
     const s = setYandexToken(token)
     refreshStatusFromSettings()
     void pullFromYandex()
-    return { yandexToken: s.yandexToken, hasPendingChanges: s.hasPendingChanges }
+    return { hasToken: Boolean(s.yandexToken), hasPendingChanges: s.hasPendingChanges }
+  })
+  ipcMain.handle('sync:get-token-masked', () => {
+    const s = readSettings()
+    const t = s.yandexToken
+    if (!t) return { hasToken: false, masked: '' }
+    const masked = t.length <= 8 ? '••••••••' : `${t.slice(0, 4)}…${t.slice(-4)}`
+    return { hasToken: true, masked }
   })
 
   ipcMain.handle('sync:status', () => getSyncStatus())
   ipcMain.handle('sync:pull', async () => pullFromYandex())
+  ipcMain.handle('sync:discard', async () => {
+    const user = getCurrentUser()
+    requireRole(user, ['editor', 'admin'])
+    return discardLocalChanges()
+  })
   ipcMain.handle('sync:push', async () => {
     const user = getCurrentUser()
     requireRole(user, ['editor', 'admin'])
@@ -296,6 +329,52 @@ function registerIpc(): void {
     },
   )
 
+  ipcMain.handle(
+    'delete-item',
+    (
+      _event,
+      payload: {
+        departmentId: DepartmentId
+        id: number
+      },
+    ) => {
+      requireRole(getCurrentUser(), ['admin'])
+      const dept = departmentById(payload.departmentId)
+      const data = readGuideFile(dept.fileName) as Record<string, unknown>
+      const listKey = dept.listKey
+      const list = (data[listKey] as Array<Record<string, unknown>>) || []
+      const target = list.find((item) => item.id === payload.id)
+      if (!target) throw new Error('Тема не найдена')
+
+      const toRemove = new Set<number>()
+      const collect = (id: number) => {
+        toRemove.add(id)
+        for (const item of list) {
+          if (item.parent_id === id && typeof item.id === 'number') {
+            collect(item.id)
+          }
+        }
+      }
+      collect(payload.id)
+
+      const parentId = target.parent_id
+      const next = list.filter((item) => typeof item.id !== 'number' || !toRemove.has(item.id))
+
+      if (parentId != null) {
+        const parent = next.find((item) => item.id === parentId)
+        if (parent) {
+          const stillHasChildren = next.some((item) => item.parent_id === parentId)
+          parent.has_children = stillHasChildren
+        }
+      }
+
+      data[listKey] = next
+      writeGuideFile(dept.fileName, data)
+      markLocalChange()
+      return data
+    },
+  )
+
   ipcMain.handle('pick-and-save-image', async (event) => {
     requireRole(getCurrentUser(), ['editor', 'admin'])
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -345,6 +424,7 @@ function registerIpc(): void {
 
 app.whenReady().then(() => {
   ensureDataReady()
+  clearEphemeralSessionOnStartup()
   refreshStatusFromSettings()
 
   protocol.handle('spravochnik', (request) => {

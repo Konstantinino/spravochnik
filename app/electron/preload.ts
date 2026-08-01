@@ -22,14 +22,20 @@ contextBridge.exposeInMainWorld('spravochnik', {
   addWhitelist: (email: string) => ipcRenderer.invoke('admin:add-whitelist', email),
   removeWhitelist: (email: string) => ipcRenderer.invoke('admin:remove-whitelist', email),
   getAdminSettings: () => ipcRenderer.invoke('admin:get-settings'),
-  setYandexToken: (token: string) => ipcRenderer.invoke('admin:set-yandex-token', token),
+
+  setYandexToken: (token: string) => ipcRenderer.invoke('sync:set-token', token),
+  getTokenMasked: () => ipcRenderer.invoke('sync:get-token-masked'),
+  hasYandexToken: () => ipcRenderer.invoke('sync:has-token'),
 
   getSyncStatus: () => ipcRenderer.invoke('sync:status'),
   pullSync: () => ipcRenderer.invoke('sync:pull'),
+  discardSync: () => ipcRenderer.invoke('sync:discard'),
   pushSync: () => ipcRenderer.invoke('sync:push'),
   onSyncStatus: (callback: (status: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
     ipcRenderer.on('sync:status-changed', listener)
     return () => ipcRenderer.removeListener('sync:status-changed', listener)
   },
+
+  deleteItem: (payload: unknown) => ipcRenderer.invoke('delete-item', payload),
 })

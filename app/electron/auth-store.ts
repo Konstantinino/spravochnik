@@ -39,6 +39,8 @@ export interface PublicUser {
 
 export interface SessionData {
   userId: string
+  /** If false, session is cleared on next app start */
+  persist: boolean
 }
 
 function accountsPath(): string {
@@ -193,28 +195,45 @@ export function registerUser(input: {
 
   accounts.users.push(user)
   writeAccounts(accounts)
-  writeSession(user.id)
   return toPublicUser(user)
 }
 
-export function loginUser(input: { email: string; password: string }): PublicUser {
+export function loginUser(input: {
+  email: string
+  password: string
+  rememberMe?: boolean
+}): PublicUser {
   const email = normalizeEmail(input.email)
   const accounts = readAccounts()
   const user = accounts.users.find((u) => normalizeEmail(u.email) === email)
   if (!user || !verifyPassword(input.password, user.salt, user.passwordHash)) {
     throw new Error('Неверная почта или пароль')
   }
-  writeSession(user.id)
+  writeSession(user.id, Boolean(input.rememberMe))
   return toPublicUser(user)
 }
 
-export function writeSession(userId: string): void {
-  const data: SessionData = { userId }
+export function writeSession(userId: string, persist: boolean): void {
+  const data: SessionData = { userId, persist }
   fs.writeFileSync(sessionPath(), JSON.stringify(data, null, 2), 'utf8')
 }
 
 export function clearSession(): void {
   if (fs.existsSync(sessionPath())) fs.unlinkSync(sessionPath())
+}
+
+/** Drop session from previous run if user did not check «Запомнить меня». */
+export function clearEphemeralSessionOnStartup(): void {
+  if (!fs.existsSync(sessionPath())) return
+  try {
+    const session = JSON.parse(fs.readFileSync(sessionPath(), 'utf8')) as SessionData
+    // Legacy sessions without persist → keep (treat as remembered)
+    if (session.persist === false) {
+      clearSession()
+    }
+  } catch {
+    clearSession()
+  }
 }
 
 export function getCurrentUser(): PublicUser | null {

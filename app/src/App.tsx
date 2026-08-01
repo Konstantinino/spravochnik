@@ -8,6 +8,7 @@ import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
 import { getItems } from './lib/data'
 import { searchItems } from './lib/search'
+import { loadSavedDepartment, saveDepartment } from './lib/prefs'
 import type { DepartmentId, GuideFile, GuideItem, PublicUser, SyncStatus } from './types'
 import { DEPARTMENTS } from './types'
 
@@ -25,17 +26,36 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [query, setQuery] = useState('')
   const [editorOpen, setEditorOpen] = useState(false)
-  const [editorMode, setEditorMode] = useState<'add' | 'edit'>('add')
+  const [editorParentId, setEditorParentId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSync)
   const [pushing, setPushing] = useState(false)
+  const [discarding, setDiscarding] = useState(false)
 
   useEffect(() => {
-    void window.spravochnik.getCurrentUser().then(setUser)
+    void window.spravochnik.getCurrentUser().then((u) => {
+      if (u) {
+        const saved = loadSavedDepartment(u.id)
+        if (saved) setDepartmentId(saved)
+      }
+      setUser(u)
+    })
     void window.spravochnik.getSyncStatus().then(setSyncStatus)
     return window.spravochnik.onSyncStatus(setSyncStatus)
   }, [])
+
+  function handleDepartmentChange(id: DepartmentId) {
+    setDepartmentId(id)
+    if (user) saveDepartment(user.id, id)
+  }
+
+  function handleAuthenticated(u: PublicUser) {
+    const saved = loadSavedDepartment(u.id)
+    if (saved) setDepartmentId(saved)
+    else setDepartmentId('support')
+    setUser(u)
+  }
 
   const load = useCallback(async (id: DepartmentId) => {
     setLoading(true)
@@ -80,11 +100,7 @@ export default function App() {
   }, [items, query])
 
   const canEdit = user?.role === 'editor' || user?.role === 'admin'
-
-  const loadDeptItems = useCallback(async (id: DepartmentId) => {
-    const data = await window.spravochnik.loadGuide(id)
-    return getItems(data)
-  }, [])
+  const isAdmin = user?.role === 'admin'
 
   async function handleSave(payload: {
     departmentId: DepartmentId
@@ -93,28 +109,6 @@ export default function App() {
     parent_id: number | null
     id?: number
   }) {
-    if (editorMode === 'edit' && payload.id != null) {
-      const data = await window.spravochnik.updateItem({
-        departmentId: payload.departmentId,
-        item: {
-          id: payload.id,
-          question: payload.question,
-          answer: payload.answer,
-          parent_id: payload.parent_id,
-          has_children: selected?.has_children ?? false,
-          photos: selected?.photos ?? [],
-          documents: selected?.documents ?? [],
-        },
-      })
-      if (payload.departmentId === departmentId) {
-        setGuide(data)
-        setSelectedId(payload.id)
-      } else {
-        setDepartmentId(payload.departmentId)
-      }
-      return
-    }
-
     const data = await window.spravochnik.saveItem({
       departmentId: payload.departmentId,
       item: {
@@ -137,6 +131,29 @@ export default function App() {
     }
   }
 
+  async function handleInlineSave(payload: { question: string; answer: string }) {
+    if (!selected) return
+    const data = await window.spravochnik.updateItem({
+      departmentId,
+      item: {
+        ...selected,
+        question: payload.question,
+        answer: payload.answer,
+      },
+    })
+    setGuide(data)
+  }
+
+  async function handleDelete() {
+    if (!selected) return
+    const data = await window.spravochnik.deleteItem({
+      departmentId,
+      id: selected.id,
+    })
+    setGuide(data)
+    setSelectedId(null)
+  }
+
   async function handlePush() {
     setPushing(true)
     try {
@@ -146,6 +163,28 @@ export default function App() {
       setError(e instanceof Error ? e.message : 'Ошибка отправки')
     } finally {
       setPushing(false)
+    }
+  }
+
+  async function handleDiscard() {
+    if (
+      !window.confirm(
+        'Отменить локальные изменения? Данные будут заменены версией с Яндекс.Диска.',
+      )
+    ) {
+      return
+    }
+    setDiscarding(true)
+    try {
+      const status = await window.spravochnik.discardSync()
+      setSyncStatus(status)
+      const data = await window.spravochnik.loadGuide(departmentId)
+      setGuide(data)
+      setSelectedId(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка отмены')
+    } finally {
+      setDiscarding(false)
     }
   }
 
@@ -160,7 +199,7 @@ export default function App() {
   }
 
   if (!user) {
-    return <AuthScreen onAuthenticated={setUser} />
+    return <AuthScreen onAuthenticated={handleAuthenticated} />
   }
 
   if (view === 'settings') {
@@ -173,23 +212,29 @@ export default function App() {
     <div className="app-shell">
       <Header
         departmentId={departmentId}
-        onDepartmentChange={setDepartmentId}
-        onAdd={() => {
-          setEditorMode('add')
-          setEditorOpen(true)
-        }}
+        onDepartmentChange={handleDepartmentChange}
         onOpenSettings={() => setView('settings')}
         user={user}
         syncStatus={syncStatus}
         canEdit={!!canEdit}
         onLogout={() => void handleLogout()}
         onPush={() => void handlePush()}
+        onDiscard={() => void handleDiscard()}
         pushing={pushing}
+        discarding={discarding}
       />
 
       <div className="app-body">
         <aside className="sidebar">
-          <Search value={query} onChange={setQuery} />
+          <Search
+            value={query}
+            onChange={setQuery}
+            canAdd={!!canEdit}
+            onAdd={() => {
+              setEditorParentId(null)
+              setEditorOpen(true)
+            }}
+          />
           <div className="sidebar__list">
             {loading ? (
               <div className="empty-hint">Загрузка…</div>
@@ -210,9 +255,15 @@ export default function App() {
         <main className="content">
           <Viewer
             item={selected}
+            items={items}
             canEdit={!!canEdit && !!selected}
-            onEdit={() => {
-              setEditorMode('edit')
+            isAdmin={!!isAdmin && !!selected}
+            onSelect={setSelectedId}
+            onSave={handleInlineSave}
+            onDelete={handleDelete}
+            onAddSubtopic={() => {
+              if (!selected) return
+              setEditorParentId(selected.id)
               setEditorOpen(true)
             }}
           />
@@ -221,13 +272,11 @@ export default function App() {
 
       <TopicEditorModal
         open={editorOpen}
-        mode={editorMode}
-        items={items}
+        mode="add"
         departmentId={departmentId}
-        initial={editorMode === 'edit' ? selected : null}
+        parentId={editorParentId}
         onClose={() => setEditorOpen(false)}
         onSave={handleSave}
-        onDepartmentPreview={loadDeptItems}
       />
     </div>
   )

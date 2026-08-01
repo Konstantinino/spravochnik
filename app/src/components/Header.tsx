@@ -5,27 +5,29 @@ import { DEPARTMENTS, ROLE_LABELS } from '../types'
 interface HeaderProps {
   departmentId: DepartmentId
   onDepartmentChange: (id: DepartmentId) => void
-  onAdd: () => void
   onOpenSettings: () => void
   user: PublicUser
   syncStatus: SyncStatus
   canEdit: boolean
   onLogout: () => void
   onPush: () => void
+  onDiscard: () => void
   pushing: boolean
+  discarding: boolean
 }
 
 export function Header({
   departmentId,
   onDepartmentChange,
-  onAdd,
   onOpenSettings,
   user,
   syncStatus,
   canEdit,
   onLogout,
   onPush,
+  onDiscard,
   pushing,
+  discarding,
 }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -39,13 +41,48 @@ export function Header({
   }, [])
 
   const showPush = canEdit && syncStatus.hasPendingChanges
+  const showDiscard = canEdit && syncStatus.hasPendingChanges
 
   return (
     <header className="app-header">
       <div className="app-header__brand">REST INFO</div>
 
       <div className="app-header__sync" title={syncStatus.detail || syncStatus.label}>
-        {syncStatus.label}
+        <span className="app-header__sync-label">{syncStatus.label}</span>
+        {showPush && (
+          <button
+            type="button"
+            className="icon-btn icon-btn--accent icon-btn--sm"
+            onClick={onPush}
+            disabled={pushing || discarding}
+            title="Отправить изменения на Яндекс.Диск"
+            aria-label="Отправить изменения"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6v3l4-4-4-4v3z"
+              />
+            </svg>
+          </button>
+        )}
+        {showDiscard && (
+          <button
+            type="button"
+            className="icon-btn icon-btn--sm"
+            onClick={onDiscard}
+            disabled={pushing || discarding}
+            title="Отменить локальные изменения (подтянуть с Диска)"
+            aria-label="Отменить локальные изменения"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       <label className="app-header__dept">
@@ -64,30 +101,6 @@ export function Header({
       </label>
 
       <div className="app-header__actions">
-        {showPush && (
-          <button
-            type="button"
-            className="icon-btn icon-btn--accent"
-            onClick={onPush}
-            disabled={pushing}
-            title="Отправить изменения на Яндекс.Диск"
-            aria-label="Отправить изменения"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6v3l4-4-4-4v3z"
-              />
-            </svg>
-          </button>
-        )}
-
-        {canEdit && (
-          <button type="button" className="btn btn-primary" onClick={onAdd}>
-            Добавить
-          </button>
-        )}
-
         {user.role === 'admin' && (
           <button
             type="button"

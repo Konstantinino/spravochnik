@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DepartmentId, GuideItem } from '../types'
 import { DEPARTMENTS } from '../types'
-import { getFolders } from '../lib/data'
 
 interface TopicEditorModalProps {
   open: boolean
   mode: 'add' | 'edit'
-  items: GuideItem[]
   departmentId: DepartmentId
+  /** When adding a subtopic — parent id; null for root */
+  parentId: number | null
   initial?: GuideItem | null
   onClose: () => void
   onSave: (payload: {
@@ -17,24 +17,20 @@ interface TopicEditorModalProps {
     parent_id: number | null
     id?: number
   }) => Promise<void>
-  onDepartmentPreview: (id: DepartmentId) => Promise<GuideItem[]>
 }
 
 export function TopicEditorModal({
   open,
   mode,
-  items,
   departmentId,
+  parentId,
   initial,
   onClose,
   onSave,
-  onDepartmentPreview,
 }: TopicEditorModalProps) {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
-  const [parentId, setParentId] = useState<string>('')
   const [targetDept, setTargetDept] = useState<DepartmentId>(departmentId)
-  const [folderItems, setFolderItems] = useState<GuideItem[]>(items)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -43,37 +39,12 @@ export function TopicEditorModal({
     if (!open) return
     setQuestion(initial?.question ?? '')
     setAnswer(initial?.answer ?? '')
-    setParentId(initial?.parent_id != null ? String(initial.parent_id) : '')
     setTargetDept(departmentId)
-    setFolderItems(items)
     setError(null)
     setSaving(false)
-  }, [open, initial, departmentId, items])
-
-  useEffect(() => {
-    if (!open || mode === 'edit') return
-    let cancelled = false
-    void (async () => {
-      try {
-        const next = await onDepartmentPreview(targetDept)
-        if (!cancelled) {
-          setFolderItems(next)
-          setParentId('')
-        }
-      } catch {
-        /* ignore */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [targetDept, open, mode, onDepartmentPreview])
+  }, [open, initial, departmentId])
 
   if (!open) return null
-
-  const folders = getFolders(folderItems)
-  const deptLabel =
-    DEPARTMENTS.find((d) => d.id === targetDept)?.label ?? 'Отдел'
 
   async function insertPhoto() {
     setError(null)
@@ -114,7 +85,7 @@ export function TopicEditorModal({
         departmentId: targetDept,
         question: question.trim(),
         answer,
-        parent_id: parentId ? Number(parentId) : null,
+        parent_id: mode === 'add' ? parentId : (initial?.parent_id ?? null),
         id: initial?.id,
       })
       onClose()
@@ -134,13 +105,15 @@ export function TopicEditorModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal__header">
-          <h2 id="topic-modal-title">{mode === 'add' ? 'Новая тема' : 'Редактирование'}</h2>
+          <h2 id="topic-modal-title">
+            {mode === 'add' ? (parentId != null ? 'Новая подтема' : 'Новая тема') : 'Редактирование'}
+          </h2>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Закрыть">
             ✕
           </button>
         </div>
         <form className="modal__body" onSubmit={handleSubmit}>
-          {mode === 'add' && (
+          {mode === 'add' && parentId == null && (
             <label className="field">
               <span>Отдел</span>
               <select
@@ -164,18 +137,6 @@ export function TopicEditorModal({
               placeholder="Тема / вопрос"
               autoFocus
             />
-          </label>
-
-          <label className="field">
-            <span>Размещение</span>
-            <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
-              <option value="">{deptLabel}</option>
-              {folders.map((f) => (
-                <option key={f.id} value={String(f.id)}>
-                  {f.question}
-                </option>
-              ))}
-            </select>
           </label>
 
           <label className="field">

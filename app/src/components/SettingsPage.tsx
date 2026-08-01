@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { PublicUser, UserRole } from '../types'
+import type { PublicUser, SyncStatus, UserRole } from '../types'
 import { ROLE_LABELS } from '../types'
 
 interface SettingsPageProps {
@@ -9,25 +9,28 @@ interface SettingsPageProps {
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const [users, setUsers] = useState<PublicUser[]>([])
   const [whitelist, setWhitelist] = useState<string[]>([])
-  const [token, setToken] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
+  const [hasToken, setHasToken] = useState(false)
 
   async function reload() {
-    const [u, w, s] = await Promise.all([
+    const [u, w, s, sync] = await Promise.all([
       window.spravochnik.listUsers(),
       window.spravochnik.getWhitelist(),
       window.spravochnik.getAdminSettings(),
+      window.spravochnik.getSyncStatus(),
     ])
     setUsers(u)
     setWhitelist(w)
-    setToken(s.yandexToken)
+    setHasToken(s.hasToken)
+    setSyncStatus(sync)
   }
 
   useEffect(() => {
     void reload().catch((e) => setError(e instanceof Error ? e.message : 'Ошибка загрузки'))
+    return window.spravochnik.onSyncStatus(setSyncStatus)
   }, [])
 
   async function changeRole(userId: string, role: UserRole) {
@@ -63,19 +66,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     }
   }
 
-  async function saveToken() {
-    setBusy(true)
-    setError(null)
-    try {
-      await window.spravochnik.setYandexToken(token)
-      setInfo('Токен сохранён, запущена синхронизация')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div className="settings-page">
       <div className="settings-page__bar">
@@ -90,23 +80,15 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
         {info && <div className="form-info">{info}</div>}
 
         <section className="settings-section">
-          <h2>Яндекс.Диск</h2>
-          <p className="muted">
-            OAuth-токен для папки <strong>REST INFO</strong>. После сохранения приложение
-            синхронизирует данные в фоне.
+          <h2>Подключение</h2>
+          <p className="settings-sync-status">
+            Статус: <strong>{syncStatus?.label ?? '—'}</strong>
+            {hasToken ? '' : ' · токен не задан'}
           </p>
-          <label className="field">
-            <span>Токен</span>
-            <input
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="y0_..."
-              autoComplete="off"
-            />
-          </label>
-          <button type="button" className="btn btn-primary" onClick={saveToken} disabled={busy}>
-            {busy ? 'Сохранение…' : 'Сохранить токен'}
-          </button>
+          <p className="muted settings-section__hint">
+            OAuth-токен Яндекс.Диска задаётся на экране входа (шестерёнка в углу). Без токена
+            синхронизация недоступна.
+          </p>
         </section>
 
         <section className="settings-section">

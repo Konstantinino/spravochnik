@@ -170,13 +170,13 @@ async function ensureRemoteMediaFolder(token: string): Promise<void> {
 
 const SYNC_JSON_FILES = [...DATA_FILES, ACCOUNTS_FILE] as const
 
-export async function pullFromYandex(): Promise<SyncStatus> {
+export async function pullFromYandex(options?: { force?: boolean }): Promise<SyncStatus> {
   const settings = readSettings()
   if (!settings.yandexToken) {
     return emit({
       code: 'no_token',
       label: 'Нет токена Диска',
-      detail: 'Админ может указать токен в настройках',
+      detail: 'Укажите токен на экране входа (шестерёнка)',
     })
   }
 
@@ -186,10 +186,15 @@ export async function pullFromYandex(): Promise<SyncStatus> {
     emit({ code: 'syncing', label: 'Синхронизация…' })
 
     const root = getUserDataRoot()
+    const force = Boolean(options?.force)
     for (const fileName of SYNC_JSON_FILES) {
       const dest = path.join(root, fileName)
       // Don't overwrite local pending guide edits on pull if pending — still pull accounts carefully
-      if (settings.hasPendingChanges && DATA_FILES.includes(fileName as (typeof DATA_FILES)[number])) {
+      if (
+        !force &&
+        settings.hasPendingChanges &&
+        DATA_FILES.includes(fileName as (typeof DATA_FILES)[number])
+      ) {
         continue
       }
       await downloadRemoteFile(settings.yandexToken, fileName, dest)
@@ -229,7 +234,7 @@ export async function pushToYandex(): Promise<SyncStatus> {
     return emit({
       code: 'no_token',
       label: 'Нет токена Диска',
-      detail: 'Укажите токен в настройках',
+      detail: 'Укажите токен на экране входа (шестерёнка)',
     })
   }
 
@@ -269,6 +274,20 @@ export async function pushToYandex(): Promise<SyncStatus> {
 export function markLocalChange(): SyncStatus {
   setPendingChanges(true)
   return emit({ code: 'pending', label: 'Есть локальные изменения' })
+}
+
+/** Drop unsynced local guide edits by re-downloading from Disk. */
+export async function discardLocalChanges(): Promise<SyncStatus> {
+  const settings = readSettings()
+  if (!settings.yandexToken) {
+    return emit({
+      code: 'no_token',
+      label: 'Нет токена Диска',
+      detail: 'Укажите токен на экране входа (шестерёнка)',
+    })
+  }
+  setPendingChanges(false)
+  return pullFromYandex({ force: true })
 }
 
 export function refreshStatusFromSettings(): SyncStatus {

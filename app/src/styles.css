@@ -184,6 +184,22 @@ option {
   position: relative;
 }
 
+.user-menu__trigger {
+  position: relative;
+}
+
+.user-menu__badge {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 1.5px solid #fff;
+  pointer-events: none;
+}
+
 .user-menu__popup {
   position: absolute;
   right: 0;
@@ -613,6 +629,17 @@ mark.find-hit--active {
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+
+.user-menu__update.btn-primary {
+  width: 100%;
+  margin-top: 8px;
+  background: #2563eb;
+  color: #fff;
+}
+
+.user-menu__update.btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
 }
 
 .btn-secondary {

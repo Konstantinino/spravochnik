@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DepartmentId, PublicUser, SyncStatus, UserRole } from '../types'
+import type { DepartmentId, PublicUser, SyncStatus, UpdateInfo, UserRole } from '../types'
 import { DEPARTMENTS, ROLE_LABELS } from '../types'
 
 interface HeaderProps {
@@ -30,6 +30,8 @@ export function Header({
   discarding,
 }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [downloading, setDownloading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -40,8 +42,33 @@ export function Header({
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    void window.spravochnik.getUpdateStatus().then((info) => {
+      if (!cancelled) setUpdateInfo(info)
+    })
+    const off = window.spravochnik.onUpdateStatus((info) => {
+      setUpdateInfo(info)
+    })
+    return () => {
+      cancelled = true
+      off()
+    }
+  }, [])
+
   const showPush = canEdit && syncStatus.hasPendingChanges
   const showDiscard = canEdit && syncStatus.hasPendingChanges
+  const updateAvailable = Boolean(updateInfo?.available && updateInfo.downloadUrl)
+
+  async function handleDownloadUpdate() {
+    if (!updateAvailable || downloading) return
+    setDownloading(true)
+    try {
+      await window.spravochnik.downloadUpdate()
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <header className="app-header">
@@ -121,7 +148,7 @@ export function Header({
         <div className="user-menu" ref={menuRef}>
           <button
             type="button"
-            className="icon-btn"
+            className="icon-btn user-menu__trigger"
             onClick={() => setMenuOpen((v) => !v)}
             title="Профиль"
             aria-label="Профиль"
@@ -132,6 +159,9 @@ export function Header({
                 d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5z"
               />
             </svg>
+            {updateAvailable && (
+              <span className="user-menu__badge" aria-label="Доступно обновление" />
+            )}
           </button>
           {menuOpen && (
             <div className="user-menu__popup">
@@ -141,6 +171,21 @@ export function Header({
               <button type="button" className="btn btn-secondary user-menu__logout" onClick={onLogout}>
                 Выйти
               </button>
+              {updateAvailable && (
+                <button
+                  type="button"
+                  className="btn btn-primary user-menu__update"
+                  onClick={() => void handleDownloadUpdate()}
+                  disabled={downloading}
+                  title={
+                    updateInfo?.version
+                      ? `Скачать версию ${updateInfo.version}`
+                      : 'Скачать обновление'
+                  }
+                >
+                  {downloading ? 'Скачивание…' : 'Скачать обновление'}
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -47,6 +47,12 @@ import {
   pushToYandex,
   refreshStatusFromSettings,
 } from './yandex-sync'
+import {
+  checkForUpdates,
+  downloadUpdate,
+  getUpdateStatus,
+  onUpdateStatus,
+} from './updates'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -414,10 +420,20 @@ function registerIpc(): void {
     return `spravochnik://${cleaned}`
   })
 
+  ipcMain.handle('updates:status', () => getUpdateStatus())
+  ipcMain.handle('updates:check', () => checkForUpdates())
+  ipcMain.handle('updates:download', () => downloadUpdate())
+
   // Forward sync status to all windows
   onSyncStatus((status) => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('sync:status-changed', status)
+    }
+  })
+
+  onUpdateStatus((info) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('updates:status-changed', info)
     }
   })
 }
@@ -451,6 +467,11 @@ app.whenReady().then(() => {
   setTimeout(() => {
     void pullFromYandex()
   }, 800)
+
+  // Check GitHub Releases for a newer Setup (packaged builds only)
+  setTimeout(() => {
+    void checkForUpdates()
+  }, 2000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -37,5 +37,14 @@ contextBridge.exposeInMainWorld('spravochnik', {
     return () => ipcRenderer.removeListener('sync:status-changed', listener)
   },
 
+  getUpdateStatus: () => ipcRenderer.invoke('updates:status'),
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  downloadUpdate: () => ipcRenderer.invoke('updates:download'),
+  onUpdateStatus: (callback: (info: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: unknown) => callback(info)
+    ipcRenderer.on('updates:status-changed', listener)
+    return () => ipcRenderer.removeListener('updates:status-changed', listener)
+  },
+
   deleteItem: (payload: unknown) => ipcRenderer.invoke('delete-item', payload),
 })

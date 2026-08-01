@@ -6,6 +6,7 @@ import type {
   GuideFile,
   PublicUser,
   SyncStatus,
+  UpdateInfo,
   UserRole,
 } from './types'
 
@@ -55,6 +56,11 @@ export interface SpravochnikApi {
   discardSync: () => Promise<SyncStatus>
   pushSync: () => Promise<SyncStatus>
   onSyncStatus: (callback: (status: SyncStatus) => void) => () => void
+
+  getUpdateStatus: () => Promise<UpdateInfo>
+  checkForUpdates: () => Promise<UpdateInfo>
+  downloadUpdate: () => Promise<{ ok: boolean; error?: string }>
+  onUpdateStatus: (callback: (info: UpdateInfo) => void) => () => void
 
   deleteItem: (payload: { departmentId: DepartmentId; id: number }) => Promise<GuideFile>
 }

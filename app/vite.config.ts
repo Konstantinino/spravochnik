@@ -4,6 +4,12 @@ import electron from 'vite-plugin-electron/simple'
 import path from 'node:path'
 
 export default defineConfig({
+  // Windows: Vite may bind only to ::1; Electron often resolves localhost → 127.0.0.1 → blank window
+  server: {
+    host: '127.0.0.1',
+    port: 5173,
+    strictPort: true,
+  },
   plugins: [
     react(),
     electron({

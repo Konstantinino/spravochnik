@@ -31,6 +31,14 @@ export interface SyncStatus {
   hasPendingChanges: boolean
 }
 
+export interface UpdateInfo {
+  available: boolean
+  currentVersion: string
+  version: string | null
+  downloadUrl: string | null
+  error?: string
+}
+
 export interface GuideDocument {
   file_id: string
   file_name: string

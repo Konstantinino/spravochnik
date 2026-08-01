@@ -52,4 +52,7 @@ execSync('npm run dist', { cwd: asciiRoot, stdio: 'inherit', shell: true })
 console.log('Copying release artifacts back...')
 fs.rmSync(releaseDst, { recursive: true, force: true })
 copyDir(releaseSrc, releaseDst)
-console.log('Done:', path.join(releaseDst, 'REST-INFO-Setup-1.1.0.exe'))
+const version = JSON.parse(
+  fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
+).version
+console.log('Done:', path.join(releaseDst, `REST-INFO-Setup-${version}.exe`))

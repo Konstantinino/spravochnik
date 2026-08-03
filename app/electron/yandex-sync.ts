@@ -617,7 +617,7 @@ export async function pushToYandex(): Promise<SyncStatus> {
   }
 }
 
-/** Apply user choices for topic conflicts, then push again. */
+/** Apply user choices for topic conflicts, then upload without re-detecting the same conflicts. */
 export async function resolveSyncConflicts(
   resolutions: ConflictResolution[],
 ): Promise<SyncStatus> {
@@ -632,8 +632,10 @@ export async function resolveSyncConflicts(
     byFile.set(r.fileName, list)
   }
 
+  const resolvedConflicts = [...pendingConflicts]
+
   for (const [fileName, fileResolutions] of byFile) {
-    const conflicts = pendingConflicts.filter((c) => c.fileName === fileName)
+    const conflicts = resolvedConflicts.filter((c) => c.fileName === fileName)
     const listKey = conflicts[0]?.listKey ?? listKeyForFile(fileName)
     let file = pendingMergedByFile[fileName] ?? readLocalJson(fileName)
     if (!file) continue
@@ -645,9 +647,19 @@ export async function resolveSyncConflicts(
     )
     writeLocalJson(fileName, file)
     pendingMergedByFile[fileName] = file
+
+    // Align base so a follow-up merge would not re-flag the same topics as conflicts
+    const baseRaw = readBaseGuide(fileName)
+    const baseFile =
+      baseRaw && typeof baseRaw === 'object'
+        ? (baseRaw as Record<string, unknown>)
+        : { [listKey]: [] }
+    writeBaseGuide(
+      fileName,
+      patchBaseForResolutions(baseFile, listKey, fileResolutions, conflicts),
+    )
   }
 
-  // Drop resolved from pending list
   const resolvedKeys = new Set(resolutions.map((r) => `${r.fileName}:${r.id}`))
   pendingConflicts = pendingConflicts.filter((c) => !resolvedKeys.has(`${c.fileName}:${c.id}`))
 
@@ -661,7 +673,115 @@ export async function resolveSyncConflicts(
   }
 
   pendingConflicts = []
-  return pushToYandex()
+  // Upload resolved locals as-is (already merged); avoid re-merge that recreates conflicts
+  return pushResolvedLocalToYandex()
+}
+
+/** After manual conflict resolution: lock → upload current local guides → media → unlock. */
+async function pushResolvedLocalToYandex(): Promise<SyncStatus> {
+  const settings = readSettings()
+  if (!settings.yandexToken) {
+    return emit({
+      code: 'no_token',
+      label: 'Нет токена Диска',
+      detail: 'Укажите токен на экране входа (шестерёнка)',
+    })
+  }
+
+  const token = settings.yandexToken
+  let lockHeld = false
+
+  try {
+    emit({ code: 'connecting', label: 'Подключение…' })
+    await ensureRemoteFolder(token)
+    await ensureRemoteMediaFolder(token)
+
+    emit({ code: 'syncing', label: 'Проверка блокировки…' })
+    const lock = await acquireSyncLock(token)
+    if (!lock.ok) {
+      return emit({
+        code: 'busy',
+        label: 'Синхронизация временно занята',
+        detail: `Сейчас синхронизирует: ${lock.by}. Повтор через ${lock.retryAfterSec} с`,
+        retryAfterSec: lock.retryAfterSec,
+        lockBy: lock.by,
+      })
+    }
+    lockHeld = true
+
+    emit({ code: 'uploading', label: 'Отправка…' })
+    const root = getUserDataRoot()
+    for (const fileName of DATA_FILES) {
+      const localPath = path.join(root, fileName)
+      if (!fs.existsSync(localPath)) continue
+      await uploadLocalFile(token, fileName, localPath)
+      writeBaseFromDownloaded(fileName, localPath)
+    }
+
+    await pullAndMergeAccounts(token, false)
+    await uploadLocalFile(token, ACCOUNTS_FILE, path.join(root, ACCOUNTS_FILE))
+    await uploadPendingMedia(token)
+
+    pendingMergedByFile = {}
+    setPendingChanges(false)
+    await releaseSyncLock(token)
+    lockHeld = false
+    return emit({ code: 'up_to_date', label: 'Актуально' })
+  } catch (e) {
+    if (lockHeld) {
+      try {
+        await releaseSyncLock(token)
+      } catch {
+        /* ignore */
+      }
+    }
+    return emit({
+      code: 'error',
+      label: 'Ошибка отправки',
+      detail: e instanceof Error ? e.message : String(e),
+    })
+  }
+}
+
+function patchBaseForResolutions(
+  baseFile: Record<string, unknown>,
+  listKey: 'questions' | 'templates',
+  resolutions: Array<{ id: number; choice: 'local' | 'remote' }>,
+  conflicts: TopicConflict[],
+): Record<string, unknown> {
+  const list = Array.isArray(baseFile[listKey]) ? [...(baseFile[listKey] as unknown[])] : []
+  const map = new Map<number, Record<string, unknown>>()
+  for (const row of list) {
+    if (!row || typeof row !== 'object') continue
+    const id = (row as { id?: number }).id
+    if (typeof id === 'number') map.set(id, row as Record<string, unknown>)
+  }
+
+  for (const res of resolutions) {
+    const c = conflicts.find((x) => x.id === res.id && x.listKey === listKey)
+    if (!c) continue
+    const isDeletedRemote =
+      typeof c.remote.question === 'string' && c.remote.question.includes('удалено на Диске')
+    const isDeletedLocal =
+      typeof c.local.question === 'string' && c.local.question.includes('удалено локально')
+
+    // Point base at the remote side so the next merge treats the chosen local as the only edit
+    if (res.choice === 'local') {
+      if (isDeletedRemote || isDeletedLocal) map.delete(res.id)
+      else map.set(res.id, c.remote as Record<string, unknown>)
+    } else if (isDeletedRemote) {
+      map.delete(res.id)
+    } else {
+      map.set(res.id, c.remote as Record<string, unknown>)
+    }
+  }
+
+  return {
+    ...baseFile,
+    [listKey]: [...map.values()].sort(
+      (a, b) => Number((a as { id: number }).id) - Number((b as { id: number }).id),
+    ),
+  }
 }
 
 export function markLocalChange(): SyncStatus {

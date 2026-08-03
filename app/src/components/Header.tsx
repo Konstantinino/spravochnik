@@ -12,6 +12,7 @@ interface HeaderProps {
   onLogout: () => void
   onPush: () => void
   pushing: boolean
+  interactionLocked?: boolean
 }
 
 export function Header({
@@ -24,6 +25,7 @@ export function Header({
   onLogout,
   onPush,
   pushing,
+  interactionLocked = false,
 }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
@@ -52,11 +54,11 @@ export function Header({
     }
   }, [])
 
-  const showSync = canEdit && syncStatus.hasPendingChanges && !pushing
+  const showSync = canEdit && syncStatus.hasPendingChanges && !pushing && !interactionLocked
   const updateAvailable = Boolean(updateInfo?.available && updateInfo.downloadUrl)
 
   async function handleDownloadUpdate() {
-    if (!updateAvailable || downloading) return
+    if (!updateAvailable || downloading || interactionLocked) return
     setDownloading(true)
     try {
       await window.spravochnik.downloadUpdate()
@@ -66,7 +68,7 @@ export function Header({
   }
 
   return (
-    <header className="app-header">
+    <header className={`app-header${interactionLocked ? ' app-header--locked' : ''}`}>
       <div className="app-header__brand">REST INFO</div>
 
       <div className="app-header__sync" title={syncStatus.detail || syncStatus.label}>
@@ -89,6 +91,7 @@ export function Header({
           value={departmentId}
           onChange={(e) => onDepartmentChange(e.target.value as DepartmentId)}
           aria-label="Отдел"
+          disabled={interactionLocked}
         >
           {DEPARTMENTS.map((d) => (
             <option key={d.id} value={d.id}>
@@ -106,6 +109,7 @@ export function Header({
             onClick={onOpenSettings}
             title="Настройки"
             aria-label="Настройки"
+            disabled={interactionLocked}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path
@@ -120,9 +124,13 @@ export function Header({
           <button
             type="button"
             className="icon-btn user-menu__trigger"
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => {
+              if (interactionLocked) return
+              setMenuOpen((v) => !v)
+            }}
             title="Профиль"
             aria-label="Профиль"
+            disabled={interactionLocked}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path

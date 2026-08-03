@@ -168,6 +168,13 @@ export default function App() {
     try {
       const status = await window.spravochnik.resolveSyncConflicts(resolutions)
       setSyncStatus(status)
+      if (status.code === 'error') {
+        throw new Error(status.detail || status.label)
+      }
+      if (status.code === 'busy') {
+        setConflictOpen(false)
+        return
+      }
       if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
         setConflictOpen(true)
       } else {
@@ -342,6 +349,13 @@ export default function App() {
     return <SettingsPage onBack={() => setView('main')} />
   }
 
+  const syncBlocking =
+    pushing ||
+    busyLeft != null ||
+    syncStatus.code === 'uploading' ||
+    syncStatus.code === 'syncing' ||
+    syncStatus.code === 'connecting'
+
   const deptLabel = DEPARTMENTS.find((d) => d.id === departmentId)?.label ?? ''
 
   const editorDefaultParty: SupportParty = (() => {
@@ -353,7 +367,7 @@ export default function App() {
   })()
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${syncBlocking ? ' app-shell--sync-busy' : ''}`}>
       <Header
         departmentId={departmentId}
         onDepartmentChange={handleDepartmentChange}
@@ -364,6 +378,7 @@ export default function App() {
         onLogout={() => void handleLogout()}
         onPush={() => void handlePush()}
         pushing={pushing || busyLeft != null}
+        interactionLocked={syncBlocking}
       />
 
       <div className="app-body">

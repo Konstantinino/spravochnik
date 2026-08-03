@@ -33,6 +33,7 @@ export function SyncConflictModal({ conflicts, onResolve, onClose }: SyncConflic
       await onResolve(resolutions)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось применить')
+    } finally {
       setSaving(false)
     }
   }

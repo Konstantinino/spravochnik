@@ -4,7 +4,6 @@ import {
   ACCOUNTS_FILE,
   DATA_FILES,
   YANDEX_FOLDER,
-  getMediaDir,
   getUserDataRoot,
 } from './paths'
 import {
@@ -16,6 +15,7 @@ import {
   mergeAccountsData,
   type AccountsData,
 } from './auth-store'
+import { clearPendingMedia, readPendingMedia } from './pending-media'
 
 export type SyncStatusCode =
   | 'idle'
@@ -146,7 +146,12 @@ async function uploadLocalFile(token: string, fileName: string, localPath: strin
 }
 
 async function listRemoteMedia(token: string): Promise<string[]> {
-  const encoded = encodeURIComponent(folderPath('media'))
+  return listRemoteMediaRecursive(token, 'media')
+}
+
+/** Returns paths relative to userData root, e.g. media/a.jpg or media/12/images/b.png */
+async function listRemoteMediaRecursive(token: string, remoteDir: string): Promise<string[]> {
+  const encoded = encodeURIComponent(folderPath(remoteDir))
   const res = await yandexFetch(
     token,
     `https://cloud-api.yandex.net/v1/disk/resources?path=${encoded}&limit=1000`,
@@ -156,23 +161,85 @@ async function listRemoteMedia(token: string): Promise<string[]> {
   const data = (await res.json()) as {
     _embedded?: { items?: Array<{ name: string; type: string }> }
   }
-  return (data._embedded?.items ?? [])
-    .filter((i) => i.type === 'file')
-    .map((i) => i.name)
+  const out: string[] = []
+  for (const item of data._embedded?.items ?? []) {
+    const child = `${remoteDir}/${item.name}`
+    if (item.type === 'file') {
+      out.push(child)
+    } else if (item.type === 'dir') {
+      const nested = await listRemoteMediaRecursive(token, child)
+      out.push(...nested)
+    }
+  }
+  return out
+}
+
+async function ensureRemoteDir(token: string, remoteDir: string): Promise<void> {
+  const parts = remoteDir.split('/').filter(Boolean)
+  let current = ''
+  for (const part of parts) {
+    current = current ? `${current}/${part}` : part
+    const encoded = encodeURIComponent(folderPath(current))
+    const res = await yandexFetch(
+      token,
+      `https://cloud-api.yandex.net/v1/disk/resources?path=${encoded}`,
+    )
+    if (res.status === 404) {
+      const create = await yandexFetch(
+        token,
+        `https://cloud-api.yandex.net/v1/disk/resources?path=${encoded}`,
+        { method: 'PUT' },
+      )
+      if (!create.ok && create.status !== 409) {
+        const text = await create.text()
+        throw new Error(`Не удалось создать папку ${current}: ${text || create.status}`)
+      }
+    }
+  }
 }
 
 async function ensureRemoteMediaFolder(token: string): Promise<void> {
-  const encoded = encodeURIComponent(folderPath('media'))
+  await ensureRemoteDir(token, 'media')
+}
+
+async function deleteRemoteFile(token: string, remotePath: string): Promise<void> {
+  const encoded = encodeURIComponent(folderPath(remotePath))
   const res = await yandexFetch(
     token,
-    `https://cloud-api.yandex.net/v1/disk/resources?path=${encoded}`,
+    `https://cloud-api.yandex.net/v1/disk/resources?path=${encoded}&permanently=true`,
+    { method: 'DELETE' },
   )
-  if (res.status === 404) {
-    await yandexFetch(
-      token,
-      `https://cloud-api.yandex.net/v1/disk/resources?path=${encoded}`,
-      { method: 'PUT' },
-    )
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text()
+    throw new Error(`Удаление ${remotePath}: ${text || res.status}`)
+  }
+}
+
+async function uploadPendingMedia(token: string): Promise<void> {
+  const pending = readPendingMedia()
+  const root = getUserDataRoot()
+  for (const rel of pending.upload) {
+    const localPath = path.join(root, ...rel.split('/'))
+    if (!fs.existsSync(localPath) || !fs.statSync(localPath).isFile()) continue
+    const parentDir = rel.split('/').slice(0, -1).join('/')
+    if (parentDir) await ensureRemoteDir(token, parentDir)
+    await uploadLocalFile(token, rel, localPath)
+  }
+  for (const rel of pending.deleteRemote) {
+    await deleteRemoteFile(token, rel)
+  }
+  clearPendingMedia()
+}
+
+async function pullAllRemoteMedia(token: string): Promise<void> {
+  await ensureRemoteMediaFolder(token)
+  const remoteFiles = await listRemoteMedia(token)
+  const root = getUserDataRoot()
+  for (const rel of remoteFiles) {
+    const dest = path.join(root, ...rel.split('/'))
+    if (!fs.existsSync(dest)) {
+      await downloadRemoteFile(token, rel, dest)
+    }
   }
 }
 
@@ -218,15 +285,7 @@ export async function pullFromYandex(options?: { force?: boolean }): Promise<Syn
     // Optionally download remote settings without token? Skip SETTINGS_FILE for safety.
 
     await ensureRemoteMediaFolder(settings.yandexToken)
-    const remoteMedia = await listRemoteMedia(settings.yandexToken)
-    const mediaDir = getMediaDir()
-    fs.mkdirSync(mediaDir, { recursive: true })
-    for (const name of remoteMedia) {
-      const dest = path.join(mediaDir, name)
-      if (!fs.existsSync(dest)) {
-        await downloadRemoteFile(settings.yandexToken, `media/${name}`, dest)
-      }
-    }
+    await pullAllRemoteMedia(settings.yandexToken)
 
     const latest = readSettings()
     if (latest.hasPendingChanges) {
@@ -262,17 +321,7 @@ export async function pushToYandex(): Promise<SyncStatus> {
       await uploadLocalFile(settings.yandexToken, fileName, path.join(root, fileName))
     }
 
-    // Upload settings without syncing token to cloud? Upload a copy without token for hasPending only — skip.
-    // Upload media files
-    const mediaDir = getMediaDir()
-    if (fs.existsSync(mediaDir)) {
-      for (const name of fs.readdirSync(mediaDir)) {
-        const full = path.join(mediaDir, name)
-        if (fs.statSync(full).isFile()) {
-          await uploadLocalFile(settings.yandexToken, `media/${name}`, full)
-        }
-      }
-    }
+    await uploadPendingMedia(settings.yandexToken)
 
     setPendingChanges(false)
     return emit({ code: 'up_to_date', label: 'Актуально' })

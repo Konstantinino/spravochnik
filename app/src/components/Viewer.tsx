@@ -5,7 +5,8 @@ import type { DepartmentId, GuideItem, SupportParty } from '../types'
 import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import { filterItemsByParty, getChildren, getItemParty } from '../lib/data'
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
-import { mediaSrcFromMarkdownUrl } from '../lib/markdown'
+import { mediaSrcFromMarkdownUrl, isAllowedMarkdownImageSrc } from '../lib/markdown'
+import { focusCursor, insertAtCursor } from '../lib/textInsert'
 import { ParentTopicField } from './ParentTopicField'
 
 interface ViewerProps {
@@ -175,25 +176,44 @@ export function Viewer({
   async function insertPhoto() {
     setError(null)
     try {
-      const result = await window.spravochnik.pickAndSaveImage()
+      const result = await window.spravochnik.saveTopicImage({ topicId: current.id })
       if (!result) return
       const markdown = `\n\n![](${result.markdownPath})\n\n`
-      const el = textareaRef.current
-      if (el) {
-        const start = el.selectionStart
-        const end = el.selectionEnd
-        const next = answer.slice(0, start) + markdown + answer.slice(end)
-        setAnswer(next)
-        requestAnimationFrame(() => {
-          el.focus()
-          const pos = start + markdown.length
-          el.setSelectionRange(pos, pos)
-        })
-      } else {
-        setAnswer((prev) => prev + markdown)
-      }
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      setAnswer(next)
+      focusCursor(textareaRef.current, cursor)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось добавить фото')
+    }
+  }
+
+  async function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items
+    if (!items) return
+    let hasImage = false
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        hasImage = true
+        break
+      }
+    }
+    if (!hasImage) return
+    e.preventDefault()
+    setError(null)
+    try {
+      const result = await window.spravochnik.saveTopicImageFromClipboard({
+        topicId: current.id,
+      })
+      if (!result) {
+        setError('В буфере нет изображения')
+        return
+      }
+      const markdown = `\n\n![](${result.markdownPath})\n\n`
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      setAnswer(next)
+      focusCursor(textareaRef.current, cursor)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось вставить фото из буфера')
     }
   }
 
@@ -374,8 +394,9 @@ export function Viewer({
             className="viewer__textarea"
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
+            onPaste={(e) => void handleAnswerPaste(e)}
             rows={16}
-            placeholder="Текст ответа (Markdown). Можно вставлять фото кнопкой ниже."
+            placeholder="Текст ответа (Markdown). Можно вставлять фото кнопкой или Ctrl+V."
           />
           <div className="viewer__editor-toolbar">
             <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
@@ -418,10 +439,10 @@ export function Viewer({
               components={{
                 img: ({ src, alt }) => {
                   const raw = src ?? ''
-                  if (!raw.startsWith('media/') && !raw.startsWith('spravochnik://') && !/^https?:\/\//i.test(raw)) {
+                  if (!isAllowedMarkdownImageSrc(raw)) {
                     return null
                   }
-                  const resolved = mediaSrcFromMarkdownUrl(raw)
+                  const resolved = mediaSrcFromMarkdownUrl(raw, current.id)
                   return (
                     <img
                       src={resolved}
@@ -449,7 +470,7 @@ export function Viewer({
               {localLegacy.map((src) => (
                 <img
                   key={src}
-                  src={mediaSrcFromMarkdownUrl(src)}
+                  src={mediaSrcFromMarkdownUrl(src, current.id)}
                   alt=""
                   className="viewer__image"
                 />

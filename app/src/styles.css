@@ -107,6 +107,27 @@ option {
   text-overflow: ellipsis;
 }
 
+.btn-header-sync {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  cursor: pointer;
+}
+
+.btn-header-sync:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.btn-header-sync:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
 .icon-btn--sm {
   width: 30px;
   height: 30px;

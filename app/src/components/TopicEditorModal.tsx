@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DepartmentId, GuideItem, SupportParty } from '../types'
 import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import { filterItemsByParty, getItemParty } from '../lib/data'
+import { focusCursor, insertAtCursor } from '../lib/textInsert'
 import { ParentTopicField } from './ParentTopicField'
 
 interface TopicEditorModalProps {
@@ -22,7 +23,15 @@ interface TopicEditorModalProps {
     parent_id: number | null
     party?: SupportParty
     id?: number
+    draftId?: string
   }) => Promise<void>
+}
+
+function newDraftId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID().replace(/-/g, '')
+  }
+  return `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 }
 
 export function TopicEditorModal({
@@ -42,6 +51,7 @@ export function TopicEditorModal({
   const [party, setParty] = useState<SupportParty>(defaultParty)
   const [attachParent, setAttachParent] = useState(false)
   const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
+  const [draftId, setDraftId] = useState(() => newDraftId())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -67,11 +77,17 @@ export function TopicEditorModal({
         ? getItemParty(initial)
         : defaultParty,
     )
+    if (mode === 'add') setDraftId(newDraftId())
     setError(null)
     setSaving(false)
   }, [open, initial, departmentId, parentId, mode, defaultParty])
 
   if (!open) return null
+
+  function imageOwnerPayload(): { topicId?: number; draftId?: string } {
+    if (mode === 'edit' && initial?.id != null) return { topicId: initial.id }
+    return { draftId }
+  }
 
   function handlePartyChange(next: SupportParty) {
     setParty(next)
@@ -87,26 +103,42 @@ export function TopicEditorModal({
   async function insertPhoto() {
     setError(null)
     try {
-      const result = await window.spravochnik.pickAndSaveImage()
+      const result = await window.spravochnik.saveTopicImage(imageOwnerPayload())
       if (!result) return
-
       const markdown = `\n\n![](${result.markdownPath})\n\n`
-      const el = textareaRef.current
-      if (el) {
-        const start = el.selectionStart
-        const end = el.selectionEnd
-        const next = answer.slice(0, start) + markdown + answer.slice(end)
-        setAnswer(next)
-        requestAnimationFrame(() => {
-          el.focus()
-          const pos = start + markdown.length
-          el.setSelectionRange(pos, pos)
-        })
-      } else {
-        setAnswer((prev) => prev + markdown)
-      }
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      setAnswer(next)
+      focusCursor(textareaRef.current, cursor)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось добавить фото')
+    }
+  }
+
+  async function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items
+    if (!items) return
+    let hasImage = false
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        hasImage = true
+        break
+      }
+    }
+    if (!hasImage) return
+    e.preventDefault()
+    setError(null)
+    try {
+      const result = await window.spravochnik.saveTopicImageFromClipboard(imageOwnerPayload())
+      if (!result) {
+        setError('В буфере нет изображения')
+        return
+      }
+      const markdown = `\n\n![](${result.markdownPath})\n\n`
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      setAnswer(next)
+      focusCursor(textareaRef.current, cursor)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось вставить фото из буфера')
     }
   }
 
@@ -130,6 +162,7 @@ export function TopicEditorModal({
         parent_id: attachParent ? selectedParentId : null,
         party: showParty ? party : undefined,
         id: initial?.id,
+        draftId: mode === 'add' ? draftId : undefined,
       })
       onClose()
     } catch (err) {
@@ -225,8 +258,9 @@ export function TopicEditorModal({
               ref={textareaRef}
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
+              onPaste={(e) => void handleAnswerPaste(e)}
               rows={12}
-              placeholder="Текст ответа. Можно вставлять фото кнопкой ниже."
+              placeholder="Текст ответа. Можно вставлять фото кнопкой или Ctrl+V."
             />
           </label>
 

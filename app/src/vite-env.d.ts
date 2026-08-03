@@ -15,6 +15,7 @@ export interface SpravochnikApi {
   loadGuide: (departmentId: DepartmentId) => Promise<GuideFile>
   saveItem: (payload: {
     departmentId: DepartmentId
+    draftId?: string
     item: Omit<GuideItem, 'id'> & { id?: number }
   }) => Promise<GuideFile>
   updateItem: (payload: {
@@ -22,7 +23,15 @@ export interface SpravochnikApi {
     item: GuideItem
   }) => Promise<GuideFile>
   pickAndSaveImage: () => Promise<{ markdownPath: string; url: string } | null>
-  resolveMediaUrl: (relativePath: string) => Promise<string>
+  saveTopicImage: (payload: {
+    topicId?: number
+    draftId?: string
+  }) => Promise<{ markdownPath: string; url: string; relativeFsPath: string } | null>
+  saveTopicImageFromClipboard: (payload: {
+    topicId?: number
+    draftId?: string
+  }) => Promise<{ markdownPath: string; url: string; relativeFsPath: string } | null>
+  resolveMediaUrl: (relativePath: string, topicId?: number) => Promise<string>
   getDataPath: () => Promise<string>
 
   getCurrentUser: () => Promise<PublicUser | null>

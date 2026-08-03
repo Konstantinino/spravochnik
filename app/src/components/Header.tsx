@@ -11,9 +11,7 @@ interface HeaderProps {
   canEdit: boolean
   onLogout: () => void
   onPush: () => void
-  onDiscard: () => void
   pushing: boolean
-  discarding: boolean
 }
 
 export function Header({
@@ -25,9 +23,7 @@ export function Header({
   canEdit,
   onLogout,
   onPush,
-  onDiscard,
   pushing,
-  discarding,
 }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
@@ -56,8 +52,7 @@ export function Header({
     }
   }, [])
 
-  const showPush = canEdit && syncStatus.hasPendingChanges
-  const showDiscard = canEdit && syncStatus.hasPendingChanges
+  const showSync = canEdit && syncStatus.hasPendingChanges && !pushing
   const updateAvailable = Boolean(updateInfo?.available && updateInfo.downloadUrl)
 
   async function handleDownloadUpdate() {
@@ -76,38 +71,14 @@ export function Header({
 
       <div className="app-header__sync" title={syncStatus.detail || syncStatus.label}>
         <span className="app-header__sync-label">{syncStatus.label}</span>
-        {showPush && (
+        {showSync && (
           <button
             type="button"
-            className="icon-btn icon-btn--accent icon-btn--sm"
+            className="btn btn-header-sync"
             onClick={onPush}
-            disabled={pushing || discarding}
             title="Отправить изменения на Яндекс.Диск"
-            aria-label="Отправить изменения"
           >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6v3l4-4-4-4v3z"
-              />
-            </svg>
-          </button>
-        )}
-        {showDiscard && (
-          <button
-            type="button"
-            className="icon-btn icon-btn--sm"
-            onClick={onDiscard}
-            disabled={pushing || discarding}
-            title="Отменить локальные изменения (подтянуть с Диска)"
-            aria-label="Отменить локальные изменения"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"
-              />
-            </svg>
+            Синхронизировать
           </button>
         )}
       </div>

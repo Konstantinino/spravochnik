@@ -42,7 +42,6 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSync)
   const [pushing, setPushing] = useState(false)
-  const [discarding, setDiscarding] = useState(false)
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -133,6 +132,7 @@ export default function App() {
     parent_id: number | null
     party?: SupportParty
     id?: number
+    draftId?: string
   }) {
     if (payload.id != null) {
       const existing = items.find((i) => i.id === payload.id)
@@ -157,6 +157,7 @@ export default function App() {
 
     const data = await window.spravochnik.saveItem({
       departmentId: payload.departmentId,
+      draftId: payload.draftId,
       item: {
         question: payload.question,
         answer: payload.answer,
@@ -226,28 +227,6 @@ export default function App() {
     }
   }
 
-  async function handleDiscard() {
-    if (
-      !window.confirm(
-        'Отменить локальные изменения? Данные будут заменены версией с Яндекс.Диска.',
-      )
-    ) {
-      return
-    }
-    setDiscarding(true)
-    try {
-      const status = await window.spravochnik.discardSync()
-      setSyncStatus(status)
-      const data = await window.spravochnik.loadGuide(departmentId)
-      setGuide(data)
-      setSelectedId(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка отмены')
-    } finally {
-      setDiscarding(false)
-    }
-  }
-
   async function handleLogout() {
     await window.spravochnik.logout()
     setUser(null)
@@ -287,9 +266,7 @@ export default function App() {
         canEdit={!!canEdit}
         onLogout={() => void handleLogout()}
         onPush={() => void handlePush()}
-        onDiscard={() => void handleDiscard()}
         pushing={pushing}
-        discarding={discarding}
       />
 
       <div className="app-body">

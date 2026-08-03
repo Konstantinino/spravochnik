@@ -25,6 +25,13 @@ import {
   type UserRole,
 } from './paths'
 import {
+  cleanupTopicImageOrphans,
+  migrateDraftImagesToTopic,
+  saveImageFileForOwner,
+  saveNativeImageForOwner,
+  type ImageOwner,
+} from './topic-media'
+import {
   addWhitelistEmail,
   clearSession,
   ensureAuthFiles,
@@ -289,6 +296,7 @@ function registerIpc(): void {
       _event,
       payload: {
         departmentId: DepartmentId
+        draftId?: string
         item: {
           id?: number
           question: string
@@ -312,8 +320,13 @@ function registerIpc(): void {
         return Math.max(max, id)
       }, 0)
 
+      const newId = payload.item.id ?? maxId + 1
+      if (payload.draftId) {
+        migrateDraftImagesToTopic(payload.draftId, newId)
+      }
+
       const newItem = {
-        id: payload.item.id ?? maxId + 1,
+        id: newId,
         question: payload.item.question,
         answer: payload.item.answer,
         parent_id: payload.item.parent_id ?? null,
@@ -336,6 +349,8 @@ function registerIpc(): void {
         const parent = list.find((item) => item.id === newItem.parent_id)
         if (parent) parent.has_children = true
       }
+
+      cleanupTopicImageOrphans(newId, String(newItem.answer ?? ''))
 
       data[listKey] = list
       writeGuideFile(dept.fileName, data)
@@ -436,6 +451,8 @@ function registerIpc(): void {
         row.has_children = list.some((child) => child.parent_id === id)
       }
 
+      cleanupTopicImageOrphans(payload.item.id, String(payload.item.answer ?? ''))
+
       data[listKey] = list
       writeGuideFile(dept.fileName, data)
       markLocalChange()
@@ -489,6 +506,58 @@ function registerIpc(): void {
     },
   )
 
+  function resolveImageOwner(payload: {
+    topicId?: number
+    draftId?: string
+  }): ImageOwner {
+    if (typeof payload.topicId === 'number' && Number.isFinite(payload.topicId)) {
+      return { kind: 'topic', topicId: payload.topicId }
+    }
+    if (payload.draftId && String(payload.draftId).trim()) {
+      return { kind: 'draft', draftId: String(payload.draftId).trim() }
+    }
+    throw new Error('Укажите topicId или draftId')
+  }
+
+  ipcMain.handle(
+    'save-topic-image',
+    async (
+      event,
+      payload: { topicId?: number; draftId?: string },
+    ) => {
+      requireRole(getCurrentUser(), ['editor', 'admin'])
+      const owner = resolveImageOwner(payload ?? {})
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const options = {
+        title: 'Выберите фото',
+        properties: ['openFile' as const],
+        filters: [
+          { name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] },
+        ],
+      }
+      const result = win
+        ? await dialog.showOpenDialog(win, options)
+        : await dialog.showOpenDialog(options)
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return null
+      }
+
+      return saveImageFileForOwner(owner, result.filePaths[0])
+    },
+  )
+
+  ipcMain.handle(
+    'save-topic-image-clipboard',
+    (_event, payload: { topicId?: number; draftId?: string }) => {
+      requireRole(getCurrentUser(), ['editor', 'admin'])
+      const owner = resolveImageOwner(payload ?? {})
+      const image = clipboard.readImage()
+      return saveNativeImageForOwner(owner, image)
+    },
+  )
+
+  // Legacy flat media pick — keep for compatibility; prefer save-topic-image
   ipcMain.handle('pick-and-save-image', async (event) => {
     requireRole(getCurrentUser(), ['editor', 'admin'])
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -520,12 +589,15 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('resolve-media-url', (_event, relativePath: string) => {
+  ipcMain.handle('resolve-media-url', (_event, relativePath: string, topicId?: number) => {
     const cleaned = relativePath.replace(/^\/+/, '').replace(/\\/g, '/')
-    if (!cleaned.startsWith('media/')) {
-      return ''
+    if (cleaned.startsWith('images/') && typeof topicId === 'number') {
+      return `spravochnik://media/${topicId}/${cleaned}`
     }
-    return `spravochnik://${cleaned}`
+    if (cleaned.startsWith('media/')) {
+      return `spravochnik://${cleaned}`
+    }
+    return ''
   })
 
   ipcMain.handle('updates:status', () => getUpdateStatus())

@@ -6,8 +6,11 @@ contextBridge.exposeInMainWorld('spravochnik', {
   saveItem: (payload: unknown) => ipcRenderer.invoke('save-item', payload),
   updateItem: (payload: unknown) => ipcRenderer.invoke('update-item', payload),
   pickAndSaveImage: () => ipcRenderer.invoke('pick-and-save-image'),
-  resolveMediaUrl: (relativePath: string) =>
-    ipcRenderer.invoke('resolve-media-url', relativePath),
+  saveTopicImage: (payload: unknown) => ipcRenderer.invoke('save-topic-image', payload),
+  saveTopicImageFromClipboard: (payload: unknown) =>
+    ipcRenderer.invoke('save-topic-image-clipboard', payload),
+  resolveMediaUrl: (relativePath: string, topicId?: number) =>
+    ipcRenderer.invoke('resolve-media-url', relativePath, topicId),
   getDataPath: () => ipcRenderer.invoke('get-data-path'),
 
   getCurrentUser: () => ipcRenderer.invoke('auth:current-user'),

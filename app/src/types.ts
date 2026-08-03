@@ -71,8 +71,10 @@ export interface UpdateInfo {
   available: boolean
   currentVersion: string
   version: string | null
-  downloadUrl: string | null
+  /** Path on Yandex Disk, e.g. updates/REST-INFO-Setup-1.1.4.exe */
+  remoteSetupPath: string | null
   error?: string
+  source?: 'yandex' | 'local' | null
 }
 
 export interface GuideDocument {

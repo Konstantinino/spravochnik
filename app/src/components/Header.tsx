@@ -58,7 +58,9 @@ export function Header({
   }, [])
 
   const showSync = canEdit && syncStatus.hasPendingChanges && !pushing && !interactionLocked
-  const updateAvailable = Boolean(updateInfo?.available && updateInfo.downloadUrl)
+  const updateAvailable = Boolean(
+    updateInfo?.available && updateInfo.remoteSetupPath,
+  )
 
   async function handleDownloadUpdate() {
     if (!updateAvailable || downloading || interactionLocked) return

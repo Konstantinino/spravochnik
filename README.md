@@ -6,7 +6,7 @@ Windows-приложение — корпоративный справочник
 
 ## Установка на ПК
 
-1. Скачайте `REST-INFO-Setup-1.1.3.exe` из [Releases](https://github.com/Konstantinino/spravochnik/releases) или из `app/release/` после сборки
+1. Скачайте `REST-INFO-Setup-1.1.4.exe` с Яндекс.Диска (`REST INFO/updates/`) или из `app/release/` после сборки
 2. Установите как обычную программу
 3. На рабочем столе появится ярлык **REST INFO**
 
@@ -107,7 +107,7 @@ cd app
 npm run dist:ascii
 ```
 
-Файл: `app/release/REST-INFO-Setup-1.1.3.exe`
+Файл: `app/release/REST-INFO-Setup-1.1.4.exe` (на Диске: `updates/REST-INFO-Setup-1.1.4.exe`)
 
 ## Структура
 

@@ -8,6 +8,7 @@ import type {
   SyncStatus,
   UpdateInfo,
   UserRole,
+  ConflictResolution,
 } from './types'
 
 export interface SpravochnikApi {
@@ -68,6 +69,7 @@ export interface SpravochnikApi {
   pullSync: () => Promise<SyncStatus>
   discardSync: () => Promise<SyncStatus>
   pushSync: () => Promise<SyncStatus>
+  resolveSyncConflicts: (resolutions: ConflictResolution[]) => Promise<SyncStatus>
   onSyncStatus: (callback: (status: SyncStatus) => void) => () => void
 
   getUpdateStatus: () => Promise<UpdateInfo>

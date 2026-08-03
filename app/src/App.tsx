@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Header } from './components/Header'
 import { Search } from './components/Search'
 import { TopicList } from './components/TopicList'
@@ -6,13 +6,16 @@ import { Viewer } from './components/Viewer'
 import { TopicEditorModal } from './components/TopicEditorModal'
 import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
+import { SyncConflictModal } from './components/SyncConflictModal'
 import { getItems, filterItemsByParty, getItemParty } from './lib/data'
 import { searchItems } from './lib/search'
 import { loadSavedDepartment, saveDepartment } from './lib/prefs'
 import type {
+  ConflictResolution,
   DepartmentId,
   GuideFile,
   GuideItem,
+  ImageDisplayMap,
   PublicUser,
   SupportParty,
   SyncStatus,
@@ -42,6 +45,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSync)
   const [pushing, setPushing] = useState(false)
+  const [busyLeft, setBusyLeft] = useState<number | null>(null)
+  const [conflictOpen, setConflictOpen] = useState(false)
+  const pushInFlight = useRef(false)
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -51,8 +57,18 @@ export default function App() {
       }
       setUser(u)
     })
-    void window.spravochnik.getSyncStatus().then(setSyncStatus)
-    return window.spravochnik.onSyncStatus(setSyncStatus)
+    void window.spravochnik.getSyncStatus().then((status) => {
+      setSyncStatus(status)
+      if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
+        setConflictOpen(true)
+      }
+    })
+    return window.spravochnik.onSyncStatus((status) => {
+      setSyncStatus(status)
+      if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
+        setConflictOpen(true)
+      }
+    })
   }, [])
 
   function handleDepartmentChange(id: DepartmentId) {
@@ -92,10 +108,83 @@ export default function App() {
   // After background sync, refresh current department quietly
   useEffect(() => {
     if (!user) return
-    if (syncStatus.code === 'up_to_date' || syncStatus.code === 'pending') {
+    if (
+      syncStatus.code === 'up_to_date' ||
+      syncStatus.code === 'pending' ||
+      syncStatus.code === 'conflict'
+    ) {
       void window.spravochnik.loadGuide(departmentId).then(setGuide).catch(() => undefined)
     }
   }, [syncStatus.code, departmentId, user])
+
+  async function runPush() {
+    if (pushInFlight.current) return
+    pushInFlight.current = true
+    setPushing(true)
+    try {
+      const status = await window.spravochnik.pushSync()
+      setSyncStatus(status)
+      if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
+        setConflictOpen(true)
+      }
+      if (status.code === 'up_to_date') {
+        const data = await window.spravochnik.loadGuide(departmentId)
+        setGuide(data)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка отправки')
+    } finally {
+      setPushing(false)
+      pushInFlight.current = false
+    }
+  }
+
+  // Auto-retry when sync lock is busy
+  useEffect(() => {
+    if (syncStatus.code !== 'busy') {
+      setBusyLeft(null)
+      return
+    }
+    let left = syncStatus.retryAfterSec ?? 20
+    setBusyLeft(left)
+    const timer = window.setInterval(() => {
+      left -= 1
+      setBusyLeft(left)
+      if (left <= 0) {
+        window.clearInterval(timer)
+        void runPush()
+      }
+    }, 1000)
+    return () => window.clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- retry only when busy status arrives
+  }, [syncStatus.code, syncStatus.retryAfterSec, syncStatus.lockBy])
+
+  async function handlePush() {
+    await runPush()
+  }
+
+  async function handleResolveConflicts(resolutions: ConflictResolution[]) {
+    setPushing(true)
+    try {
+      const status = await window.spravochnik.resolveSyncConflicts(resolutions)
+      setSyncStatus(status)
+      if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
+        setConflictOpen(true)
+      } else {
+        setConflictOpen(false)
+      }
+      const data = await window.spravochnik.loadGuide(departmentId)
+      setGuide(data)
+    } finally {
+      setPushing(false)
+    }
+  }
+
+  async function handleLogout() {
+    await window.spravochnik.logout()
+    setUser(null)
+    setView('main')
+  }
 
   const items: GuideItem[] = useMemo(() => (guide ? getItems(guide) : []), [guide])
 
@@ -124,6 +213,20 @@ export default function App() {
 
   const canEdit = user?.role === 'editor' || user?.role === 'admin'
   const isAdmin = user?.role === 'admin'
+
+  const displaySyncStatus: SyncStatus = useMemo(() => {
+    if (syncStatus.code === 'busy' && busyLeft != null) {
+      return {
+        ...syncStatus,
+        label: `Синхронизация временно занята (${busyLeft} с)`,
+        detail:
+          syncStatus.lockBy != null
+            ? `Сейчас синхронизирует: ${syncStatus.lockBy}`
+            : syncStatus.detail,
+      }
+    }
+    return syncStatus
+  }, [syncStatus, busyLeft])
 
   async function handleSave(payload: {
     departmentId: DepartmentId
@@ -205,6 +308,18 @@ export default function App() {
     }
   }
 
+  async function handleSaveImageDisplay(image_display: ImageDisplayMap | undefined) {
+    if (!selected) return
+    const data = await window.spravochnik.updateItem({
+      departmentId,
+      item: {
+        ...selected,
+        image_display: image_display ?? {},
+      },
+    })
+    setGuide(data)
+  }
+
   async function handleDelete() {
     if (!selected) return
     const data = await window.spravochnik.deleteItem({
@@ -213,24 +328,6 @@ export default function App() {
     })
     setGuide(data)
     setSelectedId(null)
-  }
-
-  async function handlePush() {
-    setPushing(true)
-    try {
-      const status = await window.spravochnik.pushSync()
-      setSyncStatus(status)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка отправки')
-    } finally {
-      setPushing(false)
-    }
-  }
-
-  async function handleLogout() {
-    await window.spravochnik.logout()
-    setUser(null)
-    setView('main')
   }
 
   if (user === undefined) {
@@ -262,11 +359,11 @@ export default function App() {
         onDepartmentChange={handleDepartmentChange}
         onOpenSettings={() => setView('settings')}
         user={user}
-        syncStatus={syncStatus}
+        syncStatus={displaySyncStatus}
         canEdit={!!canEdit}
         onLogout={() => void handleLogout()}
         onPush={() => void handlePush()}
-        pushing={pushing}
+        pushing={pushing || busyLeft != null}
       />
 
       <div className="app-body">
@@ -317,6 +414,7 @@ export default function App() {
             isAdmin={!!isAdmin && !!selected}
             onSelect={setSelectedId}
             onSave={handleInlineSave}
+            onSaveImageDisplay={handleSaveImageDisplay}
             onDelete={handleDelete}
             onAddSubtopic={() => {
               if (!selected) return
@@ -343,6 +441,14 @@ export default function App() {
         }}
         onSave={handleSave}
       />
+
+      {conflictOpen && (syncStatus.conflicts?.length ?? 0) > 0 && (
+        <SyncConflictModal
+          conflicts={syncStatus.conflicts!}
+          onResolve={handleResolveConflicts}
+          onClose={() => setConflictOpen(false)}
+        />
+      )}
     </div>
   )
 }

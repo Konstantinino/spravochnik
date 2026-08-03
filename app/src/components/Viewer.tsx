@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { DepartmentId, GuideItem, SupportParty } from '../types'
+import type { DepartmentId, GuideItem, ImageDisplayMap, SupportParty } from '../types'
 import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import { filterItemsByParty, getChildren, getItemParty } from '../lib/data'
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
+import {
+  IMAGE_SCALE_DEFAULT,
+  getImageScale,
+  normalizeImageDisplayKey,
+  withImageScale,
+} from '../lib/imageDisplay'
 import { mediaSrcFromMarkdownUrl, isAllowedMarkdownImageSrc } from '../lib/markdown'
 import { focusCursor, insertAtCursor } from '../lib/textInsert'
+import { ImageScaleDialog } from './ImageScaleDialog'
 import { ParentTopicField } from './ParentTopicField'
 
 interface ViewerProps {
@@ -22,8 +29,23 @@ interface ViewerProps {
     parent_id: number | null
     party?: SupportParty
   }) => Promise<void>
+  onSaveImageDisplay: (image_display: ImageDisplayMap | undefined) => Promise<void>
   onDelete: () => Promise<void>
   onAddSubtopic: () => void
+}
+
+type ImgMenuState = {
+  x: number
+  y: number
+  markdownKey: string
+  resolvedSrc: string
+}
+
+type ScaleEditorState = {
+  markdownKey: string
+  left: number
+  top: number
+  draftScale: number
 }
 
 export function Viewer({
@@ -34,6 +56,7 @@ export function Viewer({
   isAdmin,
   onSelect,
   onSave,
+  onSaveImageDisplay,
   onDelete,
   onAddSubtopic,
 }: ViewerProps) {
@@ -55,11 +78,21 @@ export function Viewer({
   const findInputRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
 
+  const [imgMenu, setImgMenu] = useState<ImgMenuState | null>(null)
+  const [scaleEditor, setScaleEditor] = useState<ScaleEditorState | null>(null)
+  const [localDisplay, setLocalDisplay] = useState<ImageDisplayMap | undefined>(undefined)
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const displayDirtyRef = useRef(false)
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setFindOpen(true)
+      }
+      if (e.key === 'Escape') {
+        setImgMenu(null)
+        setLightboxSrc(null)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -73,14 +106,35 @@ export function Viewer({
     setFindQuery('')
     setFindIndex(0)
     setFindCount(0)
+    setImgMenu(null)
+    setScaleEditor(null)
+    setLightboxSrc(null)
+    displayDirtyRef.current = false
     if (item) {
       setQuestion(item.question)
       setAnswer(item.answer ?? '')
       setParentId(item.parent_id ?? null)
       setAttachParent(item.parent_id != null)
       setParty(getItemParty(item))
+      setLocalDisplay(item.image_display)
+    } else {
+      setLocalDisplay(undefined)
     }
   }, [item?.id])
+
+  useEffect(() => {
+    if (!item || displayDirtyRef.current || scaleEditor) return
+    setLocalDisplay(item.image_display)
+  }, [item?.image_display, item, scaleEditor])
+
+  useEffect(() => {
+    if (!imgMenu) return
+    function close() {
+      setImgMenu(null)
+    }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [imgMenu])
 
   const showParty = departmentId === 'support'
 
@@ -96,7 +150,6 @@ export function Viewer({
 
   useEffect(() => {
     if (!findOpen) return
-    // Focus once when bar opens — do not steal focus on every keystroke
     requestAnimationFrame(() => findInputRef.current?.focus())
   }, [findOpen])
 
@@ -104,7 +157,6 @@ export function Viewer({
     setFindIndex(0)
   }, [findQuery, item?.id])
 
-  // Highlight matches in rendered markdown (browser-like yellow marks)
   useEffect(() => {
     const root = bodyRef.current
     if (!root || editing || !findOpen) {
@@ -118,7 +170,7 @@ export function Viewer({
       setFindCount(count)
     })
     return () => cancelAnimationFrame(frame)
-  }, [findOpen, findQuery, findIndex, editing, item?.id, item?.answer])
+  }, [findOpen, findQuery, findIndex, editing, item?.id, item?.answer, localDisplay])
 
   if (!item) {
     return (
@@ -188,11 +240,11 @@ export function Viewer({
   }
 
   async function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const items = e.clipboardData?.items
-    if (!items) return
+    const pasteItems = e.clipboardData?.items
+    if (!pasteItems) return
     let hasImage = false
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith('image/')) {
+    for (const pasteItem of Array.from(pasteItems)) {
+      if (pasteItem.type.startsWith('image/')) {
         hasImage = true
         break
       }
@@ -232,6 +284,68 @@ export function Viewer({
   function findNext(dir: 1 | -1) {
     if (findCount === 0) return
     setFindIndex((i) => (i + dir + findCount) % findCount)
+  }
+
+  function openImageMenu(e: React.MouseEvent, markdownKey: string, resolvedSrc: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    setImgMenu({
+      x: e.clientX,
+      y: e.clientY,
+      markdownKey: normalizeImageDisplayKey(markdownKey),
+      resolvedSrc,
+    })
+  }
+
+  function applyDraftScale(nextScale: number) {
+    if (!scaleEditor) return
+    displayDirtyRef.current = true
+    setScaleEditor({ ...scaleEditor, draftScale: nextScale })
+    setLocalDisplay((prev) => withImageScale(prev, scaleEditor.markdownKey, nextScale))
+  }
+
+  async function persistDisplay(map: ImageDisplayMap | undefined) {
+    try {
+      await onSaveImageDisplay(map)
+      displayDirtyRef.current = false
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось сохранить размер')
+    }
+  }
+
+  async function closeScaleEditor(persist: boolean) {
+    if (!scaleEditor || !item) return
+    if (!persist) {
+      setLocalDisplay(item.image_display)
+      displayDirtyRef.current = false
+      setScaleEditor(null)
+      return
+    }
+    const map = withImageScale(localDisplay, scaleEditor.markdownKey, scaleEditor.draftScale)
+    setLocalDisplay(map)
+    setScaleEditor(null)
+    await persistDisplay(map)
+  }
+
+  function renderTopicImage(rawSrc: string, alt: string) {
+    const key = normalizeImageDisplayKey(rawSrc)
+    const resolved = mediaSrcFromMarkdownUrl(rawSrc, current.id)
+    const scale = getImageScale(localDisplay, key)
+    const scaled = scale !== IMAGE_SCALE_DEFAULT
+    return (
+      <img
+        src={resolved}
+        alt={alt}
+        className="viewer__image"
+        loading="lazy"
+        style={
+          scaled
+            ? { width: `${scale}%`, maxWidth: 'none', height: 'auto' }
+            : undefined
+        }
+        onContextMenu={(e) => openImageMenu(e, key, resolved)}
+      />
+    )
   }
 
   return (
@@ -442,15 +556,7 @@ export function Viewer({
                   if (!isAllowedMarkdownImageSrc(raw)) {
                     return null
                   }
-                  const resolved = mediaSrcFromMarkdownUrl(raw, current.id)
-                  return (
-                    <img
-                      src={resolved}
-                      alt={alt || ''}
-                      className="viewer__image"
-                      loading="lazy"
-                    />
-                  )
+                  return renderTopicImage(raw, alt || '')
                 },
                 a: ({ href, children: linkChildren }) => (
                   <a href={href} target="_blank" rel="noreferrer">
@@ -468,17 +574,89 @@ export function Viewer({
           {localLegacy.length > 0 && (
             <div className="viewer__legacy-photos">
               {localLegacy.map((src) => (
-                <img
-                  key={src}
-                  src={mediaSrcFromMarkdownUrl(src, current.id)}
-                  alt=""
-                  className="viewer__image"
-                />
+                <span key={src}>{renderTopicImage(src, '')}</span>
               ))}
             </div>
           )}
 
           {error && <div className="form-error">{error}</div>}
+        </div>
+      )}
+
+      {imgMenu && (
+        <div
+          className="image-ctx-menu"
+          style={{ left: imgMenu.x, top: imgMenu.y }}
+          role="menu"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {canEdit && (
+            <button
+              type="button"
+              className="image-ctx-menu__item"
+              role="menuitem"
+              onClick={() => {
+                const scale = getImageScale(localDisplay, imgMenu.markdownKey)
+                setScaleEditor({
+                  markdownKey: imgMenu.markdownKey,
+                  left: Math.min(imgMenu.x, window.innerWidth - 280),
+                  top: Math.min(imgMenu.y, window.innerHeight - 160),
+                  draftScale: scale,
+                })
+                setImgMenu(null)
+              }}
+            >
+              Регулировка размера
+            </button>
+          )}
+          <button
+            type="button"
+            className="image-ctx-menu__item"
+            role="menuitem"
+            onClick={() => {
+              setLightboxSrc(imgMenu.resolvedSrc)
+              setImgMenu(null)
+            }}
+          >
+            Открыть фото на весь экран
+          </button>
+        </div>
+      )}
+
+      {scaleEditor && canEdit && (
+        <ImageScaleDialog
+          scale={scaleEditor.draftScale}
+          initialLeft={scaleEditor.left}
+          initialTop={scaleEditor.top}
+          onScaleChange={applyDraftScale}
+          onReset={() => applyDraftScale(IMAGE_SCALE_DEFAULT)}
+          onApply={() => void closeScaleEditor(true)}
+          onClose={() => void closeScaleEditor(true)}
+        />
+      )}
+
+      {lightboxSrc && (
+        <div
+          className="image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Просмотр фото"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button
+            type="button"
+            className="image-lightbox__close"
+            onClick={() => setLightboxSrc(null)}
+            aria-label="Закрыть"
+          >
+            ✕
+          </button>
+          <img
+            src={lightboxSrc}
+            alt=""
+            className="image-lightbox__img"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </article>

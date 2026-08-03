@@ -38,13 +38,33 @@ export type SyncStatusCode =
   | 'uploading'
   | 'up_to_date'
   | 'pending'
+  | 'busy'
+  | 'conflict'
   | 'error'
+
+export interface SyncConflictInfo {
+  fileName: string
+  listKey: 'questions' | 'templates'
+  id: number
+  title: string
+  localPreview: string
+  remotePreview: string
+}
 
 export interface SyncStatus {
   code: SyncStatusCode
   label: string
   detail?: string
   hasPendingChanges: boolean
+  retryAfterSec?: number
+  lockBy?: string
+  conflicts?: SyncConflictInfo[]
+}
+
+export interface ConflictResolution {
+  fileName: string
+  id: number
+  choice: 'local' | 'remote'
 }
 
 export interface UpdateInfo {
@@ -60,6 +80,9 @@ export interface GuideDocument {
   file_name: string
 }
 
+/** Display scale % for markdown image src keys (e.g. images/a.png → 80). Synced with guide JSON. */
+export type ImageDisplayMap = Record<string, number>
+
 export interface GuideItem {
   id: number
   question: string
@@ -71,6 +94,8 @@ export interface GuideItem {
   photo?: string
   photos?: string[]
   documents?: GuideDocument[]
+  /** Per-image display scale (10–200). Does not change files or markdown. */
+  image_display?: ImageDisplayMap
 }
 
 export interface GuideFile {

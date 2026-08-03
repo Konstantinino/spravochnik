@@ -1,9 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import {
   ACCOUNTS_FILE,
   DATA_FILES,
+  SYNC_LOCK_FILE,
   YANDEX_FOLDER,
+  DEPARTMENTS,
   getUserDataRoot,
 } from './paths'
 import {
@@ -13,9 +16,16 @@ import {
   writeSettings,
   readAccounts,
   mergeAccountsData,
+  getCurrentUser,
   type AccountsData,
 } from './auth-store'
 import { clearPendingMedia, readPendingMedia } from './pending-media'
+import {
+  applyConflictResolutions,
+  mergeGuideFile,
+  type TopicConflict,
+} from './guide-merge'
+import { readBaseGuide, writeAllGuideBasesFromLocal, writeBaseGuide } from './sync-base'
 
 export type SyncStatusCode =
   | 'idle'
@@ -25,13 +35,33 @@ export type SyncStatusCode =
   | 'uploading'
   | 'up_to_date'
   | 'pending'
+  | 'busy'
+  | 'conflict'
   | 'error'
+
+export interface SyncConflictInfo {
+  fileName: string
+  listKey: 'questions' | 'templates'
+  id: number
+  title: string
+  localPreview: string
+  remotePreview: string
+}
 
 export interface SyncStatus {
   code: SyncStatusCode
   label: string
   detail?: string
   hasPendingChanges: boolean
+  retryAfterSec?: number
+  lockBy?: string
+  conflicts?: SyncConflictInfo[]
+}
+
+export interface ConflictResolution {
+  fileName: string
+  id: number
+  choice: 'local' | 'remote'
 }
 
 type StatusListener = (status: SyncStatus) => void
@@ -43,10 +73,27 @@ let currentStatus: SyncStatus = {
   hasPendingChanges: false,
 }
 
+const LOCK_TTL_SEC = 90
+const BUSY_RETRY_SEC = 20
+
+interface SyncLockPayload {
+  by: string
+  since: number
+  ttlSec: number
+  lockId: string
+}
+
+let heldLockId: string | null = null
+let pendingConflicts: TopicConflict[] = []
+let pendingMergedByFile: Record<string, Record<string, unknown>> = {}
+
 function emit(partial: Partial<SyncStatus> & Pick<SyncStatus, 'code' | 'label'>): SyncStatus {
   const settings = readSettings()
   currentStatus = {
     ...currentStatus,
+    retryAfterSec: undefined,
+    lockBy: undefined,
+    conflicts: undefined,
     ...partial,
     hasPendingChanges: settings.hasPendingChanges,
   }
@@ -145,11 +192,24 @@ async function uploadLocalFile(token: string, fileName: string, localPath: strin
   }
 }
 
+async function uploadJson(token: string, fileName: string, data: unknown): Promise<void> {
+  const tmp = path.join(getUserDataRoot(), `.upload-${fileName}`)
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8')
+  try {
+    await uploadLocalFile(token, fileName, tmp)
+  } finally {
+    try {
+      fs.unlinkSync(tmp)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 async function listRemoteMedia(token: string): Promise<string[]> {
   return listRemoteMediaRecursive(token, 'media')
 }
 
-/** Returns paths relative to userData root, e.g. media/a.jpg or media/12/images/b.png */
 async function listRemoteMediaRecursive(token: string, remoteDir: string): Promise<string[]> {
   const encoded = encodeURIComponent(folderPath(remoteDir))
   const res = await yandexFetch(
@@ -243,6 +303,125 @@ async function pullAllRemoteMedia(token: string): Promise<void> {
   }
 }
 
+function readLocalJson(fileName: string): Record<string, unknown> | null {
+  const p = path.join(getUserDataRoot(), fileName)
+  try {
+    if (!fs.existsSync(p)) return null
+    return JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function writeLocalJson(fileName: string, data: unknown): void {
+  fs.writeFileSync(
+    path.join(getUserDataRoot(), fileName),
+    JSON.stringify(data, null, 2),
+    'utf8',
+  )
+}
+
+function previewText(topic: { question?: string; answer?: string }): string {
+  const q = typeof topic.question === 'string' ? topic.question.trim() : ''
+  const a = typeof topic.answer === 'string' ? topic.answer.trim().replace(/\s+/g, ' ') : ''
+  const body = a.slice(0, 160)
+  return [q, body].filter(Boolean).join(' — ') || '(пусто)'
+}
+
+function toConflictInfo(c: TopicConflict): SyncConflictInfo {
+  return {
+    fileName: c.fileName,
+    listKey: c.listKey,
+    id: c.id,
+    title: c.title,
+    localPreview: previewText(c.local),
+    remotePreview: previewText(c.remote),
+  }
+}
+
+function listKeyForFile(fileName: string): 'questions' | 'templates' {
+  const dept = DEPARTMENTS.find((d) => d.fileName === fileName)
+  return dept?.listKey ?? 'questions'
+}
+
+async function readRemoteLock(token: string): Promise<SyncLockPayload | null> {
+  const tmp = path.join(getUserDataRoot(), `.${SYNC_LOCK_FILE}.tmp`)
+  const ok = await downloadRemoteFile(token, SYNC_LOCK_FILE, tmp)
+  if (!ok) return null
+  try {
+    const raw = JSON.parse(fs.readFileSync(tmp, 'utf8')) as SyncLockPayload
+    if (!raw || typeof raw.lockId !== 'string' || typeof raw.since !== 'number') return null
+    return {
+      by: String(raw.by || 'другой пользователь'),
+      since: raw.since,
+      ttlSec: typeof raw.ttlSec === 'number' ? raw.ttlSec : LOCK_TTL_SEC,
+      lockId: raw.lockId,
+    }
+  } catch {
+    return null
+  } finally {
+    try {
+      fs.unlinkSync(tmp)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function lockExpired(lock: SyncLockPayload): boolean {
+  const ageMs = Date.now() - lock.since
+  return ageMs > lock.ttlSec * 1000
+}
+
+async function acquireSyncLock(token: string): Promise<
+  | { ok: true }
+  | { ok: false; by: string; retryAfterSec: number }
+> {
+  const existing = await readRemoteLock(token)
+  if (existing && !lockExpired(existing) && existing.lockId !== heldLockId) {
+    const left = Math.ceil((existing.ttlSec * 1000 - (Date.now() - existing.since)) / 1000)
+    return {
+      ok: false,
+      by: existing.by,
+      retryAfterSec: Math.max(BUSY_RETRY_SEC, Math.min(left, BUSY_RETRY_SEC)),
+    }
+  }
+
+  const user = getCurrentUser()
+  const lockId = randomUUID()
+  const payload: SyncLockPayload = {
+    by: user?.email || user?.name || 'редактор',
+    since: Date.now(),
+    ttlSec: LOCK_TTL_SEC,
+    lockId,
+  }
+  await uploadJson(token, SYNC_LOCK_FILE, payload)
+
+  // Verify we won a possible race
+  const verify = await readRemoteLock(token)
+  if (!verify || verify.lockId !== lockId) {
+    return {
+      ok: false,
+      by: verify?.by || 'другой пользователь',
+      retryAfterSec: BUSY_RETRY_SEC,
+    }
+  }
+  heldLockId = lockId
+  return { ok: true }
+}
+
+async function releaseSyncLock(token: string): Promise<void> {
+  try {
+    const existing = await readRemoteLock(token)
+    if (existing && heldLockId && existing.lockId !== heldLockId) return
+    await deleteRemoteFile(token, SYNC_LOCK_FILE)
+  } catch {
+    /* ignore */
+  } finally {
+    heldLockId = null
+  }
+}
+
 const SYNC_JSON_FILES = [...DATA_FILES, ACCOUNTS_FILE] as const
 
 export async function pullFromYandex(options?: { force?: boolean }): Promise<SyncStatus> {
@@ -264,7 +443,6 @@ export async function pullFromYandex(options?: { force?: boolean }): Promise<Syn
     const force = Boolean(options?.force)
     for (const fileName of SYNC_JSON_FILES) {
       const dest = path.join(root, fileName)
-      // Don't overwrite local pending guide edits on pull if pending — still pull accounts carefully
       if (
         !force &&
         settings.hasPendingChanges &&
@@ -278,16 +456,19 @@ export async function pullFromYandex(options?: { force?: boolean }): Promise<Syn
         continue
       }
 
-      await downloadRemoteFile(settings.yandexToken, fileName, dest)
+      const downloaded = await downloadRemoteFile(settings.yandexToken, fileName, dest)
+      if (downloaded && !readSettings().hasPendingChanges) {
+        writeBaseFromDownloaded(fileName, dest)
+      }
     }
-
-    // Pull settings token is local-only — never overwrite local token from remote settings file
-    // Optionally download remote settings without token? Skip SETTINGS_FILE for safety.
 
     await ensureRemoteMediaFolder(settings.yandexToken)
     await pullAllRemoteMedia(settings.yandexToken)
 
     const latest = readSettings()
+    if (!latest.hasPendingChanges) {
+      writeAllGuideBasesFromLocal()
+    }
     if (latest.hasPendingChanges) {
       return emit({ code: 'pending', label: 'Есть локальные изменения' })
     }
@@ -301,6 +482,55 @@ export async function pullFromYandex(options?: { force?: boolean }): Promise<Syn
   }
 }
 
+function writeBaseFromDownloaded(fileName: string, dest: string): void {
+  try {
+    const data = JSON.parse(fs.readFileSync(dest, 'utf8')) as unknown
+    writeBaseGuide(fileName, data)
+  } catch {
+    /* ignore */
+  }
+}
+
+async function mergeGuidesWithRemote(token: string): Promise<{
+  conflicts: TopicConflict[]
+  mergedByFile: Record<string, Record<string, unknown>>
+}> {
+  const root = getUserDataRoot()
+  const conflicts: TopicConflict[] = []
+  const mergedByFile: Record<string, Record<string, unknown>> = {}
+
+  for (const fileName of DATA_FILES) {
+    const local = readLocalJson(fileName) ?? { [listKeyForFile(fileName)]: [] }
+    const remoteTmp = path.join(root, `.${fileName}.remote`)
+    const downloaded = await downloadRemoteFile(token, fileName, remoteTmp)
+    let remote: Record<string, unknown> = { [listKeyForFile(fileName)]: [] }
+    if (downloaded) {
+      try {
+        remote = JSON.parse(fs.readFileSync(remoteTmp, 'utf8')) as Record<string, unknown>
+      } catch {
+        remote = { [listKeyForFile(fileName)]: [] }
+      }
+    }
+    try {
+      fs.unlinkSync(remoteTmp)
+    } catch {
+      /* ignore */
+    }
+
+    const baseRaw = readBaseGuide(fileName)
+    const base =
+      baseRaw && typeof baseRaw === 'object'
+        ? (baseRaw as Record<string, unknown>)
+        : null
+
+    const result = mergeGuideFile(fileName, base, local, remote)
+    mergedByFile[fileName] = result.merged
+    conflicts.push(...result.conflicts)
+  }
+
+  return { conflicts, mergedByFile }
+}
+
 export async function pushToYandex(): Promise<SyncStatus> {
   const settings = readSettings()
   if (!settings.yandexToken) {
@@ -311,27 +541,127 @@ export async function pushToYandex(): Promise<SyncStatus> {
     })
   }
 
-  try {
-    emit({ code: 'uploading', label: 'Отправка…' })
-    await ensureRemoteFolder(settings.yandexToken)
-    await ensureRemoteMediaFolder(settings.yandexToken)
+  const token = settings.yandexToken
+  let lockHeld = false
 
-    const root = getUserDataRoot()
-    for (const fileName of SYNC_JSON_FILES) {
-      await uploadLocalFile(settings.yandexToken, fileName, path.join(root, fileName))
+  try {
+    emit({ code: 'connecting', label: 'Подключение…' })
+    await ensureRemoteFolder(token)
+    await ensureRemoteMediaFolder(token)
+
+    emit({ code: 'syncing', label: 'Проверка блокировки…' })
+    const lock = await acquireSyncLock(token)
+    if (!lock.ok) {
+      return emit({
+        code: 'busy',
+        label: 'Синхронизация временно занята',
+        detail: `Сейчас синхронизирует: ${lock.by}. Повтор через ${lock.retryAfterSec} с`,
+        retryAfterSec: lock.retryAfterSec,
+        lockBy: lock.by,
+      })
+    }
+    lockHeld = true
+
+    emit({ code: 'syncing', label: 'Слияние изменений…' })
+    const { conflicts, mergedByFile } = await mergeGuidesWithRemote(token)
+
+    if (conflicts.length > 0) {
+      pendingConflicts = conflicts
+      pendingMergedByFile = mergedByFile
+      // Keep merged placeholders on disk so UI can reload after resolve
+      for (const [fileName, data] of Object.entries(mergedByFile)) {
+        writeLocalJson(fileName, data)
+      }
+      await releaseSyncLock(token)
+      lockHeld = false
+      return emit({
+        code: 'conflict',
+        label: 'Конфликт изменений',
+        detail: `Разные правки одной темы: ${conflicts.length}`,
+        conflicts: conflicts.map(toConflictInfo),
+      })
     }
 
-    await uploadPendingMedia(settings.yandexToken)
+    emit({ code: 'uploading', label: 'Отправка…' })
+    for (const [fileName, data] of Object.entries(mergedByFile)) {
+      writeLocalJson(fileName, data)
+      await uploadLocalFile(token, fileName, path.join(getUserDataRoot(), fileName))
+      writeBaseGuide(fileName, data)
+    }
 
+    // Accounts: merge then upload
+    await pullAndMergeAccounts(token, false)
+    await uploadLocalFile(token, ACCOUNTS_FILE, path.join(getUserDataRoot(), ACCOUNTS_FILE))
+
+    await uploadPendingMedia(token)
+
+    pendingConflicts = []
+    pendingMergedByFile = {}
     setPendingChanges(false)
+    await releaseSyncLock(token)
+    lockHeld = false
     return emit({ code: 'up_to_date', label: 'Актуально' })
   } catch (e) {
+    if (lockHeld) {
+      try {
+        await releaseSyncLock(token)
+      } catch {
+        /* ignore */
+      }
+    }
     return emit({
       code: 'error',
       label: 'Ошибка отправки',
       detail: e instanceof Error ? e.message : String(e),
     })
   }
+}
+
+/** Apply user choices for topic conflicts, then push again. */
+export async function resolveSyncConflicts(
+  resolutions: ConflictResolution[],
+): Promise<SyncStatus> {
+  if (pendingConflicts.length === 0) {
+    return pushToYandex()
+  }
+
+  const byFile = new Map<string, ConflictResolution[]>()
+  for (const r of resolutions) {
+    const list = byFile.get(r.fileName) ?? []
+    list.push(r)
+    byFile.set(r.fileName, list)
+  }
+
+  for (const [fileName, fileResolutions] of byFile) {
+    const conflicts = pendingConflicts.filter((c) => c.fileName === fileName)
+    const listKey = conflicts[0]?.listKey ?? listKeyForFile(fileName)
+    let file = pendingMergedByFile[fileName] ?? readLocalJson(fileName)
+    if (!file) continue
+    file = applyConflictResolutions(
+      file,
+      listKey,
+      fileResolutions.map((r) => ({ id: r.id, choice: r.choice })),
+      conflicts,
+    )
+    writeLocalJson(fileName, file)
+    pendingMergedByFile[fileName] = file
+  }
+
+  // Drop resolved from pending list
+  const resolvedKeys = new Set(resolutions.map((r) => `${r.fileName}:${r.id}`))
+  pendingConflicts = pendingConflicts.filter((c) => !resolvedKeys.has(`${c.fileName}:${c.id}`))
+
+  if (pendingConflicts.length > 0) {
+    return emit({
+      code: 'conflict',
+      label: 'Конфликт изменений',
+      detail: `Осталось конфликтов: ${pendingConflicts.length}`,
+      conflicts: pendingConflicts.map(toConflictInfo),
+    })
+  }
+
+  pendingConflicts = []
+  return pushToYandex()
 }
 
 export function markLocalChange(): SyncStatus {
@@ -359,7 +689,6 @@ async function pullAndMergeAccounts(token: string, force: boolean): Promise<void
   const local = readAccounts()
   const downloaded = await downloadRemoteFile(token, ACCOUNTS_FILE, remoteTmp)
   if (!downloaded) {
-    // Nothing on Disk yet — keep local
     return
   }
 
@@ -395,6 +724,8 @@ export async function discardLocalChanges(): Promise<SyncStatus> {
     })
   }
   setPendingChanges(false)
+  pendingConflicts = []
+  pendingMergedByFile = {}
   return pullFromYandex({ force: true })
 }
 
@@ -403,13 +734,18 @@ export function refreshStatusFromSettings(): SyncStatus {
   if (!settings.yandexToken) {
     return emit({ code: 'no_token', label: 'Нет токена Диска' })
   }
+  if (currentStatus.code === 'conflict' && (currentStatus.conflicts?.length ?? 0) > 0) {
+    return getSyncStatus()
+  }
   if (settings.hasPendingChanges) {
     return emit({ code: 'pending', label: 'Есть локальные изменения' })
   }
-  return emit({ code: currentStatus.code === 'error' ? 'error' : 'up_to_date', label: currentStatus.code === 'error' ? currentStatus.label : 'Актуально' })
+  return emit({
+    code: currentStatus.code === 'error' ? 'error' : 'up_to_date',
+    label: currentStatus.code === 'error' ? currentStatus.label : 'Актуально',
+  })
 }
 
-/** Merge remote accounts if we skipped — used after push/pull helpers */
 export function replaceAccountsFromFileIfExists(): void {
   // Kept for compatibility; pull now merges via pullAndMergeAccounts.
 }

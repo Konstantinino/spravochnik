@@ -58,6 +58,7 @@ import {
   pushAccountsFile,
   pushToYandex,
   refreshStatusFromSettings,
+  resolveSyncConflicts,
 } from './yandex-sync'
 import {
   checkForUpdates,
@@ -284,6 +285,15 @@ function registerIpc(): void {
     requireRole(user, ['editor', 'admin'])
     return pushToYandex()
   })
+  ipcMain.handle('sync:resolve-conflicts', async (_event, resolutions: unknown) => {
+    const user = getCurrentUser()
+    requireRole(user, ['editor', 'admin'])
+    return resolveSyncConflicts(
+      Array.isArray(resolutions)
+        ? (resolutions as { fileName: string; id: number; choice: 'local' | 'remote' }[])
+        : [],
+    )
+  })
 
   ipcMain.handle('load-guide', (_event, departmentId: DepartmentId) => {
     const dept = departmentById(departmentId)
@@ -306,6 +316,7 @@ function registerIpc(): void {
           party?: 'supplier' | 'customer'
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
+          image_display?: Record<string, number>
         }
       },
     ) => {
@@ -333,6 +344,11 @@ function registerIpc(): void {
         has_children: payload.item.has_children ?? false,
         photos: payload.item.photos ?? [],
         documents: payload.item.documents ?? [],
+        ...(payload.item.image_display &&
+        typeof payload.item.image_display === 'object' &&
+        Object.keys(payload.item.image_display).length > 0
+          ? { image_display: payload.item.image_display }
+          : {}),
         ...(payload.departmentId === 'support'
           ? {
               party:
@@ -374,6 +390,7 @@ function registerIpc(): void {
           party?: 'supplier' | 'customer'
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
+          image_display?: Record<string, number>
         }
       },
     ) => {
@@ -442,6 +459,15 @@ function registerIpc(): void {
                     : 'supplier',
             }
           : {}),
+      }
+
+      if (payload.item.image_display !== undefined) {
+        const map = payload.item.image_display
+        if (map && typeof map === 'object' && Object.keys(map).length > 0) {
+          list[idx].image_display = map
+        } else {
+          delete list[idx].image_display
+        }
       }
 
       // Refresh has_children for all items after possible reparent

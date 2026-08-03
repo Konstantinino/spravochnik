@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('spravochnik', {
   pullSync: () => ipcRenderer.invoke('sync:pull'),
   discardSync: () => ipcRenderer.invoke('sync:discard'),
   pushSync: () => ipcRenderer.invoke('sync:push'),
+  resolveSyncConflicts: (resolutions: unknown) =>
+    ipcRenderer.invoke('sync:resolve-conflicts', resolutions),
   onSyncStatus: (callback: (status: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
     ipcRenderer.on('sync:status-changed', listener)

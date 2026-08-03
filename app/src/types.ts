@@ -7,11 +7,27 @@ export type DepartmentId =
 
 export type UserRole = 'user' | 'editor' | 'admin'
 
+/** Только для отдела «Тех. поддержка»: Поставщик / Заказчик */
+export type SupportParty = 'supplier' | 'customer'
+
+export const SUPPORT_PARTY_LABELS: Record<SupportParty, string> = {
+  supplier: 'Поставщик',
+  customer: 'Заказчик',
+}
+
+export const SUPPORT_PARTIES: SupportParty[] = ['supplier', 'customer']
+
+export function isSupportParty(value: unknown): value is SupportParty {
+  return value === 'supplier' || value === 'customer'
+}
+
 export interface PublicUser {
   id: string
   name: string
   email: string
   role: UserRole
+  /** Owner account — role cannot be changed */
+  isOwner?: boolean
 }
 
 export type SyncStatusCode =
@@ -50,6 +66,8 @@ export interface GuideItem {
   answer: string
   parent_id?: number | null
   has_children?: boolean
+  /** Техподдержка: поставщик или заказчик. Старые темы без поля = supplier */
+  party?: SupportParty
   photo?: string
   photos?: string[]
   documents?: GuideDocument[]

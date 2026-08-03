@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import type { DepartmentId, GuideItem } from '../types'
-import { DEPARTMENTS } from '../types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { DepartmentId, GuideItem, SupportParty } from '../types'
+import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
+import { filterItemsByParty, getItemParty } from '../lib/data'
+import { ParentTopicField } from './ParentTopicField'
 
 interface TopicEditorModalProps {
   open: boolean
@@ -8,6 +10,9 @@ interface TopicEditorModalProps {
   departmentId: DepartmentId
   /** When adding a subtopic — parent id; null for root */
   parentId: number | null
+  items: GuideItem[]
+  /** Default Поставщик/Заказчик from sidebar filter (support only) */
+  defaultParty?: SupportParty
   initial?: GuideItem | null
   onClose: () => void
   onSave: (payload: {
@@ -15,6 +20,7 @@ interface TopicEditorModalProps {
     question: string
     answer: string
     parent_id: number | null
+    party?: SupportParty
     id?: number
   }) => Promise<void>
 }
@@ -24,6 +30,8 @@ export function TopicEditorModal({
   mode,
   departmentId,
   parentId,
+  items,
+  defaultParty = 'supplier',
   initial,
   onClose,
   onSave,
@@ -31,20 +39,50 @@ export function TopicEditorModal({
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
   const [targetDept, setTargetDept] = useState<DepartmentId>(departmentId)
+  const [party, setParty] = useState<SupportParty>(defaultParty)
+  const [attachParent, setAttachParent] = useState(false)
+  const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
+
+  const parentChoices = useMemo(() => {
+    if (!showParty) return items
+    return filterItemsByParty(items, party)
+  }, [items, party, showParty])
 
   useEffect(() => {
     if (!open) return
     setQuestion(initial?.question ?? '')
     setAnswer(initial?.answer ?? '')
     setTargetDept(departmentId)
+    const initialParent =
+      mode === 'edit' ? (initial?.parent_id ?? null) : parentId
+    setSelectedParentId(initialParent)
+    setAttachParent(initialParent != null)
+    setParty(
+      mode === 'edit' && initial
+        ? getItemParty(initial)
+        : defaultParty,
+    )
     setError(null)
     setSaving(false)
-  }, [open, initial, departmentId])
+  }, [open, initial, departmentId, parentId, mode, defaultParty])
 
   if (!open) return null
+
+  function handlePartyChange(next: SupportParty) {
+    setParty(next)
+    if (selectedParentId != null) {
+      const parent = items.find((i) => i.id === selectedParentId)
+      if (parent && getItemParty(parent) !== next) {
+        setSelectedParentId(null)
+        setAttachParent(false)
+      }
+    }
+  }
 
   async function insertPhoto() {
     setError(null)
@@ -78,6 +116,10 @@ export function TopicEditorModal({
       setError('Укажите название темы')
       return
     }
+    if (attachParent && selectedParentId == null) {
+      setError('Выберите родительскую тему или снимите галочку')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -85,7 +127,8 @@ export function TopicEditorModal({
         departmentId: targetDept,
         question: question.trim(),
         answer,
-        parent_id: mode === 'add' ? parentId : (initial?.parent_id ?? null),
+        parent_id: attachParent ? selectedParentId : null,
+        party: showParty ? party : undefined,
         id: initial?.id,
       })
       onClose()
@@ -94,6 +137,13 @@ export function TopicEditorModal({
       setSaving(false)
     }
   }
+
+  const title =
+    mode === 'edit'
+      ? 'Редактирование'
+      : attachParent && selectedParentId != null
+        ? 'Новая подтема'
+        : 'Новая тема'
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -105,24 +155,45 @@ export function TopicEditorModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal__header">
-          <h2 id="topic-modal-title">
-            {mode === 'add' ? (parentId != null ? 'Новая подтема' : 'Новая тема') : 'Редактирование'}
-          </h2>
+          <h2 id="topic-modal-title">{title}</h2>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Закрыть">
             ✕
           </button>
         </div>
-        <form className="modal__body" onSubmit={handleSubmit}>
-          {mode === 'add' && parentId == null && (
+        <form className="modal__body" onSubmit={(e) => void handleSubmit(e)}>
+          {mode === 'add' && !attachParent && (
             <label className="field">
               <span>Отдел</span>
               <select
                 value={targetDept}
-                onChange={(e) => setTargetDept(e.target.value as DepartmentId)}
+                onChange={(e) => {
+                  const next = e.target.value as DepartmentId
+                  setTargetDept(next)
+                  if (next !== 'support') {
+                    setSelectedParentId(null)
+                    setAttachParent(false)
+                  }
+                }}
               >
                 {DEPARTMENTS.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {showParty && (
+            <label className="field">
+              <span>Поставщик / Заказчик</span>
+              <select
+                value={party}
+                onChange={(e) => handlePartyChange(e.target.value as SupportParty)}
+              >
+                {SUPPORT_PARTIES.map((p) => (
+                  <option key={p} value={p}>
+                    {SUPPORT_PARTY_LABELS[p]}
                   </option>
                 ))}
               </select>
@@ -139,6 +210,15 @@ export function TopicEditorModal({
             />
           </label>
 
+          <ParentTopicField
+            items={parentChoices}
+            excludeId={mode === 'edit' ? initial?.id ?? null : null}
+            attach={attachParent}
+            onAttachChange={setAttachParent}
+            parentId={selectedParentId}
+            onParentIdChange={setSelectedParentId}
+          />
+
           <label className="field">
             <span>Текст ответа (Markdown)</span>
             <textarea
@@ -151,7 +231,7 @@ export function TopicEditorModal({
           </label>
 
           <div className="modal__toolbar">
-            <button type="button" className="btn btn-secondary" onClick={insertPhoto}>
+            <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
               Вставить фото
             </button>
           </div>

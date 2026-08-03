@@ -1,10 +1,13 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
+  Menu,
   protocol,
   net,
+  shell,
 } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -17,6 +20,7 @@ import {
   getMediaDir,
   getSeedDataDir,
   getUserDataRoot,
+  BOOTSTRAP_ADMIN_EMAIL,
   type DepartmentId,
   type UserRole,
 } from './paths'
@@ -44,6 +48,7 @@ import {
   markLocalChange,
   onSyncStatus,
   pullFromYandex,
+  pushAccountsFile,
   pushToYandex,
   refreshStatusFromSettings,
 } from './yandex-sync'
@@ -121,6 +126,33 @@ function createWindow(): void {
   win.setMenuBarVisibility(false)
   win.once('ready-to-show', () => win.show())
 
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+
+  win.webContents.on('context-menu', (_event, params) => {
+    const linkURL = params.linkURL?.trim()
+    if (!linkURL || !/^https?:\/\//i.test(linkURL)) return
+
+    Menu.buildFromTemplate([
+      {
+        label: 'Открыть в браузере',
+        click: () => {
+          void shell.openExternal(linkURL)
+        },
+      },
+      {
+        label: 'Копировать адрес ссылки',
+        click: () => {
+          clipboard.writeText(linkURL)
+        },
+      },
+    ]).popup({ window: win })
+  })
+
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
@@ -158,6 +190,8 @@ function registerIpc(): void {
       }
       const user = registerUser(payload)
       writeSession(user.id, Boolean(payload.rememberMe))
+      markLocalChange()
+      void pushAccountsFile()
       return user
     },
   )
@@ -174,38 +208,46 @@ function registerIpc(): void {
     requireRole(getCurrentUser(), ['admin'])
     return listUsersPublic()
   })
-  ipcMain.handle('admin:set-role', (_e, payload: { userId: string; role: UserRole }) => {
+  ipcMain.handle('admin:set-role', async (_e, payload: { userId: string; role: UserRole }) => {
     requireRole(getCurrentUser(), ['admin'])
     const users = updateUserRole(payload.userId, payload.role)
     markLocalChange()
+    await pushAccountsFile()
     return users
   })
   ipcMain.handle('admin:get-whitelist', () => {
     requireRole(getCurrentUser(), ['admin'])
     return getWhitelist()
   })
-  ipcMain.handle('admin:set-whitelist', (_e, emails: string[]) => {
+  ipcMain.handle('admin:set-whitelist', async (_e, emails: string[]) => {
     requireRole(getCurrentUser(), ['admin'])
     const list = setWhitelist(emails)
     markLocalChange()
+    await pushAccountsFile()
     return list
   })
-  ipcMain.handle('admin:add-whitelist', (_e, email: string) => {
+  ipcMain.handle('admin:add-whitelist', async (_e, email: string) => {
     requireRole(getCurrentUser(), ['admin'])
     const list = addWhitelistEmail(email)
     markLocalChange()
+    await pushAccountsFile()
     return list
   })
-  ipcMain.handle('admin:remove-whitelist', (_e, email: string) => {
+  ipcMain.handle('admin:remove-whitelist', async (_e, email: string) => {
     requireRole(getCurrentUser(), ['admin'])
     const list = removeWhitelistEmail(email)
     markLocalChange()
+    await pushAccountsFile()
     return list
   })
   ipcMain.handle('admin:get-settings', () => {
     requireRole(getCurrentUser(), ['admin'])
     const s = readSettings()
-    return { hasPendingChanges: s.hasPendingChanges, hasToken: Boolean(s.yandexToken) }
+    return {
+      hasPendingChanges: s.hasPendingChanges,
+      hasToken: Boolean(s.yandexToken),
+      ownerEmail: BOOTSTRAP_ADMIN_EMAIL,
+    }
   })
 
   // Token is set before login so whitelist/accounts can sync from Disk first
@@ -253,6 +295,7 @@ function registerIpc(): void {
           answer: string
           parent_id?: number | null
           has_children?: boolean
+          party?: 'supplier' | 'customer'
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
         }
@@ -277,6 +320,14 @@ function registerIpc(): void {
         has_children: payload.item.has_children ?? false,
         photos: payload.item.photos ?? [],
         documents: payload.item.documents ?? [],
+        ...(payload.departmentId === 'support'
+          ? {
+              party:
+                payload.item.party === 'customer' || payload.item.party === 'supplier'
+                  ? payload.item.party
+                  : 'supplier',
+            }
+          : {}),
       }
 
       list.push(newItem)
@@ -305,6 +356,7 @@ function registerIpc(): void {
           answer: string
           parent_id?: number | null
           has_children?: boolean
+          party?: 'supplier' | 'customer'
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
         }
@@ -318,14 +370,70 @@ function registerIpc(): void {
       const idx = list.findIndex((item) => item.id === payload.item.id)
       if (idx < 0) throw new Error('Тема не найдена')
 
+      const oldParentId =
+        typeof list[idx].parent_id === 'number' ? (list[idx].parent_id as number) : null
+      const newParentId =
+        payload.item.parent_id === undefined
+          ? oldParentId
+          : payload.item.parent_id == null
+            ? null
+            : payload.item.parent_id
+
+      if (newParentId != null) {
+        if (newParentId === payload.item.id) {
+          throw new Error('Тема не может быть подтемой самой себя')
+        }
+        const parentExists = list.some((item) => item.id === newParentId)
+        if (!parentExists) throw new Error('Родительская тема не найдена')
+
+        // Cycle check: parent cannot be a descendant of this item
+        const byParent = new Map<number, number[]>()
+        for (const row of list) {
+          const pid = typeof row.parent_id === 'number' ? row.parent_id : null
+          const id = typeof row.id === 'number' ? row.id : null
+          if (pid == null || id == null) continue
+          const arr = byParent.get(pid) ?? []
+          arr.push(id)
+          byParent.set(pid, arr)
+        }
+        const stack = [...(byParent.get(payload.item.id) ?? [])]
+        const descendants = new Set<number>()
+        while (stack.length) {
+          const id = stack.pop()!
+          if (descendants.has(id)) continue
+          descendants.add(id)
+          for (const child of byParent.get(id) ?? []) stack.push(child)
+        }
+        if (descendants.has(newParentId)) {
+          throw new Error('Нельзя переместить тему внутрь её собственной подтемы')
+        }
+      }
+
       list[idx] = {
         ...list[idx],
         question: payload.item.question,
         answer: payload.item.answer,
-        parent_id: payload.item.parent_id ?? list[idx].parent_id ?? null,
+        parent_id: newParentId,
         has_children: payload.item.has_children ?? list[idx].has_children ?? false,
         photos: payload.item.photos ?? list[idx].photos ?? [],
         documents: payload.item.documents ?? list[idx].documents ?? [],
+        ...(payload.departmentId === 'support'
+          ? {
+              party:
+                payload.item.party === 'customer' || payload.item.party === 'supplier'
+                  ? payload.item.party
+                  : list[idx].party === 'customer'
+                    ? 'customer'
+                    : 'supplier',
+            }
+          : {}),
+      }
+
+      // Refresh has_children for all items after possible reparent
+      for (const row of list) {
+        const id = row.id
+        if (typeof id !== 'number') continue
+        row.has_children = list.some((child) => child.parent_id === id)
       }
 
       data[listKey] = list

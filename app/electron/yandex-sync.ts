@@ -7,7 +7,15 @@ import {
   getMediaDir,
   getUserDataRoot,
 } from './paths'
-import { readSettings, setPendingChanges, writeAccounts, writeSettings } from './auth-store'
+import {
+  readSettings,
+  setPendingChanges,
+  writeAccounts,
+  writeSettings,
+  readAccounts,
+  mergeAccountsData,
+  type AccountsData,
+} from './auth-store'
 
 export type SyncStatusCode =
   | 'idle'
@@ -197,6 +205,12 @@ export async function pullFromYandex(options?: { force?: boolean }): Promise<Syn
       ) {
         continue
       }
+
+      if (fileName === ACCOUNTS_FILE) {
+        await pullAndMergeAccounts(settings.yandexToken, force)
+        continue
+      }
+
       await downloadRemoteFile(settings.yandexToken, fileName, dest)
     }
 
@@ -276,6 +290,51 @@ export function markLocalChange(): SyncStatus {
   return emit({ code: 'pending', label: 'Есть локальные изменения' })
 }
 
+/** Upload only accounts.json (registrations / roles / whitelist) without clearing guide pending. */
+export async function pushAccountsFile(): Promise<boolean> {
+  const settings = readSettings()
+  if (!settings.yandexToken) return false
+  try {
+    await ensureRemoteFolder(settings.yandexToken)
+    const localPath = path.join(getUserDataRoot(), ACCOUNTS_FILE)
+    await uploadLocalFile(settings.yandexToken, ACCOUNTS_FILE, localPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function pullAndMergeAccounts(token: string, force: boolean): Promise<void> {
+  const root = getUserDataRoot()
+  const remoteTmp = path.join(root, `.${ACCOUNTS_FILE}.remote`)
+  const local = readAccounts()
+  const downloaded = await downloadRemoteFile(token, ACCOUNTS_FILE, remoteTmp)
+  if (!downloaded) {
+    // Nothing on Disk yet — keep local
+    return
+  }
+
+  try {
+    const raw = JSON.parse(fs.readFileSync(remoteTmp, 'utf8')) as {
+      users?: unknown
+      whitelist?: unknown
+    }
+    const remote: AccountsData = {
+      users: Array.isArray(raw.users) ? (raw.users as AccountsData['users']) : [],
+      whitelist: Array.isArray(raw.whitelist) ? (raw.whitelist as string[]) : [],
+    }
+    const preferLocalRoles = !force && readSettings().hasPendingChanges
+    const merged = mergeAccountsData(local, remote, { preferLocalRoles })
+    writeAccounts(merged)
+  } finally {
+    try {
+      fs.unlinkSync(remoteTmp)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Drop unsynced local guide edits by re-downloading from Disk. */
 export async function discardLocalChanges(): Promise<SyncStatus> {
   const settings = readSettings()
@@ -303,18 +362,7 @@ export function refreshStatusFromSettings(): SyncStatus {
 
 /** Merge remote accounts if we skipped — used after push/pull helpers */
 export function replaceAccountsFromFileIfExists(): void {
-  const p = path.join(getUserDataRoot(), ACCOUNTS_FILE)
-  if (fs.existsSync(p)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(p, 'utf8'))
-      writeAccounts({
-        users: data.users ?? [],
-        whitelist: data.whitelist ?? [],
-      })
-    } catch {
-      /* ignore */
-    }
-  }
+  // Kept for compatibility; pull now merges via pullAndMergeAccounts.
 }
 
 export function replaceSettingsPreservingToken(remotePath: string): void {

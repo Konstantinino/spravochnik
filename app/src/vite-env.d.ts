@@ -46,7 +46,11 @@ export interface SpravochnikApi {
   setWhitelist: (emails: string[]) => Promise<string[]>
   addWhitelist: (email: string) => Promise<string[]>
   removeWhitelist: (email: string) => Promise<string[]>
-  getAdminSettings: () => Promise<{ hasPendingChanges: boolean; hasToken: boolean }>
+  getAdminSettings: () => Promise<{
+    hasPendingChanges: boolean
+    hasToken: boolean
+    ownerEmail: string
+  }>
   setYandexToken: (token: string) => Promise<{ hasToken: boolean; hasPendingChanges: boolean }>
   getTokenMasked: () => Promise<{ hasToken: boolean; masked: string }>
   hasYandexToken: () => Promise<{ hasToken: boolean }>

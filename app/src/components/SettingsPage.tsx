@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import type { PublicUser, SyncStatus, UserRole } from '../types'
 import { ROLE_LABELS } from '../types'
 
+/** Roles that can be assigned in settings (owner/admin is locked). */
+const ASSIGNABLE_ROLES: UserRole[] = ['user', 'editor']
+
 interface SettingsPageProps {
   onBack: () => void
 }
@@ -14,6 +17,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   const [info, setInfo] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [hasToken, setHasToken] = useState(false)
+  const [ownerEmail, setOwnerEmail] = useState('')
 
   async function reload() {
     const [u, w, s, sync] = await Promise.all([
@@ -25,20 +29,28 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     setUsers(u)
     setWhitelist(w)
     setHasToken(s.hasToken)
+    setOwnerEmail(s.ownerEmail)
     setSyncStatus(sync)
   }
 
   useEffect(() => {
     void reload().catch((e) => setError(e instanceof Error ? e.message : 'Ошибка загрузки'))
-    return window.spravochnik.onSyncStatus(setSyncStatus)
+    return window.spravochnik.onSyncStatus((status) => {
+      setSyncStatus(status)
+      if (status.code === 'up_to_date' || status.code === 'pending') {
+        void window.spravochnik.listUsers().then(setUsers).catch(() => undefined)
+        void window.spravochnik.getWhitelist().then(setWhitelist).catch(() => undefined)
+      }
+    })
   }, [])
 
   async function changeRole(userId: string, role: UserRole) {
     setError(null)
+    setInfo(null)
     try {
       const next = await window.spravochnik.setUserRole({ userId, role })
       setUsers(next)
-      setInfo('Роль обновлена. Не забудьте отправить изменения на Диск.')
+      setInfo('Роль обновлена и отправлена на Яндекс.Диск.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка')
     }
@@ -46,11 +58,12 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   async function addEmail() {
     setError(null)
+    setInfo(null)
     try {
       const next = await window.spravochnik.addWhitelist(newEmail)
       setWhitelist(next)
       setNewEmail('')
-      setInfo('Почта добавлена в белый список')
+      setInfo('Почта добавлена в белый список и отправлена на Диск.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка')
     }
@@ -93,6 +106,9 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
         <section className="settings-section">
           <h2>Пользователи и роли</h2>
+          <p className="muted settings-section__hint">
+            Владельцу роль админа закреплена. Остальным можно назначить читателя или редактора.
+          </p>
           <table className="settings-table">
             <thead>
               <tr>
@@ -107,16 +123,23 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                   <td>{u.name}</td>
                   <td>{u.email}</td>
                   <td>
-                    <select
-                      value={u.role}
-                      onChange={(e) => changeRole(u.id, e.target.value as UserRole)}
-                    >
-                      {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
-                        <option key={role} value={role}>
-                          {ROLE_LABELS[role]}
-                        </option>
-                      ))}
-                    </select>
+                    {u.isOwner || u.role === 'admin' ? (
+                      <span className="settings-role-locked" title="Роль владельца нельзя изменить">
+                        {ROLE_LABELS.admin}
+                      </span>
+                    ) : (
+                      <select
+                        value={u.role}
+                        onChange={(e) => void changeRole(u.id, e.target.value as UserRole)}
+                        aria-label={`Роль ${u.name}`}
+                      >
+                        {ASSIGNABLE_ROLES.map((role) => (
+                          <option key={role} value={role}>
+                            {ROLE_LABELS[role]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -140,19 +163,29 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               onChange={(e) => setNewEmail(e.target.value)}
               placeholder="email@company.ru"
             />
-            <button type="button" className="btn btn-secondary" onClick={addEmail}>
+            <button type="button" className="btn btn-secondary" onClick={() => void addEmail()}>
               Добавить
             </button>
           </div>
           <ul className="whitelist">
-            {whitelist.map((email) => (
-              <li key={email}>
-                <span>{email}</span>
-                <button type="button" className="btn btn-ghost" onClick={() => removeEmail(email)}>
-                  Удалить
-                </button>
-              </li>
-            ))}
+            {whitelist.map((email) => {
+              const isOwner =
+                ownerEmail && email.trim().toLowerCase() === ownerEmail.trim().toLowerCase()
+              return (
+                <li key={email}>
+                  <span>{email}</span>
+                  {!isOwner && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => void removeEmail(email)}
+                    >
+                      Удалить
+                    </button>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </section>
       </div>

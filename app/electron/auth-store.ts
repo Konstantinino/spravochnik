@@ -35,6 +35,7 @@ export interface PublicUser {
   name: string
   email: string
   role: UserRole
+  isOwner?: boolean
 }
 
 export interface SessionData {
@@ -140,16 +141,92 @@ export function setPendingChanges(value: boolean): void {
 }
 
 export function toPublicUser(user: StoredUser): PublicUser {
+  const isOwner = normalizeEmail(user.email) === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
+    isOwner,
+  }
+}
+
+export function isOwnerEmail(email: string): boolean {
+  return normalizeEmail(email) === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
+}
+
+const ROLE_RANK: Record<UserRole, number> = { user: 0, editor: 1, admin: 2 }
+
+/** Union users/whitelist from local + remote so registrations and role edits are not wiped by pull. */
+export function mergeAccountsData(
+  local: AccountsData,
+  remote: AccountsData,
+  options?: { preferLocalRoles?: boolean },
+): AccountsData {
+  const preferLocalRoles = Boolean(options?.preferLocalRoles)
+  const byEmail = new Map<string, StoredUser>()
+
+  for (const u of remote.users) {
+    byEmail.set(normalizeEmail(u.email), { ...u, email: normalizeEmail(u.email) })
+  }
+
+  for (const u of local.users) {
+    const key = normalizeEmail(u.email)
+    const remoteUser = byEmail.get(key)
+    if (!remoteUser) {
+      byEmail.set(key, { ...u, email: key })
+      continue
+    }
+
+    let role: UserRole
+    if (isOwnerEmail(key)) {
+      role = 'admin'
+    } else if (preferLocalRoles) {
+      role = u.role
+    } else if (ROLE_RANK[u.role] !== ROLE_RANK[remoteUser.role]) {
+      // Keep the higher privilege so an admin role push isn't lost to an older remote copy
+      role = ROLE_RANK[u.role] >= ROLE_RANK[remoteUser.role] ? u.role : remoteUser.role
+    } else {
+      role = remoteUser.role
+    }
+
+    // Prefer local credentials when the account exists locally (login must keep working)
+    byEmail.set(key, {
+      ...remoteUser,
+      id: u.id || remoteUser.id,
+      name: u.name || remoteUser.name,
+      email: key,
+      salt: u.salt || remoteUser.salt,
+      passwordHash: u.passwordHash || remoteUser.passwordHash,
+      role,
+      createdAt: u.createdAt || remoteUser.createdAt,
+    })
+  }
+
+  for (const [key, u] of byEmail) {
+    if (isOwnerEmail(key)) u.role = 'admin'
+    else if (u.role === 'admin') u.role = 'editor'
+  }
+
+  const whitelist = Array.from(
+    new Set(
+      [...local.whitelist, ...remote.whitelist]
+        .map(normalizeEmail)
+        .filter(Boolean),
+    ),
+  )
+  if (!whitelist.includes(normalizeEmail(BOOTSTRAP_ADMIN_EMAIL))) {
+    whitelist.push(normalizeEmail(BOOTSTRAP_ADMIN_EMAIL))
+  }
+
+  return {
+    users: Array.from(byEmail.values()),
+    whitelist,
   }
 }
 
 export function resolveRoleForEmail(email: string): UserRole {
-  if (normalizeEmail(email) === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)) {
+  if (isOwnerEmail(email)) {
     return 'admin'
   }
   return 'user'
@@ -188,8 +265,8 @@ export function registerUser(input: {
     createdAt: new Date().toISOString(),
   }
 
-  // If bootstrap admin registers later but someone else was admin-only via role change, still force admin
-  if (normalizeEmail(email) === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)) {
+  // Owner always stays admin
+  if (isOwnerEmail(email)) {
     user.role = 'admin'
   }
 
@@ -253,15 +330,16 @@ export function listUsersPublic(): PublicUser[] {
 }
 
 export function updateUserRole(userId: string, role: UserRole): PublicUser[] {
+  if (role === 'admin') {
+    throw new Error('Роль админа закреплена за владельцем и не назначается вручную')
+  }
+
   const accounts = readAccounts()
   const user = accounts.users.find((u) => u.id === userId)
   if (!user) throw new Error('Пользователь не найден')
 
-  if (
-    normalizeEmail(user.email) === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL) &&
-    role !== 'admin'
-  ) {
-    throw new Error('Нельзя снять роль админа с основной учётной записи')
+  if (isOwnerEmail(user.email)) {
+    throw new Error('Нельзя менять роль владельца')
   }
 
   user.role = role

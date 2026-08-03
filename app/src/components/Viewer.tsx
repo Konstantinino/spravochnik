@@ -1,18 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { GuideItem } from '../types'
-import { getChildren } from '../lib/data'
+import type { DepartmentId, GuideItem, SupportParty } from '../types'
+import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
+import { filterItemsByParty, getChildren, getItemParty } from '../lib/data'
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
 import { mediaSrcFromMarkdownUrl } from '../lib/markdown'
+import { ParentTopicField } from './ParentTopicField'
 
 interface ViewerProps {
   item: GuideItem | null
   items: GuideItem[]
+  departmentId: DepartmentId
   canEdit: boolean
   isAdmin: boolean
   onSelect: (id: number) => void
-  onSave: (payload: { question: string; answer: string }) => Promise<void>
+  onSave: (payload: {
+    question: string
+    answer: string
+    parent_id: number | null
+    party?: SupportParty
+  }) => Promise<void>
   onDelete: () => Promise<void>
   onAddSubtopic: () => void
 }
@@ -20,6 +28,7 @@ interface ViewerProps {
 export function Viewer({
   item,
   items,
+  departmentId,
   canEdit,
   isAdmin,
   onSelect,
@@ -30,6 +39,9 @@ export function Viewer({
   const [editing, setEditing] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
+  const [parentId, setParentId] = useState<number | null>(null)
+  const [attachParent, setAttachParent] = useState(false)
+  const [party, setParty] = useState<SupportParty>('supplier')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,8 +75,18 @@ export function Viewer({
     if (item) {
       setQuestion(item.question)
       setAnswer(item.answer ?? '')
+      setParentId(item.parent_id ?? null)
+      setAttachParent(item.parent_id != null)
+      setParty(getItemParty(item))
     }
   }, [item?.id])
+
+  const showParty = departmentId === 'support'
+
+  const parentChoices = useMemo(() => {
+    if (!showParty) return items
+    return filterItemsByParty(items, party)
+  }, [items, party, showParty])
 
   const children = useMemo(
     () => (item ? getChildren(items, item.id) : []),
@@ -117,10 +139,19 @@ export function Viewer({
       setError('Укажите название темы')
       return
     }
+    if (attachParent && parentId == null) {
+      setError('Выберите родительскую тему или снимите галочку')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
-      await onSave({ question: question.trim(), answer })
+      await onSave({
+        question: question.trim(),
+        answer,
+        parent_id: attachParent ? parentId : null,
+        party: showParty ? party : undefined,
+      })
       setEditing(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка сохранения')
@@ -279,7 +310,7 @@ export function Viewer({
         </div>
       )}
 
-      {canEdit && (
+      {canEdit && !editing && (
         <div className="viewer__subtopic-bar">
           <button type="button" className="btn btn-secondary" onClick={onAddSubtopic}>
             Добавить подтему
@@ -305,6 +336,39 @@ export function Viewer({
 
       {editing ? (
         <div className="viewer__editor">
+          {showParty && (
+            <label className="field">
+              <span>Поставщик / Заказчик</span>
+              <select
+                value={party}
+                onChange={(e) => {
+                  const next = e.target.value as SupportParty
+                  setParty(next)
+                  if (parentId != null) {
+                    const parent = items.find((i) => i.id === parentId)
+                    if (parent && getItemParty(parent) !== next) {
+                      setParentId(null)
+                      setAttachParent(false)
+                    }
+                  }
+                }}
+              >
+                {SUPPORT_PARTIES.map((p) => (
+                  <option key={p} value={p}>
+                    {SUPPORT_PARTY_LABELS[p]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <ParentTopicField
+            items={parentChoices}
+            excludeId={current.id}
+            attach={attachParent}
+            onAttachChange={setAttachParent}
+            parentId={parentId}
+            onParentIdChange={setParentId}
+          />
           <textarea
             ref={textareaRef}
             className="viewer__textarea"
@@ -325,6 +389,9 @@ export function Viewer({
                   setEditing(false)
                   setQuestion(current.question)
                   setAnswer(current.answer ?? '')
+                  setParentId(current.parent_id ?? null)
+                  setAttachParent(current.parent_id != null)
+                  setParty(getItemParty(current))
                   setError(null)
                 }}
                 disabled={saving}

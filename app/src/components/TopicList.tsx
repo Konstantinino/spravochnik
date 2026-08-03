@@ -78,7 +78,7 @@ export function TopicList({ items, selectedId, onSelect, searchHits }: TopicList
     }
     return (
       <ul className="topic-list topic-list--flat">
-        {searchHits.map(({ item, pathLabel }) => (
+        {searchHits.map(({ item, pathLabel, matchedInBody }) => (
           <li key={item.id}>
             <button
               type="button"
@@ -87,6 +87,9 @@ export function TopicList({ items, selectedId, onSelect, searchHits }: TopicList
             >
               <span className="topic-item__title">{item.question}</span>
               {pathLabel ? <span className="topic-item__path">{pathLabel}</span> : null}
+              {matchedInBody ? (
+                <span className="topic-item__path">найдено в тексте</span>
+              ) : null}
             </button>
           </li>
         ))}

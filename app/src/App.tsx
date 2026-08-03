@@ -6,10 +6,17 @@ import { Viewer } from './components/Viewer'
 import { TopicEditorModal } from './components/TopicEditorModal'
 import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
-import { getItems } from './lib/data'
+import { getItems, filterItemsByParty, getItemParty } from './lib/data'
 import { searchItems } from './lib/search'
 import { loadSavedDepartment, saveDepartment } from './lib/prefs'
-import type { DepartmentId, GuideFile, GuideItem, PublicUser, SyncStatus } from './types'
+import type {
+  DepartmentId,
+  GuideFile,
+  GuideItem,
+  PublicUser,
+  SupportParty,
+  SyncStatus,
+} from './types'
 import { DEPARTMENTS } from './types'
 
 const defaultSync: SyncStatus = {
@@ -25,8 +32,12 @@ export default function App() {
   const [guide, setGuide] = useState<GuideFile | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [query, setQuery] = useState('')
+  const [searchInBody, setSearchInBody] = useState(false)
+  const [supportParty, setSupportParty] = useState<SupportParty>('supplier')
   const [editorOpen, setEditorOpen] = useState(false)
+  const [editorMode, setEditorMode] = useState<'add' | 'edit'>('add')
   const [editorParentId, setEditorParentId] = useState<number | null>(null)
+  const [editorInitial, setEditorInitial] = useState<GuideItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSync)
@@ -47,6 +58,7 @@ export default function App() {
 
   function handleDepartmentChange(id: DepartmentId) {
     setDepartmentId(id)
+    setSupportParty('supplier')
     if (user) saveDepartment(user.id, id)
   }
 
@@ -88,16 +100,28 @@ export default function App() {
 
   const items: GuideItem[] = useMemo(() => (guide ? getItems(guide) : []), [guide])
 
+  const visibleItems: GuideItem[] = useMemo(() => {
+    if (departmentId !== 'support') return items
+    return filterItemsByParty(items, supportParty)
+  }, [items, departmentId, supportParty])
+
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
     [items, selectedId],
   )
 
+  useEffect(() => {
+    if (selectedId == null) return
+    if (!visibleItems.some((i) => i.id === selectedId)) {
+      setSelectedId(null)
+    }
+  }, [visibleItems, selectedId])
+
   const searchHits = useMemo(() => {
     const q = query.trim()
     if (!q) return null
-    return searchItems(items, q)
-  }, [items, query])
+    return searchItems(visibleItems, q, { searchInBody })
+  }, [visibleItems, query, searchInBody])
 
   const canEdit = user?.role === 'editor' || user?.role === 'admin'
   const isAdmin = user?.role === 'admin'
@@ -107,8 +131,30 @@ export default function App() {
     question: string
     answer: string
     parent_id: number | null
+    party?: SupportParty
     id?: number
   }) {
+    if (payload.id != null) {
+      const existing = items.find((i) => i.id === payload.id)
+      if (!existing) throw new Error('Тема не найдена')
+      const data = await window.spravochnik.updateItem({
+        departmentId: payload.departmentId,
+        item: {
+          ...existing,
+          question: payload.question,
+          answer: payload.answer,
+          parent_id: payload.parent_id,
+          party: payload.party ?? existing.party,
+        },
+      })
+      setGuide(data)
+      setSelectedId(payload.id)
+      if (payload.departmentId === 'support' && payload.party) {
+        setSupportParty(payload.party)
+      }
+      return
+    }
+
     const data = await window.spravochnik.saveItem({
       departmentId: payload.departmentId,
       item: {
@@ -116,6 +162,7 @@ export default function App() {
         answer: payload.answer,
         parent_id: payload.parent_id,
         has_children: false,
+        party: payload.party,
         photos: [],
         documents: [],
       },
@@ -126,12 +173,20 @@ export default function App() {
       const newest = list.reduce((a, b) => (a.id > b.id ? a : b))
       setSelectedId(newest.id)
       setQuery('')
+      if (payload.departmentId === 'support' && payload.party) {
+        setSupportParty(payload.party)
+      }
     } else {
       setDepartmentId(payload.departmentId)
     }
   }
 
-  async function handleInlineSave(payload: { question: string; answer: string }) {
+  async function handleInlineSave(payload: {
+    question: string
+    answer: string
+    parent_id: number | null
+    party?: SupportParty
+  }) {
     if (!selected) return
     const data = await window.spravochnik.updateItem({
       departmentId,
@@ -139,9 +194,14 @@ export default function App() {
         ...selected,
         question: payload.question,
         answer: payload.answer,
+        parent_id: payload.parent_id,
+        party: payload.party ?? selected.party,
       },
     })
     setGuide(data)
+    if (departmentId === 'support' && payload.party) {
+      setSupportParty(payload.party)
+    }
   }
 
   async function handleDelete() {
@@ -208,6 +268,14 @@ export default function App() {
 
   const deptLabel = DEPARTMENTS.find((d) => d.id === departmentId)?.label ?? ''
 
+  const editorDefaultParty: SupportParty = (() => {
+    if (editorParentId != null) {
+      const parent = items.find((i) => i.id === editorParentId)
+      if (parent) return getItemParty(parent)
+    }
+    return supportParty
+  })()
+
   return (
     <div className="app-shell">
       <Header
@@ -230,7 +298,18 @@ export default function App() {
             value={query}
             onChange={setQuery}
             canAdd={!!canEdit}
+            searchInBody={searchInBody}
+            onSearchInBodyChange={setSearchInBody}
+            showPartyFilter={departmentId === 'support'}
+            partyFilter={supportParty}
+            onPartyFilterChange={(party) => {
+              setSupportParty(party)
+              setQuery('')
+              setSelectedId(null)
+            }}
             onAdd={() => {
+              setEditorMode('add')
+              setEditorInitial(null)
               setEditorParentId(null)
               setEditorOpen(true)
             }}
@@ -242,7 +321,7 @@ export default function App() {
               <div className="form-error">{error}</div>
             ) : (
               <TopicList
-                items={items}
+                items={visibleItems}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 searchHits={searchHits}
@@ -255,7 +334,8 @@ export default function App() {
         <main className="content">
           <Viewer
             item={selected}
-            items={items}
+            items={visibleItems}
+            departmentId={departmentId}
             canEdit={!!canEdit && !!selected}
             isAdmin={!!isAdmin && !!selected}
             onSelect={setSelectedId}
@@ -263,6 +343,8 @@ export default function App() {
             onDelete={handleDelete}
             onAddSubtopic={() => {
               if (!selected) return
+              setEditorMode('add')
+              setEditorInitial(null)
               setEditorParentId(selected.id)
               setEditorOpen(true)
             }}
@@ -272,10 +354,16 @@ export default function App() {
 
       <TopicEditorModal
         open={editorOpen}
-        mode="add"
+        mode={editorMode}
         departmentId={departmentId}
         parentId={editorParentId}
-        onClose={() => setEditorOpen(false)}
+        items={visibleItems}
+        defaultParty={editorDefaultParty}
+        initial={editorInitial}
+        onClose={() => {
+          setEditorOpen(false)
+          setEditorInitial(null)
+        }}
         onSave={handleSave}
       />
     </div>

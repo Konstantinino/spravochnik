@@ -63,6 +63,7 @@ import {
 import {
   checkForUpdates,
   downloadUpdate,
+  ensureLocalUpdateManifest,
   getUpdateStatus,
   onUpdateStatus,
 } from './updates'
@@ -101,6 +102,7 @@ function ensureDataReady(): void {
     }
   }
   ensureAuthFiles()
+  ensureLocalUpdateManifest()
 }
 
 function readGuideFile(fileName: string): unknown {

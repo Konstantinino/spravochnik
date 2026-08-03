@@ -45,6 +45,9 @@ export function Header({
     void window.spravochnik.getUpdateStatus().then((info) => {
       if (!cancelled) setUpdateInfo(info)
     })
+    void window.spravochnik.checkForUpdates().then((info) => {
+      if (!cancelled) setUpdateInfo(info)
+    })
     const off = window.spravochnik.onUpdateStatus((info) => {
       setUpdateInfo(info)
     })

@@ -14,6 +14,7 @@ export const SETTINGS_FILE = 'settings.json'
 export const SESSION_FILE = 'session.json'
 export const PENDING_MEDIA_FILE = 'pending-media.json'
 export const SYNC_LOCK_FILE = 'sync.lock.json'
+export const APP_UPDATE_FILE = 'app-update.json'
 export const YANDEX_FOLDER = 'REST INFO'
 export const BOOTSTRAP_ADMIN_EMAIL = 'kostya.alone18@yandex.ru'
 

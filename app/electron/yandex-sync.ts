@@ -3,6 +3,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   ACCOUNTS_FILE,
+  APP_UPDATE_FILE,
   DATA_FILES,
   SYNC_LOCK_FILE,
   YANDEX_FOLDER,
@@ -26,6 +27,7 @@ import {
   type TopicConflict,
 } from './guide-merge'
 import { readBaseGuide, writeAllGuideBasesFromLocal, writeBaseGuide } from './sync-base'
+import { checkForUpdates, ensureLocalUpdateManifest } from './updates'
 
 export type SyncStatusCode =
   | 'idle'
@@ -465,10 +467,16 @@ export async function pullFromYandex(options?: { force?: boolean }): Promise<Syn
     await ensureRemoteMediaFolder(settings.yandexToken)
     await pullAllRemoteMedia(settings.yandexToken)
 
+    // Always refresh update manifest from Disk (independent of guide pending)
+    ensureLocalUpdateManifest()
+    const updateDest = path.join(root, APP_UPDATE_FILE)
+    await downloadRemoteFile(settings.yandexToken, APP_UPDATE_FILE, updateDest)
+
     const latest = readSettings()
     if (!latest.hasPendingChanges) {
       writeAllGuideBasesFromLocal()
     }
+    void checkForUpdates()
     if (latest.hasPendingChanges) {
       return emit({ code: 'pending', label: 'Есть локальные изменения' })
     }
@@ -593,6 +601,12 @@ export async function pushToYandex(): Promise<SyncStatus> {
     await pullAndMergeAccounts(token, false)
     await uploadLocalFile(token, ACCOUNTS_FILE, path.join(getUserDataRoot(), ACCOUNTS_FILE))
 
+    ensureLocalUpdateManifest()
+    const updateLocal = path.join(getUserDataRoot(), APP_UPDATE_FILE)
+    if (fs.existsSync(updateLocal)) {
+      await uploadLocalFile(token, APP_UPDATE_FILE, updateLocal)
+    }
+
     await uploadPendingMedia(token)
 
     pendingConflicts = []
@@ -600,6 +614,7 @@ export async function pushToYandex(): Promise<SyncStatus> {
     setPendingChanges(false)
     await releaseSyncLock(token)
     lockHeld = false
+    void checkForUpdates()
     return emit({ code: 'up_to_date', label: 'Актуально' })
   } catch (e) {
     if (lockHeld) {
@@ -720,12 +735,20 @@ async function pushResolvedLocalToYandex(): Promise<SyncStatus> {
 
     await pullAndMergeAccounts(token, false)
     await uploadLocalFile(token, ACCOUNTS_FILE, path.join(root, ACCOUNTS_FILE))
+
+    ensureLocalUpdateManifest()
+    const updateLocal = path.join(root, APP_UPDATE_FILE)
+    if (fs.existsSync(updateLocal)) {
+      await uploadLocalFile(token, APP_UPDATE_FILE, updateLocal)
+    }
+
     await uploadPendingMedia(token)
 
     pendingMergedByFile = {}
     setPendingChanges(false)
     await releaseSyncLock(token)
     lockHeld = false
+    void checkForUpdates()
     return emit({ code: 'up_to_date', label: 'Актуально' })
   } catch (e) {
     if (lockHeld) {

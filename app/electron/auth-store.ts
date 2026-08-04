@@ -23,6 +23,8 @@ export interface StoredUser {
 export interface AccountsData {
   users: StoredUser[]
   whitelist: string[]
+  /** Emails removed by admin — survive merge so pull does not resurrect them. */
+  removedEmails?: string[]
 }
 
 export interface SettingsData {
@@ -76,6 +78,7 @@ function defaultAccounts(): AccountsData {
   return {
     users: [],
     whitelist: [BOOTSTRAP_ADMIN_EMAIL],
+    removedEmails: [],
   }
 }
 
@@ -108,6 +111,9 @@ export function readAccounts(): AccountsData {
     return {
       users: Array.isArray(raw.users) ? raw.users : [],
       whitelist: Array.isArray(raw.whitelist) ? raw.whitelist : [BOOTSTRAP_ADMIN_EMAIL],
+      removedEmails: Array.isArray(raw.removedEmails)
+        ? raw.removedEmails.map(normalizeEmail).filter(Boolean)
+        : [],
     }
   } catch {
     return defaultAccounts()
@@ -164,14 +170,25 @@ export function mergeAccountsData(
   options?: { preferLocalRoles?: boolean },
 ): AccountsData {
   const preferLocalRoles = Boolean(options?.preferLocalRoles)
+  const removedEmails = Array.from(
+    new Set(
+      [...(local.removedEmails ?? []), ...(remote.removedEmails ?? [])]
+        .map(normalizeEmail)
+        .filter(Boolean),
+    ),
+  )
+  const removed = new Set(removedEmails)
   const byEmail = new Map<string, StoredUser>()
 
   for (const u of remote.users) {
-    byEmail.set(normalizeEmail(u.email), { ...u, email: normalizeEmail(u.email) })
+    const key = normalizeEmail(u.email)
+    if (removed.has(key)) continue
+    byEmail.set(key, { ...u, email: key })
   }
 
   for (const u of local.users) {
     const key = normalizeEmail(u.email)
+    if (removed.has(key)) continue
     const remoteUser = byEmail.get(key)
     if (!remoteUser) {
       byEmail.set(key, { ...u, email: key })
@@ -222,6 +239,7 @@ export function mergeAccountsData(
   return {
     users: Array.from(byEmail.values()),
     whitelist,
+    removedEmails,
   }
 }
 
@@ -270,6 +288,7 @@ export function registerUser(input: {
     user.role = 'admin'
   }
 
+  accounts.removedEmails = (accounts.removedEmails ?? []).filter((e) => e !== email)
   accounts.users.push(user)
   writeAccounts(accounts)
   return toPublicUser(user)
@@ -344,6 +363,35 @@ export function updateUserRole(userId: string, role: UserRole): PublicUser[] {
 
   user.role = role
   writeAccounts(accounts)
+  return listUsersPublic()
+}
+
+export function deleteUser(userId: string): PublicUser[] {
+  const accounts = readAccounts()
+  const user = accounts.users.find((u) => u.id === userId)
+  if (!user) throw new Error('Пользователь не найден')
+  if (isOwnerEmail(user.email)) {
+    throw new Error('Нельзя удалить владельца')
+  }
+
+  const email = normalizeEmail(user.email)
+  accounts.users = accounts.users.filter((u) => u.id !== userId)
+  const removed = new Set([...(accounts.removedEmails ?? []), email])
+  accounts.removedEmails = Array.from(removed)
+  writeAccounts(accounts)
+
+  const session = (() => {
+    try {
+      if (!fs.existsSync(sessionPath())) return null
+      return JSON.parse(fs.readFileSync(sessionPath(), 'utf8')) as SessionData
+    } catch {
+      return null
+    }
+  })()
+  if (session?.userId === userId) {
+    clearSession()
+  }
+
   return listUsersPublic()
 }
 

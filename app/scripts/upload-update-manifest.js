@@ -1,5 +1,6 @@
 /**
  * Uploads app-update.json (+ optional Setup.exe) to Yandex Disk using local app token.
+ * When uploading a new Setup, deletes other REST-INFO-Setup-*.exe files in updates/.
  * Usage: node scripts/upload-update-manifest.js [path-to-setup.exe]
  */
 const fs = require('node:fs')
@@ -7,6 +8,7 @@ const path = require('node:path')
 
 const YANDEX_FOLDER = 'REST INFO'
 const APP_UPDATE_FILE = 'app-update.json'
+const SETUP_NAME_RE = /^REST-INFO-Setup-.*\.exe$/i
 
 function settingsPath() {
   return path.join(process.env.APPDATA || '', 'rest-info', 'REST-INFO', 'settings.json')
@@ -44,6 +46,32 @@ async function ensureDir(token, remoteDir) {
   }
 }
 
+async function listRemoteFiles(token, remoteDir) {
+  const encoded = encodeURIComponent(folderPath(remoteDir))
+  const res = await yandexFetch(
+    token,
+    `https://cloud-api.yandex.net/v1/disk/resources?path=${encoded}&limit=1000`,
+  )
+  if (res.status === 404) return []
+  if (!res.ok) throw new Error(`list ${remoteDir}: ${res.status} ${await res.text()}`)
+  const data = await res.json()
+  const items = data?._embedded?.items
+  return Array.isArray(items) ? items : []
+}
+
+async function deleteRemoteFile(token, remoteName) {
+  const encoded = encodeURIComponent(folderPath(remoteName))
+  const res = await yandexFetch(
+    token,
+    `https://cloud-api.yandex.net/v1/disk/resources?path=${encoded}&permanently=true`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`delete ${remoteName}: ${res.status} ${await res.text()}`)
+  }
+  console.log('Deleted', remoteName)
+}
+
 async function uploadFile(token, remoteName, localPath) {
   if (!fs.existsSync(localPath)) throw new Error(`Missing file: ${localPath}`)
   const parent = remoteName.split('/').slice(0, -1).join('/')
@@ -67,6 +95,19 @@ async function uploadFile(token, remoteName, localPath) {
   console.log('Uploaded', remoteName, `(${body.length} bytes)`)
 }
 
+/** Keep only the newly uploaded Setup; remove other installers in updates/. */
+async function deleteOldSetups(token, keepFileName) {
+  await ensureDir(token, 'updates')
+  const items = await listRemoteFiles(token, 'updates')
+  for (const item of items) {
+    if (item.type !== 'file') continue
+    const name = String(item.name || '')
+    if (!SETUP_NAME_RE.test(name)) continue
+    if (name === keepFileName) continue
+    await deleteRemoteFile(token, `updates/${name}`)
+  }
+}
+
 async function main() {
   const sp = settingsPath()
   if (!fs.existsSync(sp)) {
@@ -87,9 +128,12 @@ async function main() {
   const setupArg = process.argv[2]
   if (setupArg) {
     const setupPath = path.resolve(setupArg)
-    const remote = `updates/${path.basename(setupPath)}`
+    const baseName = path.basename(setupPath)
+    const remote = `updates/${baseName}`
     console.log('Uploading Setup (large)…')
     await uploadFile(token, remote, setupPath)
+    console.log('Removing older Setup files…')
+    await deleteOldSetups(token, baseName)
   }
 
   console.log('Done')

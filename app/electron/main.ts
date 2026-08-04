@@ -46,6 +46,7 @@ import {
   setWhitelist,
   setYandexToken,
   updateUserRole,
+  deleteUser,
   writeSession,
   clearEphemeralSessionOnStartup,
 } from './auth-store'
@@ -221,6 +222,13 @@ function registerIpc(): void {
   ipcMain.handle('admin:set-role', async (_e, payload: { userId: string; role: UserRole }) => {
     requireRole(getCurrentUser(), ['admin'])
     const users = updateUserRole(payload.userId, payload.role)
+    markLocalChange()
+    await pushAccountsFile()
+    return users
+  })
+  ipcMain.handle('admin:delete-user', async (_e, userId: string) => {
+    requireRole(getCurrentUser(), ['admin'])
+    const users = deleteUser(userId)
     markLocalChange()
     await pushAccountsFile()
     return users

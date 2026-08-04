@@ -56,6 +56,19 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     }
   }
 
+  async function removeUser(userId: string, name: string) {
+    if (!window.confirm(`Удалить пользователя «${name}»?`)) return
+    setError(null)
+    setInfo(null)
+    try {
+      const next = await window.spravochnik.deleteUser(userId)
+      setUsers(next)
+      setInfo('Пользователь удалён и изменения отправлены на Диск.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка')
+    }
+  }
+
   async function addEmail() {
     setError(null)
     setInfo(null)
@@ -115,6 +128,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                 <th>Имя</th>
                 <th>Почта</th>
                 <th>Роль</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -141,11 +155,22 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                       </select>
                     )}
                   </td>
+                  <td className="settings-table__actions">
+                    {!u.isOwner && u.role !== 'admin' && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => void removeUser(u.id, u.name)}
+                      >
+                        Удалить
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="muted">
+                  <td colSpan={4} className="muted">
                     Пока никто не зарегистрировался
                   </td>
                 </tr>

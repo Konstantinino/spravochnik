@@ -833,10 +833,14 @@ async function pullAndMergeAccounts(token: string, force: boolean): Promise<void
     const raw = JSON.parse(fs.readFileSync(remoteTmp, 'utf8')) as {
       users?: unknown
       whitelist?: unknown
+      removedEmails?: unknown
     }
     const remote: AccountsData = {
       users: Array.isArray(raw.users) ? (raw.users as AccountsData['users']) : [],
       whitelist: Array.isArray(raw.whitelist) ? (raw.whitelist as string[]) : [],
+      removedEmails: Array.isArray(raw.removedEmails)
+        ? (raw.removedEmails as string[])
+        : [],
     }
     const preferLocalRoles = !force && readSettings().hasPendingChanges
     const merged = mergeAccountsData(local, remote, { preferLocalRoles })

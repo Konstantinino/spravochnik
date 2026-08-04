@@ -1,5 +1,5 @@
 {
-  "version": "1.1.6",
-  "remoteSetupPath": "updates/REST-INFO-Setup-1.1.6.exe",
-  "notes": "Обновления только с Яндекс.Диска; кнопка «Обновить» с выбором папки для установщика; фильтр тем, UX"
+  "version": "1.1.7",
+  "remoteSetupPath": "updates/REST-INFO-Setup-1.1.7.exe",
+  "notes": "Удаление пользователей в настройках; старые Setup на Диске удаляются при релизе"
 }

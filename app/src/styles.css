@@ -1426,6 +1426,12 @@ mark.find-hit--active {
   background: #fff;
 }
 
+.settings-table__actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
 .settings-role-locked {
   display: inline-block;
   padding: 6px 10px;

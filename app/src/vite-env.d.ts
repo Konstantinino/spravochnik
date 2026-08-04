@@ -74,7 +74,12 @@ export interface SpravochnikApi {
 
   getUpdateStatus: () => Promise<UpdateInfo>
   checkForUpdates: () => Promise<UpdateInfo>
-  downloadUpdate: () => Promise<{ ok: boolean; error?: string }>
+  downloadUpdate: () => Promise<{
+    ok: boolean
+    error?: string
+    canceled?: boolean
+    path?: string
+  }>
   onUpdateStatus: (callback: (info: UpdateInfo) => void) => () => void
 
   deleteItem: (payload: { departmentId: DepartmentId; id: number }) => Promise<GuideFile>

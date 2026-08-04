@@ -66,7 +66,11 @@ export function Header({
     if (!updateAvailable || downloading || interactionLocked) return
     setDownloading(true)
     try {
-      await window.spravochnik.downloadUpdate()
+      const result = await window.spravochnik.downloadUpdate()
+      if (result.canceled) return
+      if (!result.ok && result.error) {
+        window.alert(result.error)
+      }
     } finally {
       setDownloading(false)
     }
@@ -163,11 +167,11 @@ export function Header({
                   disabled={downloading}
                   title={
                     updateInfo?.version
-                      ? `Скачать версию ${updateInfo.version}`
-                      : 'Скачать обновление'
+                      ? `Обновить до версии ${updateInfo.version}`
+                      : 'Обновить приложение'
                   }
                 >
-                  {downloading ? 'Скачивание…' : 'Скачать обновление'}
+                  {downloading ? 'Скачивание…' : 'Обновить'}
                 </button>
               )}
             </div>

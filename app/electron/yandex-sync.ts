@@ -601,11 +601,8 @@ export async function pushToYandex(): Promise<SyncStatus> {
     await pullAndMergeAccounts(token, false)
     await uploadLocalFile(token, ACCOUNTS_FILE, path.join(getUserDataRoot(), ACCOUNTS_FILE))
 
+    // app-update.json is release-only (upload-update-manifest.js) — never push local copy
     ensureLocalUpdateManifest()
-    const updateLocal = path.join(getUserDataRoot(), APP_UPDATE_FILE)
-    if (fs.existsSync(updateLocal)) {
-      await uploadLocalFile(token, APP_UPDATE_FILE, updateLocal)
-    }
 
     await uploadPendingMedia(token)
 
@@ -736,11 +733,8 @@ async function pushResolvedLocalToYandex(): Promise<SyncStatus> {
     await pullAndMergeAccounts(token, false)
     await uploadLocalFile(token, ACCOUNTS_FILE, path.join(root, ACCOUNTS_FILE))
 
+    // app-update.json is release-only (upload-update-manifest.js) — never push local copy
     ensureLocalUpdateManifest()
-    const updateLocal = path.join(root, APP_UPDATE_FILE)
-    if (fs.existsSync(updateLocal)) {
-      await uploadLocalFile(token, APP_UPDATE_FILE, updateLocal)
-    }
 
     await uploadPendingMedia(token)
 

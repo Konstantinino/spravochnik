@@ -1,7 +1,6 @@
-import { app, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import fs from 'node:fs'
 import { writeFile } from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import { APP_UPDATE_FILE, YANDEX_FOLDER, getUserDataRoot, getSeedDataDir } from './paths'
 import { readSettings } from './auth-store'
@@ -10,7 +9,7 @@ export interface UpdateInfo {
   available: boolean
   currentVersion: string
   version: string | null
-  /** Relative path on Yandex Disk, e.g. updates/REST-INFO-Setup-1.1.4.exe */
+  /** Relative path on Yandex Disk, e.g. updates/REST-INFO-Setup-1.1.6.exe */
   remoteSetupPath: string | null
   error?: string
   source?: 'yandex' | 'local' | null
@@ -75,11 +74,10 @@ async function yandexFetch(token: string, url: string, init?: RequestInit): Prom
 
 function parseManifest(raw: unknown): UpdateManifest | null {
   if (!raw || typeof raw !== 'object') return null
-  const o = raw as UpdateManifest & { downloadUrl?: string }
+  const o = raw as UpdateManifest
   if (!o.version || typeof o.version !== 'string') return null
   let remoteSetupPath =
     typeof o.remoteSetupPath === 'string' ? o.remoteSetupPath.trim() : undefined
-  // Legacy manifests may only have GitHub downloadUrl — ignore URL, derive Disk path from version
   if (!remoteSetupPath) {
     const ver = o.version.trim().replace(/^v/i, '')
     if (ver) remoteSetupPath = `updates/REST-INFO-Setup-${ver}.exe`
@@ -170,8 +168,7 @@ export async function checkForUpdates(options?: {
   try {
     const fromDisk = await fetchYandexManifest(token)
     if (fromDisk?.remoteSetupPath) {
-      const info = infoFromManifest(currentVersion, fromDisk, 'yandex')
-      return emit(info)
+      return emit(infoFromManifest(currentVersion, fromDisk, 'yandex'))
     }
     if (fromDisk && !fromDisk.remoteSetupPath) {
       errors.push('В app-update.json нет remoteSetupPath')
@@ -180,6 +177,7 @@ export async function checkForUpdates(options?: {
     errors.push(`Я.Диск: ${e instanceof Error ? e.message : String(e)}`)
   }
 
+  // Fallback: local copy pulled earlier from Disk
   try {
     const local = readLocalManifest()
     if (local?.remoteSetupPath) {
@@ -213,7 +211,12 @@ async function downloadFromYandex(token: string, remotePath: string, dest: strin
   await writeFile(dest, buffer)
 }
 
-export async function downloadUpdate(): Promise<{ ok: boolean; error?: string }> {
+export async function downloadUpdate(): Promise<{
+  ok: boolean
+  error?: string
+  canceled?: boolean
+  path?: string
+}> {
   const info = lastInfo
   if (!info.available || !info.remoteSetupPath) {
     return { ok: false, error: 'Обновление недоступно' }
@@ -227,19 +230,50 @@ export async function downloadUpdate(): Promise<{ ok: boolean; error?: string }>
   const fileName =
     info.remoteSetupPath.split('/').pop() ||
     `REST-INFO-Setup-${info.version || 'update'}.exe`
-  const dest = path.join(os.tmpdir(), fileName)
+
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+  const saveOptions = {
+    title: 'Куда сохранить установщик обновления',
+    defaultPath: fileName,
+    filters: [{ name: 'Установщик REST INFO', extensions: ['exe'] }],
+  }
+  const save = win
+    ? await dialog.showSaveDialog(win, saveOptions)
+    : await dialog.showSaveDialog(saveOptions)
+  if (save.canceled || !save.filePath) {
+    return { ok: false, canceled: true }
+  }
+
+  const dest = save.filePath.endsWith('.exe') ? save.filePath : `${save.filePath}.exe`
 
   try {
     await downloadFromYandex(token, info.remoteSetupPath, dest)
-    const openError = await shell.openPath(dest)
-    if (openError) return { ok: false, error: openError }
-    return { ok: true }
+
+    const boxOptions = {
+      type: 'info' as const,
+      title: 'Обновление скачано',
+      message: 'Установщик сохранён',
+      detail: dest,
+      buttons: ['Открыть установщик', 'Показать в папке', 'Закрыть'],
+      defaultId: 0,
+      cancelId: 2,
+    }
+    const choice = win
+      ? await dialog.showMessageBox(win, boxOptions)
+      : await dialog.showMessageBox(boxOptions)
+    if (choice.response === 0) {
+      const openError = await shell.openPath(dest)
+      if (openError) return { ok: true, path: dest, error: openError }
+    } else if (choice.response === 1) {
+      shell.showItemInFolder(dest)
+    }
+    return { ok: true, path: dest }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
 
-/** Ensure local app-update.json exists (from seed) for push to Disk. */
+/** Ensure local app-update.json exists (from seed). Not uploaded on sync — release script only. */
 export function ensureLocalUpdateManifest(): void {
   const dest = path.join(getUserDataRoot(), APP_UPDATE_FILE)
   const seed = path.join(getSeedDataDir(), APP_UPDATE_FILE)

@@ -1,5 +1,5 @@
 {
-  "version": "1.1.4",
-  "remoteSetupPath": "updates/REST-INFO-Setup-1.1.4.exe",
-  "notes": "Updates only via Yandex Disk"
+  "version": "1.1.5",
+  "remoteSetupPath": "updates/REST-INFO-Setup-1.1.5.exe",
+  "notes": "Фильтр тем с AND-поиском и подсветкой; полосы у подтем; ссылки вместо кнопок; sync при запуске не блокирует UI; правки отступов и настроек"
 }

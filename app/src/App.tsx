@@ -8,7 +8,7 @@ import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
 import { SyncConflictModal } from './components/SyncConflictModal'
 import { getItems, filterItemsByParty, getItemParty } from './lib/data'
-import { searchItems } from './lib/search'
+import { buildTopicSearchFilter } from './lib/search'
 import { loadSavedDepartment, saveDepartment } from './lib/prefs'
 import type {
   ConflictResolution,
@@ -212,11 +212,10 @@ export default function App() {
     }
   }, [visibleItems, selectedId])
 
-  const searchHits = useMemo(() => {
-    const q = query.trim()
-    if (!q) return null
-    return searchItems(visibleItems, q, { searchInBody })
-  }, [visibleItems, query, searchInBody])
+  const searchFilter = useMemo(
+    () => buildTopicSearchFilter(visibleItems, query, { searchInBody }),
+    [visibleItems, query, searchInBody],
+  )
 
   const canEdit = user?.role === 'editor' || user?.role === 'admin'
   const isAdmin = user?.role === 'admin'
@@ -349,12 +348,8 @@ export default function App() {
     return <SettingsPage onBack={() => setView('main')} />
   }
 
-  const syncBlocking =
-    pushing ||
-    busyLeft != null ||
-    syncStatus.code === 'uploading' ||
-    syncStatus.code === 'syncing' ||
-    syncStatus.code === 'connecting'
+  // Block UI only while uploading local changes — startup/background pull stays interactive
+  const syncBlocking = pushing || busyLeft != null
 
   const deptLabel = DEPARTMENTS.find((d) => d.id === departmentId)?.label ?? ''
 
@@ -413,7 +408,7 @@ export default function App() {
                 items={visibleItems}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
-                searchHits={searchHits}
+                searchFilter={searchFilter}
               />
             )}
           </div>

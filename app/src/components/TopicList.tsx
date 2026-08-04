@@ -1,13 +1,77 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { GuideItem } from '../types'
 import { getChildren } from '../lib/data'
-import type { SearchHit } from '../lib/search'
+import type { TopicSearchFilter } from '../lib/search'
+
+/** Matches default `.topic-item` horizontal margin */
+const BASE_MARGIN_X = 8
+/** Inner pad before toggle on root rows only */
+const ROOT_PAD = 12
+const TOGGLE_W = 28
+/** Gap between guide line and outer left edge of child row */
+const GUIDE_GAP = 8
+
+function rowMarginLeft(depth: number): number {
+  if (depth <= 0) return BASE_MARGIN_X
+  return guideX(depth - 1) + GUIDE_GAP
+}
+
+/** X of guide under the expand arrow of a row at `depth` */
+function guideX(depth: number): number {
+  if (depth <= 0) return BASE_MARGIN_X + ROOT_PAD + TOGGLE_W / 2
+  return rowMarginLeft(depth) + TOGGLE_W / 2
+}
+
+function highlightTitle(text: string, tokens: string[]): ReactNode {
+  if (tokens.length === 0) return text
+
+  const lower = text.toLowerCase()
+  const ranges: Array<{ start: number; end: number }> = []
+
+  for (const token of tokens) {
+    let from = 0
+    while (from < text.length) {
+      const idx = lower.indexOf(token, from)
+      if (idx < 0) break
+      ranges.push({ start: idx, end: idx + token.length })
+      from = idx + Math.max(token.length, 1)
+    }
+  }
+
+  if (ranges.length === 0) return text
+
+  ranges.sort((a, b) => a.start - b.start || b.end - a.end)
+  const merged: Array<{ start: number; end: number }> = []
+  for (const r of ranges) {
+    const last = merged[merged.length - 1]
+    if (last && r.start <= last.end) {
+      last.end = Math.max(last.end, r.end)
+    } else {
+      merged.push({ ...r })
+    }
+  }
+
+  const parts: ReactNode[] = []
+  let cursor = 0
+  let key = 0
+  for (const r of merged) {
+    if (r.start > cursor) parts.push(text.slice(cursor, r.start))
+    parts.push(
+      <mark key={key++} className="find-hit">
+        {text.slice(r.start, r.end)}
+      </mark>,
+    )
+    cursor = r.end
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor))
+  return parts
+}
 
 interface TopicListProps {
   items: GuideItem[]
   selectedId: number | null
   onSelect: (id: number) => void
-  searchHits: SearchHit[] | null
+  searchFilter: TopicSearchFilter | null
 }
 
 function TreeNode({
@@ -16,29 +80,56 @@ function TreeNode({
   selectedId,
   onSelect,
   depth,
+  searchFilter,
 }: {
   item: GuideItem
   items: GuideItem[]
   selectedId: number | null
   onSelect: (id: number) => void
   depth: number
+  searchFilter: TopicSearchFilter | null
 }) {
-  const children = getChildren(items, item.id)
-  const isFolder = item.has_children || children.length > 0
-  const [open, setOpen] = useState(depth < 1)
+  const allChildren = getChildren(items, item.id)
+  const children = searchFilter
+    ? allChildren.filter((c) => searchFilter.visibleIds.has(c.id))
+    : allChildren
+  const isFolder = searchFilter
+    ? children.length > 0
+    : item.has_children || allChildren.length > 0
+  const [manualOpen, setManualOpen] = useState(depth < 1)
+  const open = searchFilter ? children.length > 0 : manualOpen
+  const match = searchFilter?.matchById.get(item.id)
+  const title = item.question || 'Без названия'
+  const label = (() => {
+    if (!match || !searchFilter) return title
+    const titleLower = title.toLowerCase()
+    if (searchFilter.tokens.some((t) => titleLower.includes(t))) {
+      return highlightTitle(title, searchFilter.tokens)
+    }
+    if (match.inBody) {
+      return <mark className="find-hit">{title}</mark>
+    }
+    return title
+  })()
 
   return (
     <li>
       <div
         className={`topic-item${selectedId === item.id ? ' is-selected' : ''}${isFolder ? ' is-folder' : ''}`}
-        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        style={{
+          marginLeft: `${rowMarginLeft(depth)}px`,
+          paddingLeft: depth === 0 ? `${ROOT_PAD}px` : 0,
+        }}
       >
         {isFolder ? (
           <button
             type="button"
             className="topic-item__toggle"
             aria-label={open ? 'Свернуть' : 'Развернуть'}
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => {
+              if (searchFilter) return
+              setManualOpen((v) => !v)
+            }}
           >
             {open ? '▾' : '▸'}
           </button>
@@ -50,11 +141,14 @@ function TreeNode({
           className="topic-item__label"
           onClick={() => onSelect(item.id)}
         >
-          {item.question || 'Без названия'}
+          {label}
         </button>
       </div>
-      {isFolder && open && (
-        <ul className="topic-tree">
+      {isFolder && open && children.length > 0 && (
+        <ul
+          className="topic-tree"
+          style={{ ['--guide-x' as string]: `${guideX(depth)}px` }}
+        >
           {children.map((child) => (
             <TreeNode
               key={child.id}
@@ -63,6 +157,7 @@ function TreeNode({
               selectedId={selectedId}
               onSelect={onSelect}
               depth={depth + 1}
+              searchFilter={searchFilter}
             />
           ))}
         </ul>
@@ -71,35 +166,15 @@ function TreeNode({
   )
 }
 
-export function TopicList({ items, selectedId, onSelect, searchHits }: TopicListProps) {
-  if (searchHits) {
-    if (searchHits.length === 0) {
-      return <div className="empty-hint">Ничего не найдено</div>
-    }
-    return (
-      <ul className="topic-list topic-list--flat">
-        {searchHits.map(({ item, pathLabel, matchedInBody }) => (
-          <li key={item.id}>
-            <button
-              type="button"
-              className={`topic-item topic-item--flat${selectedId === item.id ? ' is-selected' : ''}`}
-              onClick={() => onSelect(item.id)}
-            >
-              <span className="topic-item__title">{item.question}</span>
-              {pathLabel ? <span className="topic-item__path">{pathLabel}</span> : null}
-              {matchedInBody ? (
-                <span className="topic-item__path">найдено в тексте</span>
-              ) : null}
-            </button>
-          </li>
-        ))}
-      </ul>
-    )
-  }
-
+export function TopicList({ items, selectedId, onSelect, searchFilter }: TopicListProps) {
   const roots = items
     .filter((item) => item.parent_id == null)
+    .filter((item) => !searchFilter || searchFilter.visibleIds.has(item.id))
     .sort((a, b) => a.id - b.id)
+
+  if (searchFilter && roots.length === 0) {
+    return <div className="empty-hint">Ничего не найдено</div>
+  }
 
   if (roots.length === 0) {
     return <div className="empty-hint">В этом отделе пока нет тем</div>
@@ -115,6 +190,7 @@ export function TopicList({ items, selectedId, onSelect, searchHits }: TopicList
           selectedId={selectedId}
           onSelect={onSelect}
           depth={0}
+          searchFilter={searchFilter}
         />
       ))}
     </ul>

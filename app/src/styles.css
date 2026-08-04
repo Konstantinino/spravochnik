@@ -402,7 +402,33 @@ option {
 .topic-tree {
   list-style: none;
   margin: 0;
+  padding: 0;
+}
+
+.topic-list {
   padding: 8px 0;
+}
+
+/* Guide line for nested subtopics */
+.topic-tree .topic-tree {
+  position: relative;
+}
+
+.topic-tree .topic-tree::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--guide-x, 34px);
+  width: 1px;
+  background: rgba(28, 36, 48, 0.14);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.topic-tree .topic-tree > li > .topic-item {
+  position: relative;
+  z-index: 1;
 }
 
 .topic-item {
@@ -412,6 +438,7 @@ option {
   margin: 2px 8px;
   border-radius: 8px;
   border: 1px solid transparent;
+  box-sizing: border-box;
 }
 
 .topic-item.is-selected {
@@ -536,26 +563,46 @@ option {
 .viewer-children {
   list-style: none;
   margin: 0 0 16px;
-  padding: 0;
+  padding: 0 0 0 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  position: relative;
+}
+
+.viewer-children::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: rgba(28, 36, 48, 0.14);
+  pointer-events: none;
 }
 
 .viewer-children__item {
-  width: 100%;
+  display: inline;
+  width: auto;
+  max-width: 100%;
+  align-self: flex-start;
   text-align: left;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  background: rgba(31, 58, 76, 0.04);
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #3d6a7e;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
+  font: inherit;
 }
 
 .viewer-children__item:hover,
 .viewer-children__item.is-selected {
-  background: var(--selected);
-  border-color: var(--selected-border);
+  background: transparent;
+  border: 0;
+  color: #2a5364;
 }
 
 .viewer-find {
@@ -649,7 +696,7 @@ mark.find-hit--active {
 }
 
 .markdown-body p {
-  margin: 0 0 0.9em;
+  margin: 0 0 0.8em;
   white-space: pre-wrap;
 }
 
@@ -1328,6 +1375,9 @@ mark.find-hit--active {
   overflow: auto;
   padding: 20px 24px 40px;
   max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .settings-section {

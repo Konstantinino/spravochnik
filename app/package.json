@@ -1,6 +1,6 @@
 {
   "name": "rest-info",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "REST INFO — корпоративный справочник",
   "main": "dist-electron/main.js",
   "author": "REST",

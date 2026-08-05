@@ -1,4 +1,4 @@
-import type { GuideItem, SupportParty } from '../types'
+import type { GuideItem, SupportParty, SupportPartyFilter } from '../types'
 import { isSupportParty } from '../types'
 
 export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[] }): GuideItem[] {
@@ -10,7 +10,11 @@ export function getItemParty(item: GuideItem): SupportParty {
   return isSupportParty(item.party) ? item.party : 'supplier'
 }
 
-export function filterItemsByParty(items: GuideItem[], party: SupportParty): GuideItem[] {
+export function filterItemsByParty(
+  items: GuideItem[],
+  party: SupportPartyFilter,
+): GuideItem[] {
+  if (party === 'all') return items
   return items.filter((item) => getItemParty(item) === party)
 }
 

@@ -1,5 +1,5 @@
 import type { GuideItem } from '../types'
-import { getItemPath } from './data'
+import { getChildren, getItemPath } from './data'
 
 export interface SearchHit {
   item: GuideItem
@@ -36,6 +36,14 @@ export function textHasAllTokens(text: string, tokens: string[]): boolean {
   return tokens.every((t) => lower.includes(t))
 }
 
+/** Answer + direct subtopic titles (shown inside the topic view). */
+function bodySearchText(items: GuideItem[], item: GuideItem): string {
+  const childTitles = getChildren(items, item.id)
+    .map((c) => c.question)
+    .join('\n')
+  return `${item.question}\n${item.answer ?? ''}\n${childTitles}`
+}
+
 export function searchItems(
   items: GuideItem[],
   query: string,
@@ -50,8 +58,7 @@ export function searchItems(
   for (const item of items) {
     const inTitle = textHasAllTokens(item.question, tokens)
     const inBody =
-      searchInBody &&
-      textHasAllTokens(`${item.question}\n${item.answer ?? ''}`, tokens)
+      searchInBody && textHasAllTokens(bodySearchText(items, item), tokens)
     if (!inTitle && !inBody) continue
     hits.push({
       item,
@@ -80,8 +87,7 @@ export function buildTopicSearchFilter(
   for (const item of items) {
     const inTitle = textHasAllTokens(item.question, tokens)
     const combinedOk =
-      searchInBody &&
-      textHasAllTokens(`${item.question}\n${item.answer ?? ''}`, tokens)
+      searchInBody && textHasAllTokens(bodySearchText(items, item), tokens)
     const inBody = Boolean(combinedOk) && !inTitle
     if (!inTitle && !combinedOk) continue
 

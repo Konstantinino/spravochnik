@@ -10,15 +10,30 @@ export type UserRole = 'user' | 'editor' | 'admin'
 /** Только для отдела «Тех. поддержка»: Поставщик / Заказчик */
 export type SupportParty = 'supplier' | 'customer'
 
+/** Sidebar filter: specific party or all topics */
+export type SupportPartyFilter = SupportParty | 'all'
+
 export const SUPPORT_PARTY_LABELS: Record<SupportParty, string> = {
+  supplier: 'Поставщик',
+  customer: 'Заказчик',
+}
+
+export const SUPPORT_PARTY_FILTER_LABELS: Record<SupportPartyFilter, string> = {
+  all: 'Все',
   supplier: 'Поставщик',
   customer: 'Заказчик',
 }
 
 export const SUPPORT_PARTIES: SupportParty[] = ['supplier', 'customer']
 
+export const SUPPORT_PARTY_FILTERS: SupportPartyFilter[] = ['all', 'supplier', 'customer']
+
 export function isSupportParty(value: unknown): value is SupportParty {
   return value === 'supplier' || value === 'customer'
+}
+
+export function isSupportPartyFilter(value: unknown): value is SupportPartyFilter {
+  return value === 'all' || isSupportParty(value)
 }
 
 export interface PublicUser {

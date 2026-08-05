@@ -1,14 +1,14 @@
-import type { SupportParty } from '../types'
-import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
+import type { SupportPartyFilter } from '../types'
+import { SUPPORT_PARTY_FILTERS, SUPPORT_PARTY_FILTER_LABELS } from '../types'
 
 interface SearchProps {
   value: string
   onChange: (value: string) => void
   canAdd?: boolean
   onAdd?: () => void
-  /** Техподдержка: фильтр Поставщик / Заказчик */
-  partyFilter?: SupportParty
-  onPartyFilterChange?: (party: SupportParty) => void
+  /** Техподдержка: фильтр Все / Поставщик / Заказчик */
+  partyFilter?: SupportPartyFilter
+  onPartyFilterChange?: (party: SupportPartyFilter) => void
   showPartyFilter?: boolean
   searchInBody?: boolean
   onSearchInBodyChange?: (value: boolean) => void
@@ -75,12 +75,12 @@ export function Search({
           <span className="visually-hidden">Поставщик или заказчик</span>
           <select
             value={partyFilter}
-            onChange={(e) => onPartyFilterChange(e.target.value as SupportParty)}
+            onChange={(e) => onPartyFilterChange(e.target.value as SupportPartyFilter)}
             aria-label="Поставщик или заказчик"
           >
-            {SUPPORT_PARTIES.map((p) => (
+            {SUPPORT_PARTY_FILTERS.map((p) => (
               <option key={p} value={p}>
-                {SUPPORT_PARTY_LABELS[p]}
+                {SUPPORT_PARTY_FILTER_LABELS[p]}
               </option>
             ))}
           </select>

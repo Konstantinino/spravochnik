@@ -119,9 +119,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
         <section className="settings-section">
           <h2>Пользователи и роли</h2>
-          <p className="muted settings-section__hint">
-            Владельцу роль админа закреплена. Остальным можно назначить читателя или редактора.
-          </p>
           <table className="settings-table">
             <thead>
               <tr>

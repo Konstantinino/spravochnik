@@ -1,5 +1,5 @@
 {
-  "version": "1.1.7",
-  "remoteSetupPath": "updates/REST-INFO-Setup-1.1.7.exe",
-  "notes": "Удаление пользователей в настройках; старые Setup на Диске удаляются при релизе"
+  "version": "1.1.8",
+  "remoteSetupPath": "updates/REST-INFO-Setup-1.1.8.exe",
+  "notes": "Фильтр «Все», поиск по подтемам, перенос party у папки, правки удаления/ссылок и шапки темы"
 }

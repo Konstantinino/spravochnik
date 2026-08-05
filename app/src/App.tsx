@@ -18,6 +18,7 @@ import type {
   ImageDisplayMap,
   PublicUser,
   SupportParty,
+  SupportPartyFilter,
   SyncStatus,
 } from './types'
 import { DEPARTMENTS } from './types'
@@ -36,7 +37,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [query, setQuery] = useState('')
   const [searchInBody, setSearchInBody] = useState(false)
-  const [supportParty, setSupportParty] = useState<SupportParty>('supplier')
+  const [supportParty, setSupportParty] = useState<SupportPartyFilter>('all')
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorMode, setEditorMode] = useState<'add' | 'edit'>('add')
   const [editorParentId, setEditorParentId] = useState<number | null>(null)
@@ -73,7 +74,7 @@ export default function App() {
 
   function handleDepartmentChange(id: DepartmentId) {
     setDepartmentId(id)
-    setSupportParty('supplier')
+    setSupportParty('all')
     if (user) saveDepartment(user.id, id)
   }
 
@@ -258,7 +259,11 @@ export default function App() {
       })
       setGuide(data)
       setSelectedId(payload.id)
-      if (payload.departmentId === 'support' && payload.party) {
+      if (
+        payload.departmentId === 'support' &&
+        payload.party &&
+        supportParty !== 'all'
+      ) {
         setSupportParty(payload.party)
       }
       return
@@ -283,7 +288,11 @@ export default function App() {
       const newest = list.reduce((a, b) => (a.id > b.id ? a : b))
       setSelectedId(newest.id)
       setQuery('')
-      if (payload.departmentId === 'support' && payload.party) {
+      if (
+        payload.departmentId === 'support' &&
+        payload.party &&
+        supportParty !== 'all'
+      ) {
         setSupportParty(payload.party)
       }
     } else {
@@ -309,7 +318,7 @@ export default function App() {
       },
     })
     setGuide(data)
-    if (departmentId === 'support' && payload.party) {
+    if (departmentId === 'support' && payload.party && supportParty !== 'all') {
       setSupportParty(payload.party)
     }
   }
@@ -358,7 +367,7 @@ export default function App() {
       const parent = items.find((i) => i.id === editorParentId)
       if (parent) return getItemParty(parent)
     }
-    return supportParty
+    return supportParty === 'all' ? 'supplier' : supportParty
   })()
 
   return (

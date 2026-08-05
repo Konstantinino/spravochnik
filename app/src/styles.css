@@ -518,27 +518,29 @@ option {
 
 .viewer__header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   margin-bottom: 12px;
 }
 
 .viewer__title {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   font-size: 1.6rem;
   line-height: 1.25;
   color: #173246;
   font-weight: 700;
-  flex: 1;
-  min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
 .viewer__title-input {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   font-size: 1.4rem;
   font-weight: 700;
   line-height: 1.25;
@@ -552,8 +554,10 @@ option {
 .viewer__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
+  width: 100%;
 }
 
 .viewer__subtopic-bar {
@@ -609,7 +613,6 @@ option {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 12px;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;

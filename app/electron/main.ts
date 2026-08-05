@@ -117,6 +117,41 @@ function writeGuideFile(fileName: string, data: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
 }
 
+let inAppBrowser: BrowserWindow | null = null
+
+function isHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
+function openInAppBrowser(url: string): void {
+  if (!isHttpUrl(url)) return
+
+  if (inAppBrowser && !inAppBrowser.isDestroyed()) {
+    inAppBrowser.focus()
+    void inAppBrowser.loadURL(url)
+    return
+  }
+
+  inAppBrowser = new BrowserWindow({
+    width: 1100,
+    height: 800,
+    minWidth: 640,
+    minHeight: 480,
+    title: 'REST INFO',
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  inAppBrowser.setMenuBarVisibility(false)
+  inAppBrowser.on('closed', () => {
+    inAppBrowser = null
+  })
+  void inAppBrowser.loadURL(url)
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1200,
@@ -137,16 +172,43 @@ function createWindow(): void {
   win.setMenuBarVisibility(false)
   win.once('ready-to-show', () => win.show())
 
+  const appOrigins = new Set<string>()
+  const devServer = process.env.VITE_DEV_SERVER_URL
+  if (devServer) {
+    try {
+      appOrigins.add(new URL(devServer).origin)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function isAppNavigation(url: string): boolean {
+    if (url.startsWith('file:')) return true
+    if (url.startsWith('spravochnik:')) return true
+    try {
+      const origin = new URL(url).origin
+      return appOrigins.has(origin)
+    } catch {
+      return false
+    }
+  }
+
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) {
-      void shell.openExternal(url)
+    if (isHttpUrl(url)) {
+      openInAppBrowser(url)
     }
     return { action: 'deny' }
   })
 
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isAppNavigation(url)) return
+    event.preventDefault()
+    if (isHttpUrl(url)) openInAppBrowser(url)
+  })
+
   win.webContents.on('context-menu', (_event, params) => {
     const linkURL = params.linkURL?.trim()
-    if (!linkURL || !/^https?:\/\//i.test(linkURL)) return
+    if (!linkURL || !isHttpUrl(linkURL)) return
 
     Menu.buildFromTemplate([
       {
@@ -164,8 +226,8 @@ function createWindow(): void {
     ]).popup({ window: win })
   })
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    win.loadURL(process.env.VITE_DEV_SERVER_URL)
+  if (devServer) {
+    win.loadURL(devServer)
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'))
   }
@@ -451,6 +513,19 @@ function registerIpc(): void {
         }
       }
 
+      const oldParty =
+        list[idx].party === 'customer'
+          ? 'customer'
+          : list[idx].party === 'supplier'
+            ? 'supplier'
+            : 'supplier'
+      const nextParty =
+        payload.departmentId === 'support'
+          ? payload.item.party === 'customer' || payload.item.party === 'supplier'
+            ? payload.item.party
+            : oldParty
+          : undefined
+
       list[idx] = {
         ...list[idx],
         question: payload.item.question,
@@ -459,16 +534,34 @@ function registerIpc(): void {
         has_children: payload.item.has_children ?? list[idx].has_children ?? false,
         photos: payload.item.photos ?? list[idx].photos ?? [],
         documents: payload.item.documents ?? list[idx].documents ?? [],
-        ...(payload.departmentId === 'support'
-          ? {
-              party:
-                payload.item.party === 'customer' || payload.item.party === 'supplier'
-                  ? payload.item.party
-                  : list[idx].party === 'customer'
-                    ? 'customer'
-                    : 'supplier',
-            }
-          : {}),
+        ...(nextParty ? { party: nextParty } : {}),
+      }
+
+      // When a folder's party changes, move all descendants to the same party
+      if (
+        payload.departmentId === 'support' &&
+        nextParty &&
+        nextParty !== oldParty
+      ) {
+        const byParent = new Map<number, number[]>()
+        for (const row of list) {
+          const pid = typeof row.parent_id === 'number' ? row.parent_id : null
+          const id = typeof row.id === 'number' ? row.id : null
+          if (pid == null || id == null) continue
+          const arr = byParent.get(pid) ?? []
+          arr.push(id)
+          byParent.set(pid, arr)
+        }
+        const stack = [...(byParent.get(payload.item.id) ?? [])]
+        const seen = new Set<number>()
+        while (stack.length) {
+          const id = stack.pop()!
+          if (seen.has(id)) continue
+          seen.add(id)
+          const row = list.find((r) => r.id === id)
+          if (row) row.party = nextParty
+          for (const child of byParent.get(id) ?? []) stack.push(child)
+        }
       }
 
       if (payload.item.image_display !== undefined) {

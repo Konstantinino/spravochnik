@@ -76,7 +76,8 @@ export function Viewer({
   const [findIndex, setFindIndex] = useState(0)
   const [findCount, setFindCount] = useState(0)
   const findInputRef = useRef<HTMLInputElement>(null)
-  const bodyRef = useRef<HTMLDivElement>(null)
+  /** Includes subtopic titles + answer body for Ctrl+F */
+  const findRootRef = useRef<HTMLDivElement>(null)
 
   const [imgMenu, setImgMenu] = useState<ImgMenuState | null>(null)
   const [scaleEditor, setScaleEditor] = useState<ScaleEditorState | null>(null)
@@ -103,6 +104,8 @@ export function Viewer({
   useEffect(() => {
     setEditing(false)
     setError(null)
+    setDeleting(false)
+    setSaving(false)
     setFindOpen(false)
     setFindQuery('')
     setFindIndex(0)
@@ -159,7 +162,7 @@ export function Viewer({
   }, [findQuery, item?.id])
 
   useEffect(() => {
-    const root = bodyRef.current
+    const root = findRootRef.current
     if (!root || editing || !findOpen) {
       if (root) clearFindHighlights(root)
       setFindCount(0)
@@ -171,7 +174,7 @@ export function Viewer({
       setFindCount(count)
     })
     return () => cancelAnimationFrame(frame)
-  }, [findOpen, findQuery, findIndex, editing, item?.id, item?.answer, localDisplay])
+  }, [findOpen, findQuery, findIndex, editing, item?.id, item?.answer, localDisplay, children])
 
   if (!item) {
     return (
@@ -222,6 +225,7 @@ export function Viewer({
       await onDelete()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка удаления')
+    } finally {
       setDeleting(false)
     }
   }
@@ -279,7 +283,7 @@ export function Viewer({
     setFindQuery('')
     setFindIndex(0)
     setFindCount(0)
-    if (bodyRef.current) clearFindHighlights(bodyRef.current)
+    if (findRootRef.current) clearFindHighlights(findRootRef.current)
   }
 
   function findNext(dir: 1 | -1) {
@@ -352,19 +356,8 @@ export function Viewer({
   return (
     <article className="viewer">
       <div className="viewer__header">
-        {editing ? (
-          <input
-            className="viewer__title-input"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            aria-label="Название темы"
-          />
-        ) : (
-          <h1 className="viewer__title">{current.question}</h1>
-        )}
-
-        <div className="viewer__actions">
-          {!editing && (
+        {!editing && (
+          <div className="viewer__actions">
             <button
               type="button"
               className="icon-btn--light"
@@ -379,219 +372,227 @@ export function Viewer({
                 />
               </svg>
             </button>
-          )}
 
-          {canEdit && !editing && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                closeFind()
-                setEditing(true)
+            {canEdit && (
+              <>
+                <button type="button" className="btn btn-secondary" onClick={onAddSubtopic}>
+                  Добавить подтему
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    closeFind()
+                    setEditing(true)
+                  }}
+                >
+                  Изменить
+                </button>
+              </>
+            )}
+
+            {isAdmin && (
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+              >
+                {deleting ? 'Удаление…' : 'Удалить'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {findOpen && !editing && (
+          <div className="viewer-find">
+            <input
+              ref={findInputRef}
+              value={findQuery}
+              onChange={(e) => setFindQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  findNext(e.shiftKey ? -1 : 1)
+                }
+                if (e.key === 'Escape') closeFind()
               }}
-            >
-              Изменить
-            </button>
-          )}
-
-          {isAdmin && !editing && (
+              placeholder="Найти в тексте…"
+              aria-label="Поиск в тексте темы"
+            />
+            <span className="viewer-find__count">
+              {findQuery.trim()
+                ? findCount
+                  ? `${findIndex + 1}/${findCount}`
+                  : '0/0'
+                : ''}
+            </span>
             <button
               type="button"
-              className="btn btn-danger"
-              onClick={() => void handleDelete()}
-              disabled={deleting}
+              className="btn btn-ghost"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => findNext(-1)}
+              title="Назад"
             >
-              {deleting ? 'Удаление…' : 'Удалить'}
+              ↑
             </button>
-          )}
-        </div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => findNext(1)}
+              title="Далее"
+            >
+              ↓
+            </button>
+            <button type="button" className="search__clear" onClick={closeFind} aria-label="Закрыть поиск">
+              ✕
+            </button>
+          </div>
+        )}
+
+        {editing ? (
+          <input
+            className="viewer__title-input"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            aria-label="Название темы"
+          />
+        ) : (
+          <h1 className="viewer__title">{current.question}</h1>
+        )}
       </div>
 
-      {findOpen && !editing && (
-        <div className="viewer-find">
-          <input
-            ref={findInputRef}
-            value={findQuery}
-            onChange={(e) => setFindQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                findNext(e.shiftKey ? -1 : 1)
-              }
-              if (e.key === 'Escape') closeFind()
-            }}
-            placeholder="Найти в тексте…"
-            aria-label="Поиск в тексте темы"
-          />
-          <span className="viewer-find__count">
-            {findQuery.trim()
-              ? findCount
-                ? `${findIndex + 1}/${findCount}`
-                : '0/0'
-              : ''}
-          </span>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => findNext(-1)}
-            title="Назад"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => findNext(1)}
-            title="Далее"
-          >
-            ↓
-          </button>
-          <button type="button" className="search__clear" onClick={closeFind} aria-label="Закрыть поиск">
-            ✕
-          </button>
-        </div>
-      )}
+      <div ref={findRootRef} className="viewer__find-root">
+        {children.length > 0 && !editing && (
+          <ul className="viewer-children">
+            {children.map((child) => (
+              <li key={child.id}>
+                <button
+                  type="button"
+                  className={`viewer-children__item${child.id === current.id ? ' is-selected' : ''}`}
+                  onClick={() => onSelect(child.id)}
+                >
+                  {child.question || 'Без названия'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
-      {canEdit && !editing && (
-        <div className="viewer__subtopic-bar">
-          <button type="button" className="btn btn-secondary" onClick={onAddSubtopic}>
-            Добавить подтему
-          </button>
-        </div>
-      )}
-
-      {children.length > 0 && !editing && (
-        <ul className="viewer-children">
-          {children.map((child) => (
-            <li key={child.id}>
-              <button
-                type="button"
-                className={`viewer-children__item${child.id === current.id ? ' is-selected' : ''}`}
-                onClick={() => onSelect(child.id)}
-              >
-                {child.question || 'Без названия'}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {editing ? (
-        <div className="viewer__editor">
-          {showParty && (
-            <label className="field">
-              <span>Поставщик / Заказчик</span>
-              <select
-                value={party}
-                onChange={(e) => {
-                  const next = e.target.value as SupportParty
-                  setParty(next)
-                  if (parentId != null) {
-                    const parent = items.find((i) => i.id === parentId)
-                    if (parent && getItemParty(parent) !== next) {
-                      setParentId(null)
-                      setAttachParent(false)
+        {editing ? (
+          <div className="viewer__editor">
+            {showParty && (
+              <label className="field">
+                <span>Поставщик / Заказчик</span>
+                <select
+                  value={party}
+                  onChange={(e) => {
+                    const next = e.target.value as SupportParty
+                    setParty(next)
+                    if (parentId != null) {
+                      const parent = items.find((i) => i.id === parentId)
+                      if (parent && getItemParty(parent) !== next) {
+                        setParentId(null)
+                        setAttachParent(false)
+                      }
                     }
-                  }
-                }}
-              >
-                {SUPPORT_PARTIES.map((p) => (
-                  <option key={p} value={p}>
-                    {SUPPORT_PARTY_LABELS[p]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <ParentTopicField
-            items={parentChoices}
-            excludeId={current.id}
-            attach={attachParent}
-            onAttachChange={setAttachParent}
-            parentId={parentId}
-            onParentIdChange={setParentId}
-          />
-          <textarea
-            ref={textareaRef}
-            className="viewer__textarea"
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            onPaste={(e) => void handleAnswerPaste(e)}
-            rows={16}
-            placeholder="Текст ответа (Markdown). Можно вставлять фото кнопкой или Ctrl+V."
-          />
-          <div className="viewer__editor-toolbar">
-            <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
-              Вставить фото
-            </button>
-            <div className="viewer__editor-actions">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => {
-                  setEditing(false)
-                  setQuestion(current.question)
-                  setAnswer(current.answer ?? '')
-                  setParentId(current.parent_id ?? null)
-                  setAttachParent(current.parent_id != null)
-                  setParty(getItemParty(current))
-                  setError(null)
-                }}
-                disabled={saving}
-              >
-                Отмена
+                  }}
+                >
+                  {SUPPORT_PARTIES.map((p) => (
+                    <option key={p} value={p}>
+                      {SUPPORT_PARTY_LABELS[p]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <ParentTopicField
+              items={parentChoices}
+              excludeId={current.id}
+              attach={attachParent}
+              onAttachChange={setAttachParent}
+              parentId={parentId}
+              onParentIdChange={setParentId}
+            />
+            <textarea
+              ref={textareaRef}
+              className="viewer__textarea"
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              onPaste={(e) => void handleAnswerPaste(e)}
+              rows={16}
+              placeholder="Текст ответа (Markdown). Можно вставлять фото кнопкой или Ctrl+V."
+            />
+            <div className="viewer__editor-toolbar">
+              <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
+                Вставить фото
               </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void handleSave()}
-                disabled={saving}
-              >
-                {saving ? 'Сохранение…' : 'Сохранить'}
-              </button>
+              <div className="viewer__editor-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setEditing(false)
+                    setQuestion(current.question)
+                    setAnswer(current.answer ?? '')
+                    setParentId(current.parent_id ?? null)
+                    setAttachParent(current.parent_id != null)
+                    setParty(getItemParty(current))
+                    setError(null)
+                  }}
+                  disabled={saving}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void handleSave()}
+                  disabled={saving}
+                >
+                  {saving ? 'Сохранение…' : 'Сохранить'}
+                </button>
+              </div>
             </div>
+            {error && <div className="form-error">{error}</div>}
           </div>
-          {error && <div className="form-error">{error}</div>}
-        </div>
-      ) : (
-        <div className="viewer__body markdown-body" ref={bodyRef}>
-          {current.answer?.trim() ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                img: ({ src, alt }) => {
-                  const raw = src ?? ''
-                  if (!isAllowedMarkdownImageSrc(raw)) {
-                    return null
-                  }
-                  return renderTopicImage(raw, alt || '')
-                },
-                a: ({ href, children: linkChildren }) => (
-                  <a href={href} target="_blank" rel="noreferrer">
-                    {linkChildren}
-                  </a>
-                ),
-              }}
-            >
-              {current.answer}
-            </ReactMarkdown>
-          ) : (
-            <p className="muted">Текст ответа пока пуст</p>
-          )}
+        ) : (
+          <div className="viewer__body markdown-body">
+            {current.answer?.trim() ? (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  img: ({ src, alt }) => {
+                    const raw = src ?? ''
+                    if (!isAllowedMarkdownImageSrc(raw)) {
+                      return null
+                    }
+                    return renderTopicImage(raw, alt || '')
+                  },
+                  a: ({ href, children: linkChildren }) => (
+                    <a href={href}>{linkChildren}</a>
+                  ),
+                }}
+              >
+                {current.answer}
+              </ReactMarkdown>
+            ) : (
+              <p className="muted">Текст ответа пока пуст</p>
+            )}
 
-          {localLegacy.length > 0 && (
-            <div className="viewer__legacy-photos">
-              {localLegacy.map((src) => (
-                <span key={src}>{renderTopicImage(src, '')}</span>
-              ))}
-            </div>
-          )}
+            {localLegacy.length > 0 && (
+              <div className="viewer__legacy-photos">
+                {localLegacy.map((src) => (
+                  <span key={src}>{renderTopicImage(src, '')}</span>
+                ))}
+              </div>
+            )}
 
-          {error && <div className="form-error">{error}</div>}
-        </div>
-      )}
+            {error && <div className="form-error">{error}</div>}
+          </div>
+        )}
+      </div>
 
       {imgMenu && (
         <div

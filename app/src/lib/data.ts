@@ -1,4 +1,4 @@
-import type { GuideItem, SupportParty, SupportPartyFilter } from '../types'
+import type { GuideItem, SupportParty, TopicViewFilter } from '../types'
 import { isSupportParty } from '../types'
 
 export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[] }): GuideItem[] {
@@ -10,24 +10,45 @@ export function getItemParty(item: GuideItem): SupportParty {
   return isSupportParty(item.party) ? item.party : 'supplier'
 }
 
+export function isArchived(item: GuideItem): boolean {
+  return Boolean(item.archived)
+}
+
+/**
+ * Filter sidebar list.
+ * - archive: only archived
+ * - all / supplier / customer: exclude archived; party filter for support
+ */
+export function filterItemsByView(
+  items: GuideItem[],
+  filter: TopicViewFilter,
+): GuideItem[] {
+  if (filter === 'archive') {
+    return items.filter((item) => isArchived(item))
+  }
+  const active = items.filter((item) => !isArchived(item))
+  if (filter === 'all') return active
+  return active.filter((item) => getItemParty(item) === filter)
+}
+
+/** @deprecated use filterItemsByView */
 export function filterItemsByParty(
   items: GuideItem[],
-  party: SupportPartyFilter,
+  party: TopicViewFilter,
 ): GuideItem[] {
-  if (party === 'all') return items
-  return items.filter((item) => getItemParty(item) === party)
+  return filterItemsByView(items, party)
+}
+
+function byTitle(a: GuideItem, b: GuideItem): number {
+  return (a.question || '').localeCompare(b.question || '', 'ru', { sensitivity: 'base' })
 }
 
 export function buildTree(items: GuideItem[]): GuideItem[] {
-  return items
-    .filter((item) => item.parent_id == null)
-    .sort((a, b) => a.id - b.id)
+  return items.filter((item) => item.parent_id == null).sort(byTitle)
 }
 
 export function getChildren(items: GuideItem[], parentId: number): GuideItem[] {
-  return items
-    .filter((item) => item.parent_id === parentId)
-    .sort((a, b) => a.id - b.id)
+  return items.filter((item) => item.parent_id === parentId).sort(byTitle)
 }
 
 export function getItemPath(items: GuideItem[], itemId: number): string[] {
@@ -43,9 +64,7 @@ export function getItemPath(items: GuideItem[], itemId: number): string[] {
 }
 
 export function getFolders(items: GuideItem[]): GuideItem[] {
-  return items
-    .filter((item) => item.has_children)
-    .sort((a, b) => a.question.localeCompare(b.question, 'ru'))
+  return items.filter((item) => item.has_children).sort(byTitle)
 }
 
 /** All descendant ids of rootId (not including rootId itself). */

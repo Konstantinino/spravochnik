@@ -259,7 +259,7 @@ export function TopicEditorModal({
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               onPaste={(e) => void handleAnswerPaste(e)}
-              rows={12}
+              rows={10}
               placeholder="Текст ответа. Можно вставлять фото кнопкой или Ctrl+V."
             />
           </label>

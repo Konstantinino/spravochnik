@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('spravochnik', {
   listUsers: () => ipcRenderer.invoke('admin:list-users'),
   setUserRole: (payload: unknown) => ipcRenderer.invoke('admin:set-role', payload),
   deleteUser: (userId: string) => ipcRenderer.invoke('admin:delete-user', userId),
+  updateUser: (payload: unknown) => ipcRenderer.invoke('admin:update-user', payload),
   getWhitelist: () => ipcRenderer.invoke('admin:get-whitelist'),
   setWhitelist: (emails: string[]) => ipcRenderer.invoke('admin:set-whitelist', emails),
   addWhitelist: (email: string) => ipcRenderer.invoke('admin:add-whitelist', email),

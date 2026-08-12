@@ -47,6 +47,7 @@ import {
   setYandexToken,
   updateUserRole,
   deleteUser,
+  updateUserCredentials,
   writeSession,
   clearEphemeralSessionOnStartup,
 } from './auth-store'
@@ -152,10 +153,73 @@ function openInAppBrowser(url: string): void {
   void inAppBrowser.loadURL(url)
 }
 
+function windowStatePath(): string {
+  return path.join(getUserDataRoot(), 'window-state.json')
+}
+
+function loadWindowState(): {
+  width: number
+  height: number
+  x?: number
+  y?: number
+  isMaximized?: boolean
+} {
+  const defaults = { width: 1200, height: 800 }
+  try {
+    if (!fs.existsSync(windowStatePath())) return defaults
+    const raw = JSON.parse(fs.readFileSync(windowStatePath(), 'utf8')) as Record<
+      string,
+      unknown
+    >
+    const width =
+      typeof raw.width === 'number' && raw.width >= 1000 ? raw.width : defaults.width
+    const height =
+      typeof raw.height === 'number' && raw.height >= 700 ? raw.height : defaults.height
+    return {
+      width,
+      height,
+      x: typeof raw.x === 'number' ? raw.x : undefined,
+      y: typeof raw.y === 'number' ? raw.y : undefined,
+      isMaximized: Boolean(raw.isMaximized),
+    }
+  } catch {
+    return defaults
+  }
+}
+
+function saveWindowState(win: BrowserWindow): void {
+  try {
+    const isMaximized = win.isMaximized()
+    const bounds = isMaximized ? win.getNormalBounds() : win.getBounds()
+    fs.writeFileSync(
+      windowStatePath(),
+      JSON.stringify(
+        {
+          width: bounds.width,
+          height: bounds.height,
+          x: bounds.x,
+          y: bounds.y,
+          isMaximized,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
 function createWindow(): void {
+  Menu.setApplicationMenu(null)
+
+  const state = loadWindowState()
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: state.width,
+    height: state.height,
+    x: state.x,
+    y: state.y,
     minWidth: 1000,
     minHeight: 700,
     title: 'REST INFO',
@@ -170,7 +234,17 @@ function createWindow(): void {
   })
 
   win.setMenuBarVisibility(false)
+  if (state.isMaximized) win.maximize()
   win.once('ready-to-show', () => win.show())
+
+  let saveTimer: ReturnType<typeof setTimeout> | null = null
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => saveWindowState(win), 400)
+  }
+  win.on('resize', scheduleSave)
+  win.on('move', scheduleSave)
+  win.on('close', () => saveWindowState(win))
 
   const appOrigins = new Set<string>()
   const devServer = process.env.VITE_DEV_SERVER_URL
@@ -243,12 +317,17 @@ function registerIpc(): void {
   ipcMain.handle('auth:current-user', () => getCurrentUser())
   ipcMain.handle(
     'auth:login',
-    (_e, payload: { email: string; password: string; rememberMe?: boolean }) =>
-      loginUser(payload),
+    async (_e, payload: { email: string; password: string; rememberMe?: boolean }) => {
+      const s = readSettings()
+      if (s.yandexToken.trim()) {
+        await pullFromYandex()
+      }
+      return loginUser(payload)
+    },
   )
   ipcMain.handle(
     'auth:register',
-    (
+    async (
       _e,
       payload: {
         name: string
@@ -263,8 +342,8 @@ function registerIpc(): void {
       }
       const user = registerUser(payload)
       writeSession(user.id, Boolean(payload.rememberMe))
-      markLocalChange()
-      void pushAccountsFile()
+      // Accounts-only push — do not mark guide pending
+      await pushAccountsFile()
       return user
     },
   )
@@ -284,17 +363,27 @@ function registerIpc(): void {
   ipcMain.handle('admin:set-role', async (_e, payload: { userId: string; role: UserRole }) => {
     requireRole(getCurrentUser(), ['admin'])
     const users = updateUserRole(payload.userId, payload.role)
-    markLocalChange()
     await pushAccountsFile()
     return users
   })
   ipcMain.handle('admin:delete-user', async (_e, userId: string) => {
     requireRole(getCurrentUser(), ['admin'])
     const users = deleteUser(userId)
-    markLocalChange()
     await pushAccountsFile()
     return users
   })
+  ipcMain.handle(
+    'admin:update-user',
+    async (_e, payload: { userId: string; email: string; password?: string }) => {
+      requireRole(getCurrentUser(), ['admin'])
+      const users = updateUserCredentials(payload.userId, {
+        email: payload.email,
+        password: payload.password,
+      })
+      await pushAccountsFile()
+      return users
+    },
+  )
   ipcMain.handle('admin:get-whitelist', () => {
     requireRole(getCurrentUser(), ['admin'])
     return getWhitelist()
@@ -302,21 +391,18 @@ function registerIpc(): void {
   ipcMain.handle('admin:set-whitelist', async (_e, emails: string[]) => {
     requireRole(getCurrentUser(), ['admin'])
     const list = setWhitelist(emails)
-    markLocalChange()
     await pushAccountsFile()
     return list
   })
   ipcMain.handle('admin:add-whitelist', async (_e, email: string) => {
     requireRole(getCurrentUser(), ['admin'])
     const list = addWhitelistEmail(email)
-    markLocalChange()
     await pushAccountsFile()
     return list
   })
   ipcMain.handle('admin:remove-whitelist', async (_e, email: string) => {
     requireRole(getCurrentUser(), ['admin'])
     const list = removeWhitelistEmail(email)
-    markLocalChange()
     await pushAccountsFile()
     return list
   })
@@ -331,11 +417,11 @@ function registerIpc(): void {
   })
 
   // Token is set before login so whitelist/accounts can sync from Disk first
-  ipcMain.handle('sync:set-token', (_e, token: string) => {
+  ipcMain.handle('sync:set-token', async (_e, token: string) => {
     const s = setYandexToken(token)
     refreshStatusFromSettings()
-    void pullFromYandex()
-    return { hasToken: Boolean(s.yandexToken), hasPendingChanges: s.hasPendingChanges }
+    await pullFromYandex()
+    return { hasToken: Boolean(s.yandexToken), hasPendingChanges: readSettings().hasPendingChanges }
   })
   ipcMain.handle('sync:get-token-masked', () => {
     const s = readSettings()
@@ -460,6 +546,7 @@ function registerIpc(): void {
           parent_id?: number | null
           has_children?: boolean
           party?: 'supplier' | 'customer'
+          archived?: boolean
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
           image_display?: Record<string, number>
@@ -526,6 +613,10 @@ function registerIpc(): void {
             : oldParty
           : undefined
 
+      const oldArchived = Boolean(list[idx].archived)
+      const nextArchived =
+        payload.item.archived !== undefined ? Boolean(payload.item.archived) : oldArchived
+
       list[idx] = {
         ...list[idx],
         question: payload.item.question,
@@ -535,14 +626,13 @@ function registerIpc(): void {
         photos: payload.item.photos ?? list[idx].photos ?? [],
         documents: payload.item.documents ?? list[idx].documents ?? [],
         ...(nextParty ? { party: nextParty } : {}),
+        ...(nextArchived ? { archived: true } : {}),
+      }
+      if (!nextArchived) {
+        delete list[idx].archived
       }
 
-      // When a folder's party changes, move all descendants to the same party
-      if (
-        payload.departmentId === 'support' &&
-        nextParty &&
-        nextParty !== oldParty
-      ) {
+      function collectDescendants(rootId: number): number[] {
         const byParent = new Map<number, number[]>()
         for (const row of list) {
           const pid = typeof row.parent_id === 'number' ? row.parent_id : null
@@ -552,15 +642,36 @@ function registerIpc(): void {
           arr.push(id)
           byParent.set(pid, arr)
         }
-        const stack = [...(byParent.get(payload.item.id) ?? [])]
+        const stack = [...(byParent.get(rootId) ?? [])]
         const seen = new Set<number>()
         while (stack.length) {
           const id = stack.pop()!
           if (seen.has(id)) continue
           seen.add(id)
+          for (const child of byParent.get(id) ?? []) stack.push(child)
+        }
+        return [...seen]
+      }
+
+      // When a folder's party changes, move all descendants to the same party
+      if (
+        payload.departmentId === 'support' &&
+        nextParty &&
+        nextParty !== oldParty
+      ) {
+        for (const id of collectDescendants(payload.item.id)) {
           const row = list.find((r) => r.id === id)
           if (row) row.party = nextParty
-          for (const child of byParent.get(id) ?? []) stack.push(child)
+        }
+      }
+
+      // Archive / unarchive cascades to subtopics
+      if (nextArchived !== oldArchived) {
+        for (const id of collectDescendants(payload.item.id)) {
+          const row = list.find((r) => r.id === id)
+          if (!row) continue
+          if (nextArchived) row.archived = true
+          else delete row.archived
         }
       }
 
@@ -772,12 +883,10 @@ app.whenReady().then(() => {
   registerIpc()
   createWindow()
 
-  // Background sync after UI is up
-  setTimeout(() => {
-    void pullFromYandex()
-  }, 800)
+  // Pull from Disk on every launch so themes/accounts from other PCs appear
+  void pullFromYandex()
 
-  // Check GitHub Releases for a newer Setup (packaged builds only)
+  // Check Disk for a newer Setup (packaged builds only)
   setTimeout(() => {
     void checkForUpdates()
   }, 2000)

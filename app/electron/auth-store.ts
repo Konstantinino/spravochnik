@@ -161,8 +161,6 @@ export function isOwnerEmail(email: string): boolean {
   return normalizeEmail(email) === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
 }
 
-const ROLE_RANK: Record<UserRole, number> = { user: 0, editor: 1, admin: 2 }
-
 /** Union users/whitelist from local + remote so registrations and role edits are not wiped by pull. */
 export function mergeAccountsData(
   local: AccountsData,
@@ -200,14 +198,12 @@ export function mergeAccountsData(
       role = 'admin'
     } else if (preferLocalRoles) {
       role = u.role
-    } else if (ROLE_RANK[u.role] !== ROLE_RANK[remoteUser.role]) {
-      // Keep the higher privilege so an admin role push isn't lost to an older remote copy
-      role = ROLE_RANK[u.role] >= ROLE_RANK[remoteUser.role] ? u.role : remoteUser.role
     } else {
+      // Disk / admin is source of truth for roles (allows demotions)
       role = remoteUser.role
     }
 
-    // Prefer local credentials when the account exists locally (login must keep working)
+    // Prefer local credentials when present; otherwise take remote (login on new PC)
     byEmail.set(key, {
       ...remoteUser,
       id: u.id || remoteUser.id,
@@ -302,8 +298,13 @@ export function loginUser(input: {
   const email = normalizeEmail(input.email)
   const accounts = readAccounts()
   const user = accounts.users.find((u) => normalizeEmail(u.email) === email)
-  if (!user || !verifyPassword(input.password, user.salt, user.passwordHash)) {
-    throw new Error('Неверная почта или пароль')
+  if (!user) {
+    throw new Error(
+      'Пользователь не найден. Дождитесь синхронизации с Диском или проверьте почту.',
+    )
+  }
+  if (!verifyPassword(input.password, user.salt, user.passwordHash)) {
+    throw new Error('Неверный пароль')
   }
   writeSession(user.id, Boolean(input.rememberMe))
   return toPublicUser(user)
@@ -362,6 +363,44 @@ export function updateUserRole(userId: string, role: UserRole): PublicUser[] {
   }
 
   user.role = role
+  writeAccounts(accounts)
+  return listUsersPublic()
+}
+
+/** Update login (email) and optionally password. Empty password keeps the current one. */
+export function updateUserCredentials(
+  userId: string,
+  input: { email: string; password?: string },
+): PublicUser[] {
+  const email = normalizeEmail(input.email)
+  const password = input.password?.trim() ?? ''
+
+  if (!email || !email.includes('@')) throw new Error('Укажите корректную почту')
+  if (password && password.length < 6) throw new Error('Пароль не короче 6 символов')
+
+  const accounts = readAccounts()
+  const user = accounts.users.find((u) => u.id === userId)
+  if (!user) throw new Error('Пользователь не найден')
+
+  if (isOwnerEmail(user.email) && email !== normalizeEmail(user.email)) {
+    throw new Error('Почту владельца менять нельзя')
+  }
+
+  const taken = accounts.users.some(
+    (u) => u.id !== userId && normalizeEmail(u.email) === email,
+  )
+  if (taken) throw new Error('Пользователь с такой почтой уже есть')
+
+  user.email = email
+  if (password) {
+    const salt = randomBytes(16).toString('hex')
+    user.salt = salt
+    user.passwordHash = hashPassword(password, salt)
+  }
+
+  // Allow login with the new email if it was previously removed
+  accounts.removedEmails = (accounts.removedEmails ?? []).filter((e) => e !== email)
+
   writeAccounts(accounts)
   return listUsersPublic()
 }

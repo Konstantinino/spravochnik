@@ -19,6 +19,12 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   const [hasToken, setHasToken] = useState(false)
   const [ownerEmail, setOwnerEmail] = useState('')
 
+  const [editUser, setEditUser] = useState<PublicUser | null>(null)
+  const [editLogin, setEditLogin] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
   async function reload() {
     const [u, w, s, sync] = await Promise.all([
       window.spravochnik.listUsers(),
@@ -66,6 +72,46 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       setInfo('Пользователь удалён и изменения отправлены на Диск.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка')
+    }
+  }
+
+  function openEdit(u: PublicUser) {
+    setEditUser(u)
+    setEditLogin(u.email)
+    setEditPassword('')
+    setEditError(null)
+  }
+
+  function closeEdit() {
+    if (editSaving) return
+    setEditUser(null)
+    setEditLogin('')
+    setEditPassword('')
+    setEditError(null)
+  }
+
+  async function applyEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editUser) return
+    setEditSaving(true)
+    setEditError(null)
+    setError(null)
+    setInfo(null)
+    try {
+      const next = await window.spravochnik.updateUser({
+        userId: editUser.id,
+        email: editLogin,
+        password: editPassword.trim() || undefined,
+      })
+      setUsers(next)
+      setInfo('Данные пользователя обновлены и отправлены на Диск.')
+      setEditUser(null)
+      setEditLogin('')
+      setEditPassword('')
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -153,6 +199,13 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                     )}
                   </td>
                   <td className="settings-table__actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => openEdit(u)}
+                    >
+                      Изменить
+                    </button>
                     {!u.isOwner && u.role !== 'admin' && (
                       <button
                         type="button"
@@ -211,6 +264,72 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
           </ul>
         </section>
       </div>
+
+      {editUser && (
+        <div className="modal-backdrop" role="presentation" onClick={closeEdit}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-user-title"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="modal__header">
+              <h2 id="edit-user-title">Изменить аккаунт</h2>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={closeEdit}
+                aria-label="Закрыть"
+                disabled={editSaving}
+              >
+                ✕
+              </button>
+            </div>
+            <form className="modal__body" onSubmit={(ev) => void applyEdit(ev)}>
+              <p className="muted" style={{ marginTop: 0 }}>
+                {editUser.name}
+              </p>
+              <label className="field">
+                <span>Логин (почта)</span>
+                <input
+                  type="email"
+                  value={editLogin}
+                  onChange={(ev) => setEditLogin(ev.target.value)}
+                  autoComplete="off"
+                  required
+                  disabled={editUser.isOwner || editSaving}
+                />
+              </label>
+              <label className="field">
+                <span>Пароль</span>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(ev) => setEditPassword(ev.target.value)}
+                  autoComplete="new-password"
+                  placeholder="Оставьте пустым, чтобы не менять"
+                  disabled={editSaving}
+                />
+              </label>
+              {editError && <div className="form-error">{editError}</div>}
+              <div className="modal__actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={closeEdit}
+                  disabled={editSaving}
+                >
+                  Отмена
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={editSaving}>
+                  {editSaving ? 'Сохранение…' : 'Применить'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -31,6 +31,7 @@ interface ViewerProps {
   }) => Promise<void>
   onSaveImageDisplay: (image_display: ImageDisplayMap | undefined) => Promise<void>
   onDelete: () => Promise<void>
+  onToggleArchive?: () => void
   onAddSubtopic: () => void
 }
 
@@ -58,6 +59,7 @@ export function Viewer({
   onSave,
   onSaveImageDisplay,
   onDelete,
+  onToggleArchive,
   onAddSubtopic,
 }: ViewerProps) {
   const [editing, setEditing] = useState(false)
@@ -378,6 +380,11 @@ export function Viewer({
                 <button type="button" className="btn btn-secondary" onClick={onAddSubtopic}>
                   Добавить подтему
                 </button>
+                {onToggleArchive && (
+                  <button type="button" className="btn btn-secondary" onClick={onToggleArchive}>
+                    {current.archived ? 'Из архива' : 'В архив'}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn btn-secondary"

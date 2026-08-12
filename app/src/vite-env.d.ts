@@ -53,6 +53,11 @@ export interface SpravochnikApi {
   listUsers: () => Promise<PublicUser[]>
   setUserRole: (payload: { userId: string; role: UserRole }) => Promise<PublicUser[]>
   deleteUser: (userId: string) => Promise<PublicUser[]>
+  updateUser: (payload: {
+    userId: string
+    email: string
+    password?: string
+  }) => Promise<PublicUser[]>
   getWhitelist: () => Promise<string[]>
   setWhitelist: (emails: string[]) => Promise<string[]>
   addWhitelist: (email: string) => Promise<string[]>

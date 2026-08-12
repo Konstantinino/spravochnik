@@ -426,8 +426,25 @@ async function releaseSyncLock(token: string): Promise<void> {
 
 const SYNC_JSON_FILES = [...DATA_FILES, ACCOUNTS_FILE] as const
 
+function guidesMatchSyncBase(): boolean {
+  const root = getUserDataRoot()
+  for (const fileName of DATA_FILES) {
+    const localPath = path.join(root, fileName)
+    if (!fs.existsSync(localPath)) continue
+    const base = readBaseGuide(fileName)
+    if (base == null) return false
+    try {
+      const local = JSON.parse(fs.readFileSync(localPath, 'utf8')) as unknown
+      if (JSON.stringify(local) !== JSON.stringify(base)) return false
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
 export async function pullFromYandex(options?: { force?: boolean }): Promise<SyncStatus> {
-  const settings = readSettings()
+  let settings = readSettings()
   if (!settings.yandexToken) {
     return emit({
       code: 'no_token',
@@ -437,21 +454,51 @@ export async function pullFromYandex(options?: { force?: boolean }): Promise<Syn
   }
 
   try {
+    // Drop sticky pending left from old accounts-only ops (no real guide diffs)
+    if (settings.hasPendingChanges && guidesMatchSyncBase()) {
+      setPendingChanges(false)
+      settings = readSettings()
+    }
+
     emit({ code: 'connecting', label: 'Подключение…' })
     await ensureRemoteFolder(settings.yandexToken)
     emit({ code: 'syncing', label: 'Синхронизация…' })
 
     const root = getUserDataRoot()
     const force = Boolean(options?.force)
+    const pending = !force && readSettings().hasPendingChanges
+
+    if (pending) {
+      // Keep local edits, but merge in topics from Disk (other PCs)
+      const { conflicts, mergedByFile } = await mergeGuidesWithRemote(settings.yandexToken)
+      for (const [fileName, data] of Object.entries(mergedByFile)) {
+        writeLocalJson(fileName, data)
+      }
+      await pullAndMergeAccounts(settings.yandexToken, false)
+
+      await ensureRemoteMediaFolder(settings.yandexToken)
+      await pullAllRemoteMedia(settings.yandexToken)
+
+      ensureLocalUpdateManifest()
+      const updateDest = path.join(root, APP_UPDATE_FILE)
+      await downloadRemoteFile(settings.yandexToken, APP_UPDATE_FILE, updateDest)
+      void checkForUpdates()
+
+      if (conflicts.length > 0) {
+        pendingConflicts = conflicts
+        pendingMergedByFile = mergedByFile
+        return emit({
+          code: 'conflict',
+          label: 'Конфликт изменений',
+          detail: `Разные правки одной темы: ${conflicts.length}`,
+          conflicts: conflicts.map(toConflictInfo),
+        })
+      }
+      return emit({ code: 'pending', label: 'Есть локальные изменения' })
+    }
+
     for (const fileName of SYNC_JSON_FILES) {
       const dest = path.join(root, fileName)
-      if (
-        !force &&
-        settings.hasPendingChanges &&
-        DATA_FILES.includes(fileName as (typeof DATA_FILES)[number])
-      ) {
-        continue
-      }
 
       if (fileName === ACCOUNTS_FILE) {
         await pullAndMergeAccounts(settings.yandexToken, force)
@@ -806,21 +853,18 @@ export function markLocalChange(): SyncStatus {
   return emit({ code: 'pending', label: 'Есть локальные изменения' })
 }
 
-/** Upload only accounts.json (registrations / roles / whitelist) without clearing guide pending. */
-export async function pushAccountsFile(): Promise<boolean> {
+/** Upload only accounts.json (registrations / roles / whitelist) without touching guide pending. */
+export async function pushAccountsFile(): Promise<void> {
   const settings = readSettings()
-  if (!settings.yandexToken) return false
-  try {
-    await ensureRemoteFolder(settings.yandexToken)
-    const localPath = path.join(getUserDataRoot(), ACCOUNTS_FILE)
-    await uploadLocalFile(settings.yandexToken, ACCOUNTS_FILE, localPath)
-    return true
-  } catch {
-    return false
+  if (!settings.yandexToken) {
+    throw new Error('Нет токена Диска — аккаунты не отправлены')
   }
+  await ensureRemoteFolder(settings.yandexToken)
+  const localPath = path.join(getUserDataRoot(), ACCOUNTS_FILE)
+  await uploadLocalFile(settings.yandexToken, ACCOUNTS_FILE, localPath)
 }
 
-async function pullAndMergeAccounts(token: string, force: boolean): Promise<void> {
+async function pullAndMergeAccounts(token: string, _force: boolean): Promise<void> {
   const root = getUserDataRoot()
   const remoteTmp = path.join(root, `.${ACCOUNTS_FILE}.remote`)
   const local = readAccounts()
@@ -842,8 +886,8 @@ async function pullAndMergeAccounts(token: string, force: boolean): Promise<void
         ? (raw.removedEmails as string[])
         : [],
     }
-    const preferLocalRoles = !force && readSettings().hasPendingChanges
-    const merged = mergeAccountsData(local, remote, { preferLocalRoles })
+    // Never tie role merge to guide pending — Disk roles must apply on pull
+    const merged = mergeAccountsData(local, remote, { preferLocalRoles: false })
     writeAccounts(merged)
   } finally {
     try {

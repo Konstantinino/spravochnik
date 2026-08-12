@@ -7,9 +7,14 @@ import { TopicEditorModal } from './components/TopicEditorModal'
 import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
 import { SyncConflictModal } from './components/SyncConflictModal'
-import { getItems, filterItemsByParty, getItemParty } from './lib/data'
+import { getItems, filterItemsByView, getItemParty } from './lib/data'
 import { buildTopicSearchFilter } from './lib/search'
-import { loadSavedDepartment, saveDepartment } from './lib/prefs'
+import {
+  loadSavedDepartment,
+  saveDepartment,
+  loadSavedListFilter,
+  saveListFilter,
+} from './lib/prefs'
 import type {
   ConflictResolution,
   DepartmentId,
@@ -18,15 +23,35 @@ import type {
   ImageDisplayMap,
   PublicUser,
   SupportParty,
-  SupportPartyFilter,
+  TopicViewFilter,
   SyncStatus,
 } from './types'
-import { DEPARTMENTS } from './types'
+import {
+  DEPARTMENTS,
+  DEPT_VIEW_FILTERS,
+  SUPPORT_VIEW_FILTERS,
+  isSupportParty,
+} from './types'
 
 const defaultSync: SyncStatus = {
   code: 'idle',
   label: 'Готово',
   hasPendingChanges: false,
+}
+
+function resolveListFilter(
+  userId: string,
+  departmentId: DepartmentId,
+  canEdit: boolean,
+): TopicViewFilter {
+  const saved = loadSavedListFilter(userId, departmentId)
+  if (saved === 'archive' && !canEdit) return 'all'
+  if (departmentId === 'support') {
+    if (saved === 'archive' || saved === 'all' || isSupportParty(saved)) return saved!
+    return 'all'
+  }
+  if (saved === 'archive' || saved === 'all') return saved
+  return 'all'
 }
 
 export default function App() {
@@ -37,7 +62,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [query, setQuery] = useState('')
   const [searchInBody, setSearchInBody] = useState(false)
-  const [supportParty, setSupportParty] = useState<SupportPartyFilter>('all')
+  const [listFilter, setListFilter] = useState<TopicViewFilter>('all')
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorMode, setEditorMode] = useState<'add' | 'edit'>('add')
   const [editorParentId, setEditorParentId] = useState<number | null>(null)
@@ -55,6 +80,8 @@ export default function App() {
       if (u) {
         const saved = loadSavedDepartment(u.id)
         if (saved) setDepartmentId(saved)
+        const canEditUser = u.role === 'editor' || u.role === 'admin'
+        setListFilter(resolveListFilter(u.id, saved ?? 'support', canEditUser))
       }
       setUser(u)
     })
@@ -74,15 +101,30 @@ export default function App() {
 
   function handleDepartmentChange(id: DepartmentId) {
     setDepartmentId(id)
-    setSupportParty('all')
-    if (user) saveDepartment(user.id, id)
+    if (user) {
+      saveDepartment(user.id, id)
+      const canEditUser = user.role === 'editor' || user.role === 'admin'
+      setListFilter(resolveListFilter(user.id, id, canEditUser))
+    } else {
+      setListFilter('all')
+    }
   }
 
   function handleAuthenticated(u: PublicUser) {
     const saved = loadSavedDepartment(u.id)
+    const dept = saved ?? 'support'
     if (saved) setDepartmentId(saved)
     else setDepartmentId('support')
+    const canEditUser = u.role === 'editor' || u.role === 'admin'
+    setListFilter(resolveListFilter(u.id, dept, canEditUser))
     setUser(u)
+  }
+
+  function handleListFilterChange(filter: TopicViewFilter) {
+    setListFilter(filter)
+    setQuery('')
+    setSelectedId(null)
+    if (user) saveListFilter(user.id, departmentId, filter)
   }
 
   const load = useCallback(async (id: DepartmentId) => {
@@ -106,7 +148,7 @@ export default function App() {
     void load(departmentId)
   }, [departmentId, load, user])
 
-  // After background sync, refresh current department quietly
+  // After background sync, refresh guide + current user (roles from Disk)
   useEffect(() => {
     if (!user) return
     if (
@@ -115,53 +157,48 @@ export default function App() {
       syncStatus.code === 'conflict'
     ) {
       void window.spravochnik.loadGuide(departmentId).then(setGuide).catch(() => undefined)
+      void window.spravochnik.getCurrentUser().then((u) => {
+        if (u) setUser(u)
+      })
     }
-  }, [syncStatus.code, departmentId, user])
+    // intentionally not depending on user object (avoid refresh loop)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncStatus.code, departmentId, user?.id])
 
-  async function runPush() {
+  useEffect(() => {
+    if (syncStatus.code !== 'busy' || syncStatus.retryAfterSec == null) {
+      setBusyLeft(null)
+      return
+    }
+    setBusyLeft(syncStatus.retryAfterSec)
+    const started = Date.now()
+    const total = syncStatus.retryAfterSec
+    const timer = window.setInterval(() => {
+      const left = Math.max(0, total - Math.floor((Date.now() - started) / 1000))
+      setBusyLeft(left)
+      if (left <= 0) window.clearInterval(timer)
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [syncStatus.code, syncStatus.retryAfterSec])
+
+  async function handlePush() {
     if (pushInFlight.current) return
     pushInFlight.current = true
     setPushing(true)
     try {
       const status = await window.spravochnik.pushSync()
       setSyncStatus(status)
-      if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
-        setConflictOpen(true)
-      }
-      if (status.code === 'up_to_date') {
+      if (status.code === 'conflict') setConflictOpen(true)
+      if (status.code === 'up_to_date' || status.code === 'pending') {
         const data = await window.spravochnik.loadGuide(departmentId)
         setGuide(data)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка отправки')
+      setError(e instanceof Error ? e.message : 'Ошибка синхронизации')
     } finally {
-      setPushing(false)
       pushInFlight.current = false
+      setPushing(false)
     }
-  }
-
-  // Auto-retry when sync lock is busy
-  useEffect(() => {
-    if (syncStatus.code !== 'busy') {
-      setBusyLeft(null)
-      return
-    }
-    let left = syncStatus.retryAfterSec ?? 20
-    setBusyLeft(left)
-    const timer = window.setInterval(() => {
-      left -= 1
-      setBusyLeft(left)
-      if (left <= 0) {
-        window.clearInterval(timer)
-        void runPush()
-      }
-    }, 1000)
-    return () => window.clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- retry only when busy status arrives
-  }, [syncStatus.code, syncStatus.retryAfterSec, syncStatus.lockBy])
-
-  async function handlePush() {
-    await runPush()
   }
 
   async function handleResolveConflicts(resolutions: ConflictResolution[]) {
@@ -169,20 +206,11 @@ export default function App() {
     try {
       const status = await window.spravochnik.resolveSyncConflicts(resolutions)
       setSyncStatus(status)
-      if (status.code === 'error') {
-        throw new Error(status.detail || status.label)
-      }
-      if (status.code === 'busy') {
-        setConflictOpen(false)
-        return
-      }
-      if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
-        setConflictOpen(true)
-      } else {
-        setConflictOpen(false)
-      }
+      if (status.code !== 'conflict') setConflictOpen(false)
       const data = await window.spravochnik.loadGuide(departmentId)
       setGuide(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось разрешить конфликт')
     } finally {
       setPushing(false)
     }
@@ -196,10 +224,10 @@ export default function App() {
 
   const items: GuideItem[] = useMemo(() => (guide ? getItems(guide) : []), [guide])
 
-  const visibleItems: GuideItem[] = useMemo(() => {
-    if (departmentId !== 'support') return items
-    return filterItemsByParty(items, supportParty)
-  }, [items, departmentId, supportParty])
+  const visibleItems: GuideItem[] = useMemo(
+    () => filterItemsByView(items, listFilter),
+    [items, listFilter],
+  )
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
@@ -220,6 +248,13 @@ export default function App() {
 
   const canEdit = user?.role === 'editor' || user?.role === 'admin'
   const isAdmin = user?.role === 'admin'
+
+  const filterOptions: TopicViewFilter[] = useMemo(() => {
+    const base =
+      departmentId === 'support' ? [...SUPPORT_VIEW_FILTERS] : [...DEPT_VIEW_FILTERS]
+    if (canEdit) base.push('archive')
+    return base
+  }, [departmentId, canEdit])
 
   const displaySyncStatus: SyncStatus = useMemo(() => {
     if (syncStatus.code === 'busy' && busyLeft != null) {
@@ -262,9 +297,10 @@ export default function App() {
       if (
         payload.departmentId === 'support' &&
         payload.party &&
-        supportParty !== 'all'
+        listFilter !== 'all' &&
+        listFilter !== 'archive'
       ) {
-        setSupportParty(payload.party)
+        handleListFilterChange(payload.party)
       }
       return
     }
@@ -291,9 +327,10 @@ export default function App() {
       if (
         payload.departmentId === 'support' &&
         payload.party &&
-        supportParty !== 'all'
+        listFilter !== 'all' &&
+        listFilter !== 'archive'
       ) {
-        setSupportParty(payload.party)
+        handleListFilterChange(payload.party)
       }
     } else {
       setDepartmentId(payload.departmentId)
@@ -318,8 +355,13 @@ export default function App() {
       },
     })
     setGuide(data)
-    if (departmentId === 'support' && payload.party && supportParty !== 'all') {
-      setSupportParty(payload.party)
+    if (
+      departmentId === 'support' &&
+      payload.party &&
+      listFilter !== 'all' &&
+      listFilter !== 'archive'
+    ) {
+      handleListFilterChange(payload.party)
     }
   }
 
@@ -333,6 +375,22 @@ export default function App() {
       },
     })
     setGuide(data)
+  }
+
+  async function handleToggleArchive() {
+    if (!selected || !canEdit) return
+    const nextArchived = !selected.archived
+    const data = await window.spravochnik.updateItem({
+      departmentId,
+      item: {
+        ...selected,
+        archived: nextArchived,
+      },
+    })
+    setGuide(data)
+    if (nextArchived && listFilter !== 'archive') {
+      setSelectedId(null)
+    }
   }
 
   async function handleDelete() {
@@ -367,7 +425,7 @@ export default function App() {
       const parent = items.find((i) => i.id === editorParentId)
       if (parent) return getItemParty(parent)
     }
-    return supportParty === 'all' ? 'supplier' : supportParty
+    return isSupportParty(listFilter) ? listFilter : 'supplier'
   })()
 
   return (
@@ -393,13 +451,10 @@ export default function App() {
             canAdd={!!canEdit}
             searchInBody={searchInBody}
             onSearchInBodyChange={setSearchInBody}
-            showPartyFilter={departmentId === 'support'}
-            partyFilter={supportParty}
-            onPartyFilterChange={(party) => {
-              setSupportParty(party)
-              setQuery('')
-              setSelectedId(null)
-            }}
+            showListFilter
+            listFilter={listFilter}
+            filterOptions={filterOptions}
+            onListFilterChange={handleListFilterChange}
             onAdd={() => {
               setEditorMode('add')
               setEditorInitial(null)
@@ -435,6 +490,7 @@ export default function App() {
             onSave={handleInlineSave}
             onSaveImageDisplay={handleSaveImageDisplay}
             onDelete={handleDelete}
+            onToggleArchive={canEdit ? () => void handleToggleArchive() : undefined}
             onAddSubtopic={() => {
               if (!selected) return
               setEditorMode('add')

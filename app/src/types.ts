@@ -10,30 +10,45 @@ export type UserRole = 'user' | 'editor' | 'admin'
 /** Только для отдела «Тех. поддержка»: Поставщик / Заказчик */
 export type SupportParty = 'supplier' | 'customer'
 
-/** Sidebar filter: specific party or all topics */
-export type SupportPartyFilter = SupportParty | 'all'
+/** Sidebar list filter (support has parties; all depts have archive for editors) */
+export type TopicViewFilter = SupportParty | 'all' | 'archive'
+
+/** @deprecated use TopicViewFilter */
+export type SupportPartyFilter = TopicViewFilter
 
 export const SUPPORT_PARTY_LABELS: Record<SupportParty, string> = {
   supplier: 'Поставщик',
   customer: 'Заказчик',
 }
 
-export const SUPPORT_PARTY_FILTER_LABELS: Record<SupportPartyFilter, string> = {
+export const TOPIC_VIEW_FILTER_LABELS: Record<TopicViewFilter, string> = {
   all: 'Все',
   supplier: 'Поставщик',
   customer: 'Заказчик',
+  archive: 'Архив',
 }
 
 export const SUPPORT_PARTIES: SupportParty[] = ['supplier', 'customer']
 
-export const SUPPORT_PARTY_FILTERS: SupportPartyFilter[] = ['all', 'supplier', 'customer']
+/** Техподдержка: Все / Поставщик / Заказчик (+ Архив для editor/admin) */
+export const SUPPORT_VIEW_FILTERS: TopicViewFilter[] = ['all', 'supplier', 'customer']
+
+/** Остальные отделы: Все (+ Архив для editor/admin) */
+export const DEPT_VIEW_FILTERS: TopicViewFilter[] = ['all']
+
+export const SUPPORT_PARTY_FILTERS: TopicViewFilter[] = SUPPORT_VIEW_FILTERS
+export const SUPPORT_PARTY_FILTER_LABELS = TOPIC_VIEW_FILTER_LABELS
 
 export function isSupportParty(value: unknown): value is SupportParty {
   return value === 'supplier' || value === 'customer'
 }
 
-export function isSupportPartyFilter(value: unknown): value is SupportPartyFilter {
-  return value === 'all' || isSupportParty(value)
+export function isTopicViewFilter(value: unknown): value is TopicViewFilter {
+  return value === 'all' || value === 'archive' || isSupportParty(value)
+}
+
+export function isSupportPartyFilter(value: unknown): value is TopicViewFilter {
+  return isTopicViewFilter(value)
 }
 
 export interface PublicUser {
@@ -108,6 +123,8 @@ export interface GuideItem {
   has_children?: boolean
   /** Техподдержка: поставщик или заказчик. Старые темы без поля = supplier */
   party?: SupportParty
+  /** Archived topics hidden from «Все»; visible only in Архив for editor/admin */
+  archived?: boolean
   photo?: string
   photos?: string[]
   documents?: GuideDocument[]

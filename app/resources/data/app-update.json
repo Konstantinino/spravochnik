@@ -1,5 +1,5 @@
 {
-  "version": "1.1.8",
-  "remoteSetupPath": "updates/REST-INFO-Setup-1.1.8.exe",
-  "notes": "Фильтр «Все», поиск по подтемам, перенос party у папки, правки удаления/ссылок и шапки темы"
+  "version": "1.1.9",
+  "remoteSetupPath": "updates/REST-INFO-Setup-1.1.9.exe",
+  "notes": "Архив тем, pull при старте, фикс ролей/аккаунтов, правка логина в настройках, UX фильтров и markdown"
 }

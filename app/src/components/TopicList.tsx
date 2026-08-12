@@ -170,7 +170,9 @@ export function TopicList({ items, selectedId, onSelect, searchFilter }: TopicLi
   const roots = items
     .filter((item) => item.parent_id == null)
     .filter((item) => !searchFilter || searchFilter.visibleIds.has(item.id))
-    .sort((a, b) => a.id - b.id)
+    .sort((a, b) =>
+      (a.question || '').localeCompare(b.question || '', 'ru', { sensitivity: 'base' }),
+    )
 
   if (searchFilter && roots.length === 0) {
     return <div className="empty-hint">Ничего не найдено</div>

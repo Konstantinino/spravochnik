@@ -45,26 +45,46 @@ import {
   requireRole,
   setWhitelist,
   setYandexToken,
+  setServerUrl,
+  setAuthToken,
+  readAccounts,
+  writeAccounts,
   updateUserRole,
+  updateUserProfile,
   deleteUser,
   writeSession,
   clearEphemeralSessionOnStartup,
+  type PublicUser,
 } from './auth-store'
 import {
   discardLocalChanges,
   getSyncStatus,
   markLocalChange,
+  markOfflinePending,
   onSyncStatus,
   pullFromYandex,
   pushAccountsFile,
   pushToYandex,
   refreshStatusFromSettings,
   resolveSyncConflicts,
-} from './yandex-sync'
+  tryPushTopicOnline,
+} from './sync-backend'
+import { queueOperation } from './pending-operations'
+import {
+  isServerReachable,
+  lockTopic,
+  unlockTopic,
+  renewTopicLock,
+  serverFetch,
+  serverLogin,
+  serverRegister,
+} from './server-api'
 import {
   checkForUpdates,
+  downloadLatestRelease,
   downloadUpdate,
   ensureLocalUpdateManifest,
+  fetchLatestRelease,
   getUpdateStatus,
   onUpdateStatus,
 } from './updates'
@@ -105,6 +125,50 @@ function ensureDataReady(): void {
   }
   ensureAuthFiles()
   ensureLocalUpdateManifest()
+}
+
+function cacheServerUser(user: Record<string, unknown>): void {
+  const accounts = readAccounts()
+  const email = String(user.email ?? '').toLowerCase()
+  const existing = accounts.users.find((u) => u.email.toLowerCase() === email)
+  if (!existing) {
+    accounts.users.push({
+      id: String(user.id),
+      name: String(user.name ?? ''),
+      email,
+      passwordHash: '',
+      salt: '',
+      role: (user.role as 'user' | 'editor' | 'admin') ?? 'user',
+      createdAt: new Date().toISOString(),
+    })
+    writeAccounts(accounts)
+  } else {
+    existing.id = String(user.id ?? existing.id)
+    existing.name = String(user.name ?? existing.name)
+    existing.role = (user.role as 'user' | 'editor' | 'admin') ?? existing.role
+    writeAccounts(accounts)
+  }
+}
+
+function publicUsersFromServer(users: Record<string, unknown>[]): PublicUser[] {
+  for (const user of users) {
+    cacheServerUser(user)
+  }
+  return users.map((user) => ({
+    id: String(user.id),
+    name: String(user.name),
+    email: String(user.email),
+    role: user.role as UserRole,
+    ...(user.isOwner ? { isOwner: true } : {}),
+  }))
+}
+
+async function fetchAdminUsersFromServer(): Promise<PublicUser[] | null> {
+  const settings = readSettings()
+  if (!settings.serverUrl.trim() || !settings.authToken.trim()) return null
+  if (!(await isServerReachable())) return null
+  const data = await serverFetch<{ users: Record<string, unknown>[] }>('/admin/users')
+  return publicUsersFromServer(data.users)
 }
 
 function readGuideFile(fileName: string): unknown {
@@ -182,12 +246,29 @@ function registerIpc(): void {
   ipcMain.handle('auth:current-user', () => getCurrentUser())
   ipcMain.handle(
     'auth:login',
-    (_e, payload: { email: string; password: string; rememberMe?: boolean }) =>
-      loginUser(payload),
+    async (_e, payload: { email: string; password: string; rememberMe?: boolean }) => {
+      const settings = readSettings()
+      if (settings.serverUrl.trim()) {
+        const { token, user } = await serverLogin(payload.email, payload.password)
+        setAuthToken(token)
+        cacheServerUser(user)
+        writeSession(String(user.id), Boolean(payload.rememberMe))
+        void pullFromYandex()
+        return {
+          id: String(user.id),
+          name: String(user.name),
+          email: String(user.email),
+          role: user.role as UserRole,
+          isOwner: Boolean(user.isOwner),
+        }
+      }
+      const user = loginUser(payload)
+      return user
+    },
   )
   ipcMain.handle(
     'auth:register',
-    (
+    async (
       _e,
       payload: {
         name: string
@@ -199,6 +280,25 @@ function registerIpc(): void {
     ) => {
       if (payload.password !== payload.passwordConfirm) {
         throw new Error('Пароли не совпадают')
+      }
+      const settings = readSettings()
+      if (settings.serverUrl.trim()) {
+        const { token, user } = await serverRegister({
+          name: payload.name,
+          email: payload.email,
+          password: payload.password,
+        })
+        setAuthToken(token)
+        cacheServerUser(user)
+        writeSession(String(user.id), Boolean(payload.rememberMe))
+        void pullFromYandex()
+        return {
+          id: String(user.id),
+          name: String(user.name),
+          email: String(user.email),
+          role: user.role as UserRole,
+          isOwner: Boolean(user.isOwner),
+        }
       }
       const user = registerUser(payload)
       writeSession(user.id, Boolean(payload.rememberMe))
@@ -213,11 +313,32 @@ function registerIpc(): void {
   })
   ipcMain.handle('sync:has-token', () => {
     const s = readSettings()
-    return { hasToken: Boolean(s.yandexToken.trim()) }
+    const hasServer = Boolean(s.serverUrl.trim() && s.authToken.trim())
+    const hasYandex = Boolean(s.yandexToken?.trim())
+    return { hasToken: hasServer || hasYandex }
+  })
+  ipcMain.handle('sync:has-server', () => {
+    const s = readSettings()
+    return { hasServer: Boolean(s.serverUrl.trim()) }
+  })
+  ipcMain.handle('sync:get-server-url', () => {
+    const s = readSettings()
+    return { serverUrl: s.serverUrl }
+  })
+  ipcMain.handle('sync:set-server-url', (_e, url: string) => {
+    const s = setServerUrl(url)
+    refreshStatusFromSettings()
+    return { serverUrl: s.serverUrl }
   })
 
-  ipcMain.handle('admin:list-users', () => {
+  ipcMain.handle('admin:list-users', async () => {
     requireRole(getCurrentUser(), ['admin'])
+    try {
+      const fromServer = await fetchAdminUsersFromServer()
+      if (fromServer) return fromServer
+    } catch {
+      /* fallback to local */
+    }
     return listUsersPublic()
   })
   ipcMain.handle('admin:set-role', async (_e, payload: { userId: string; role: UserRole }) => {
@@ -227,6 +348,61 @@ function registerIpc(): void {
     await pushAccountsFile()
     return users
   })
+  ipcMain.handle(
+    'admin:update-user',
+    async (
+      _e,
+      payload: {
+        userId: string
+        name: string
+        password?: string
+      },
+    ) => {
+      requireRole(getCurrentUser(), ['admin'])
+      const settings = readSettings()
+      const trimmedName = payload.name.trim()
+      const password = payload.password?.trim() ?? ''
+
+      if (settings.serverUrl.trim() && settings.authToken.trim()) {
+        const online = await isServerReachable()
+        if (online) {
+          const body: { name: string; password?: string } = { name: trimmedName }
+          if (password) body.password = password
+          const data = await serverFetch<{ users: Record<string, unknown>[] }>(
+            `/admin/users/${payload.userId}`,
+            {
+              method: 'PUT',
+              body: JSON.stringify(body),
+            },
+          )
+          return publicUsersFromServer(data.users)
+        }
+
+        updateUserProfile(payload.userId, {
+          name: trimmedName,
+          ...(password ? { password } : {}),
+        })
+        queueOperation({
+          type: 'update_user',
+          payload: {
+            userId: payload.userId,
+            name: trimmedName,
+            ...(password ? { password } : {}),
+          },
+        })
+        markOfflinePending()
+        return listUsersPublic()
+      }
+
+      const users = updateUserProfile(payload.userId, {
+        name: trimmedName,
+        ...(password ? { password } : {}),
+      })
+      markLocalChange()
+      await pushAccountsFile()
+      return users
+    },
+  )
   ipcMain.handle('admin:delete-user', async (_e, userId: string) => {
     requireRole(getCurrentUser(), ['admin'])
     const users = deleteUser(userId)
@@ -264,7 +440,9 @@ function registerIpc(): void {
     const s = readSettings()
     return {
       hasPendingChanges: s.hasPendingChanges,
-      hasToken: Boolean(s.yandexToken),
+      hasToken: Boolean(s.authToken?.trim() || s.yandexToken?.trim()),
+      hasServer: Boolean(s.serverUrl.trim()),
+      serverUrl: s.serverUrl,
       ownerEmail: BOOTSTRAP_ADMIN_EMAIL,
     }
   })
@@ -306,6 +484,31 @@ function registerIpc(): void {
     )
   })
 
+  ipcMain.handle(
+    'sync:lock-topic',
+    async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
+      requireRole(getCurrentUser(), ['editor', 'admin'])
+      await lockTopic(payload.departmentId, payload.topicId)
+      return { ok: true }
+    },
+  )
+  ipcMain.handle(
+    'sync:unlock-topic',
+    async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
+      requireRole(getCurrentUser(), ['editor', 'admin'])
+      await unlockTopic(payload.departmentId, payload.topicId)
+      return { ok: true }
+    },
+  )
+  ipcMain.handle(
+    'sync:renew-lock',
+    async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
+      requireRole(getCurrentUser(), ['editor', 'admin'])
+      await renewTopicLock(payload.departmentId, payload.topicId)
+      return { ok: true }
+    },
+  )
+
   ipcMain.handle('load-guide', (_event, departmentId: DepartmentId) => {
     const dept = departmentById(departmentId)
     return readGuideFile(dept.fileName)
@@ -313,7 +516,7 @@ function registerIpc(): void {
 
   ipcMain.handle(
     'save-item',
-    (
+    async (
       _event,
       payload: {
         departmentId: DepartmentId
@@ -347,7 +550,7 @@ function registerIpc(): void {
         migrateDraftImagesToTopic(payload.draftId, newId)
       }
 
-      const newItem = {
+      const newItem: Record<string, unknown> = {
         id: newId,
         question: payload.item.question,
         answer: payload.item.answer,
@@ -381,14 +584,33 @@ function registerIpc(): void {
 
       data[listKey] = list
       writeGuideFile(dept.fileName, data)
-      markLocalChange()
+
+      const settings = readSettings()
+      if (settings.serverUrl.trim()) {
+        const result = await tryPushTopicOnline('create', payload.departmentId, newItem)
+        if (result.ok) return readGuideFile(dept.fileName)
+        if (result.offline) {
+          queueOperation({
+            type: 'create_topic',
+            departmentId: payload.departmentId,
+            payload: newItem,
+          })
+          markOfflinePending()
+          return data
+        }
+        if (result.conflict) {
+          throw new Error(`Конфликт: тема уже изменена на сервере (${result.conflict.title})`)
+        }
+      } else {
+        markLocalChange()
+      }
       return data
     },
   )
 
   ipcMain.handle(
     'update-item',
-    (
+    async (
       _event,
       payload: {
         departmentId: DepartmentId
@@ -532,14 +754,37 @@ function registerIpc(): void {
 
       data[listKey] = list
       writeGuideFile(dept.fileName, data)
-      markLocalChange()
+
+      const settings = readSettings()
+      if (settings.serverUrl.trim()) {
+        const result = await tryPushTopicOnline(
+          'update',
+          payload.departmentId,
+          list[idx] as Record<string, unknown>,
+        )
+        if (result.ok) return readGuideFile(dept.fileName)
+        if (result.offline) {
+          queueOperation({
+            type: 'update_topic',
+            departmentId: payload.departmentId,
+            payload: list[idx] as Record<string, unknown>,
+          })
+          markOfflinePending()
+          return data
+        }
+        if (result.conflict) {
+          throw new Error(`Конфликт: тема уже изменена на сервере (${result.conflict.title})`)
+        }
+      } else {
+        markLocalChange()
+      }
       return data
     },
   )
 
   ipcMain.handle(
     'delete-item',
-    (
+    async (
       _event,
       payload: {
         departmentId: DepartmentId
@@ -578,7 +823,25 @@ function registerIpc(): void {
 
       data[listKey] = next
       writeGuideFile(dept.fileName, data)
-      markLocalChange()
+
+      const settings = readSettings()
+      if (settings.serverUrl.trim()) {
+        const result = await tryPushTopicOnline('delete', payload.departmentId, {
+          id: payload.id,
+        })
+        if (result.ok) return readGuideFile(dept.fileName)
+        if (result.offline) {
+          queueOperation({
+            type: 'delete_topic',
+            departmentId: payload.departmentId,
+            payload: { id: payload.id },
+          })
+          markOfflinePending()
+          return data
+        }
+      } else {
+        markLocalChange()
+      }
       return data
     },
   )
@@ -682,6 +945,8 @@ function registerIpc(): void {
   ipcMain.handle('updates:status', () => getUpdateStatus())
   ipcMain.handle('updates:check', () => checkForUpdates())
   ipcMain.handle('updates:download', () => downloadUpdate())
+  ipcMain.handle('updates:latest', () => fetchLatestRelease())
+  ipcMain.handle('updates:download-latest', () => downloadLatestRelease())
 
   // Forward sync status to all windows
   onSyncStatus((status) => {

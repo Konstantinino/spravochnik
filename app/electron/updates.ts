@@ -1,18 +1,28 @@
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, net, shell } from 'electron'
 import fs from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { APP_UPDATE_FILE, YANDEX_FOLDER, getUserDataRoot, getSeedDataDir } from './paths'
+import { APP_UPDATE_FILE, getUserDataRoot, getSeedDataDir } from './paths'
 import { readSettings } from './auth-store'
+import { serverFetch } from './server-api'
 
 export interface UpdateInfo {
   available: boolean
   currentVersion: string
   version: string | null
-  /** Relative path on Yandex Disk, e.g. updates/REST-INFO-Setup-1.1.6.exe */
   remoteSetupPath: string | null
+  downloadUrl?: string | null
   error?: string
-  source?: 'yandex' | 'local' | null
+  source?: 'server' | null
+}
+
+export interface LatestReleaseInfo {
+  version: string | null
+  downloadUrl: string | null
+  remoteSetupPath: string | null
+  notes?: string | null
+  error?: string
+  source?: 'server' | null
 }
 
 interface UpdateManifest {
@@ -48,6 +58,10 @@ function emit(info: UpdateInfo): UpdateInfo {
   return info
 }
 
+function isNetworkOnline(): boolean {
+  return net.isOnline()
+}
+
 /** Strip leading `v` and compare dotted numeric versions. Returns >0 if a>b. */
 export function compareVersions(a: string, b: string): number {
   const pa = a.replace(/^v/i, '').split(/[.+-]/).map((x) => parseInt(x, 10) || 0)
@@ -59,17 +73,6 @@ export function compareVersions(a: string, b: string): number {
     if (da !== db) return da - db
   }
   return 0
-}
-
-function folderPath(fileName?: string): string {
-  if (!fileName) return `disk:/${YANDEX_FOLDER}`
-  return `disk:/${YANDEX_FOLDER}/${fileName}`
-}
-
-async function yandexFetch(token: string, url: string, init?: RequestInit): Promise<Response> {
-  const headers = new Headers(init?.headers)
-  headers.set('Authorization', `OAuth ${token}`)
-  return fetch(url, { ...init, headers })
 }
 
 function parseManifest(raw: unknown): UpdateManifest | null {
@@ -89,57 +92,7 @@ function parseManifest(raw: unknown): UpdateManifest | null {
   }
 }
 
-function readLocalManifest(): UpdateManifest | null {
-  const candidates = [
-    path.join(getUserDataRoot(), APP_UPDATE_FILE),
-    path.join(getSeedDataDir(), APP_UPDATE_FILE),
-  ]
-  for (const p of candidates) {
-    try {
-      if (!fs.existsSync(p)) continue
-      const parsed = parseManifest(JSON.parse(fs.readFileSync(p, 'utf8')))
-      if (parsed) return parsed
-    } catch {
-      /* ignore */
-    }
-  }
-  return null
-}
-
-async function fetchYandexManifest(token: string): Promise<UpdateManifest | null> {
-  const encoded = encodeURIComponent(folderPath(APP_UPDATE_FILE))
-  const meta = await yandexFetch(
-    token,
-    `https://cloud-api.yandex.net/v1/disk/resources/download?path=${encoded}`,
-  )
-  if (meta.status === 404 || !meta.ok) return null
-  const { href } = (await meta.json()) as { href: string }
-  const fileRes = await fetch(href)
-  if (!fileRes.ok) return null
-  const text = await fileRes.text()
-  try {
-    return parseManifest(JSON.parse(text))
-  } catch {
-    return null
-  }
-}
-
-function infoFromManifest(
-  currentVersion: string,
-  manifest: UpdateManifest,
-  source: UpdateInfo['source'],
-): UpdateInfo {
-  const available = compareVersions(manifest.version!, currentVersion) > 0
-  return {
-    available,
-    currentVersion,
-    version: manifest.version!,
-    remoteSetupPath: available ? manifest.remoteSetupPath ?? null : null,
-    source,
-  }
-}
-
-/** Updates only via Yandex Disk (app-update.json + Setup in updates/). */
+/** Check for updates via server API — only when online and serverUrl is configured. */
 export async function checkForUpdates(options?: {
   force?: boolean
 }): Promise<UpdateInfo> {
@@ -149,6 +102,7 @@ export async function checkForUpdates(options?: {
     currentVersion,
     version: null,
     remoteSetupPath: null,
+    downloadUrl: null,
     source: null,
   }
 
@@ -156,84 +110,71 @@ export async function checkForUpdates(options?: {
     return emit(base)
   }
 
-  const errors: string[] = []
-  const token = readSettings().yandexToken
-  if (!token) {
+  if (!isNetworkOnline()) {
+    return emit(base)
+  }
+
+  const settings = readSettings()
+  if (!settings.serverUrl.trim()) {
     return emit({
       ...base,
-      error: 'Нет токена Яндекс.Диска — обновления проверяются только через Диск',
+      error: 'Укажите URL сервера на экране входа',
     })
   }
 
   try {
-    const fromDisk = await fetchYandexManifest(token)
-    if (fromDisk?.remoteSetupPath) {
-      return emit(infoFromManifest(currentVersion, fromDisk, 'yandex'))
+    const data = await serverFetch<{
+      available: boolean
+      version: string | null
+      setupFilename?: string
+      downloadUrl?: string
+      notes?: string
+    }>(`/app/update?currentVersion=${encodeURIComponent(currentVersion)}`, {
+      skipAuth: true,
+    })
+    if (data.available && data.downloadUrl) {
+      return emit({
+        available: true,
+        currentVersion,
+        version: data.version,
+        remoteSetupPath: data.setupFilename ?? null,
+        downloadUrl: data.downloadUrl,
+        source: 'server',
+      })
     }
-    if (fromDisk && !fromDisk.remoteSetupPath) {
-      errors.push('В app-update.json нет remoteSetupPath')
-    }
+    return emit({ ...base, source: 'server' })
   } catch (e) {
-    errors.push(`Я.Диск: ${e instanceof Error ? e.message : String(e)}`)
+    return emit({
+      ...base,
+      error: `Сервер: ${e instanceof Error ? e.message : String(e)}`,
+    })
   }
-
-  // Fallback: local copy pulled earlier from Disk
-  try {
-    const local = readLocalManifest()
-    if (local?.remoteSetupPath) {
-      const info = infoFromManifest(currentVersion, local, 'local')
-      if (info.available) return emit(info)
-    }
-  } catch (e) {
-    errors.push(`local: ${e instanceof Error ? e.message : String(e)}`)
-  }
-
-  return emit({
-    ...base,
-    error: errors.length ? errors.join('; ') : 'Манифест обновлений на Диске не найден',
-  })
 }
 
-async function downloadFromYandex(token: string, remotePath: string, dest: string): Promise<void> {
-  const encoded = encodeURIComponent(folderPath(remotePath))
-  const meta = await yandexFetch(
-    token,
-    `https://cloud-api.yandex.net/v1/disk/resources/download?path=${encoded}`,
-  )
-  if (!meta.ok) {
-    const text = await meta.text()
-    throw new Error(`Скачивание с Диска: ${text || meta.status}`)
-  }
-  const { href } = (await meta.json()) as { href: string }
-  const fileRes = await fetch(href)
-  if (!fileRes.ok) throw new Error('Не удалось скачать установщик с Диска')
-  const buffer = Buffer.from(await fileRes.arrayBuffer())
-  await writeFile(dest, buffer)
-}
-
-export async function downloadUpdate(): Promise<{
+async function saveInstallerFromSource(info: {
+  version: string | null
+  downloadUrl?: string | null
+  remoteSetupPath?: string | null
+}): Promise<{
   ok: boolean
   error?: string
   canceled?: boolean
   path?: string
 }> {
-  const info = lastInfo
-  if (!info.available || !info.remoteSetupPath) {
-    return { ok: false, error: 'Обновление недоступно' }
+  if (!isNetworkOnline()) {
+    return { ok: false, error: 'Нет подключения к сети' }
   }
-
-  const token = readSettings().yandexToken
-  if (!token) {
-    return { ok: false, error: 'Нет токена Яндекс.Диска' }
+  if (!info.downloadUrl) {
+    return { ok: false, error: 'Установщик недоступен на сервере' }
   }
 
   const fileName =
-    info.remoteSetupPath.split('/').pop() ||
-    `REST-INFO-Setup-${info.version || 'update'}.exe`
+    info.remoteSetupPath?.split('/').pop() ||
+    `REST-INFO-Setup-${info.version || 'latest'}.exe`
 
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
   const saveOptions = {
-    title: 'Куда сохранить установщик обновления',
+    title: 'Куда сохранить установщик',
     defaultPath: fileName,
     filters: [{ name: 'Установщик REST INFO', extensions: ['exe'] }],
   }
@@ -247,12 +188,15 @@ export async function downloadUpdate(): Promise<{
   const dest = save.filePath.endsWith('.exe') ? save.filePath : `${save.filePath}.exe`
 
   try {
-    await downloadFromYandex(token, info.remoteSetupPath, dest)
+    const res = await fetch(info.downloadUrl)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const buffer = Buffer.from(await res.arrayBuffer())
+    await writeFile(dest, buffer)
 
     const boxOptions = {
       type: 'info' as const,
-      title: 'Обновление скачано',
-      message: 'Установщик сохранён',
+      title: 'Установщик скачан',
+      message: 'Файл сохранён',
       detail: dest,
       buttons: ['Открыть установщик', 'Показать в папке', 'Закрыть'],
       defaultId: 0,
@@ -273,7 +217,76 @@ export async function downloadUpdate(): Promise<{
   }
 }
 
-/** Ensure local app-update.json exists (from seed). Not uploaded on sync — release script only. */
+/** Latest published release on server (admin), regardless of current app version. */
+export async function fetchLatestRelease(): Promise<LatestReleaseInfo> {
+  const empty: LatestReleaseInfo = {
+    version: null,
+    downloadUrl: null,
+    remoteSetupPath: null,
+    source: null,
+  }
+
+  if (!isNetworkOnline()) {
+    return { ...empty, error: 'Нет подключения к сети' }
+  }
+
+  const settings = readSettings()
+  if (!settings.serverUrl.trim()) {
+    return { ...empty, error: 'Укажите URL сервера на экране входа' }
+  }
+
+  try {
+    const data = await serverFetch<{
+      version: string | null
+      setupFilename?: string
+      downloadUrl?: string
+      notes?: string
+    }>(`/app/update?currentVersion=0.0.0`, { skipAuth: true })
+    if (data.version && data.downloadUrl) {
+      return {
+        version: data.version,
+        downloadUrl: data.downloadUrl,
+        remoteSetupPath: data.setupFilename ?? null,
+        notes: data.notes,
+        source: 'server',
+      }
+    }
+    return { ...empty, error: 'На сервере нет опубликованных версий' }
+  } catch (e) {
+    return {
+      ...empty,
+      error: `Сервер: ${e instanceof Error ? e.message : String(e)}`,
+    }
+  }
+}
+
+export async function downloadLatestRelease(): Promise<{
+  ok: boolean
+  error?: string
+  canceled?: boolean
+  path?: string
+}> {
+  const latest = await fetchLatestRelease()
+  if (!latest.downloadUrl) {
+    return { ok: false, error: latest.error ?? 'Последняя версия недоступна' }
+  }
+  return saveInstallerFromSource(latest)
+}
+
+export async function downloadUpdate(): Promise<{
+  ok: boolean
+  error?: string
+  canceled?: boolean
+  path?: string
+}> {
+  const info = lastInfo
+  if (!info.available || !info.downloadUrl) {
+    return { ok: false, error: info.error ?? 'Обновление недоступно' }
+  }
+  return saveInstallerFromSource(info)
+}
+
+/** Seed local app-update.json from bundle (dev reference only). */
 export function ensureLocalUpdateManifest(): void {
   const dest = path.join(getUserDataRoot(), APP_UPDATE_FILE)
   const seed = path.join(getSeedDataDir(), APP_UPDATE_FILE)

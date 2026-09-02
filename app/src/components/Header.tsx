@@ -87,7 +87,7 @@ export function Header({
             type="button"
             className="btn btn-header-sync"
             onClick={onPush}
-            title="Отправить изменения на Яндекс.Диск"
+            title="Отправить изменения на сервер"
           >
             Синхронизировать
           </button>

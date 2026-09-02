@@ -55,12 +55,14 @@ export interface PublicUser {
 
 export type SyncStatusCode =
   | 'idle'
+  | 'no_server'
   | 'no_token'
   | 'connecting'
   | 'syncing'
   | 'uploading'
   | 'up_to_date'
   | 'pending'
+  | 'offline_pending'
   | 'busy'
   | 'conflict'
   | 'error'
@@ -72,6 +74,8 @@ export interface SyncConflictInfo {
   title: string
   localPreview: string
   remotePreview: string
+  localFull?: Record<string, unknown>
+  remoteFull?: Record<string, unknown>
 }
 
 export interface SyncStatus {
@@ -94,10 +98,31 @@ export interface UpdateInfo {
   available: boolean
   currentVersion: string
   version: string | null
-  /** Path on Yandex Disk, e.g. updates/REST-INFO-Setup-1.1.4.exe */
+  /** Download path or URL */
   remoteSetupPath: string | null
+  downloadUrl?: string | null
   error?: string
-  source?: 'yandex' | 'local' | null
+  source?: 'server' | null
+}
+
+export interface LatestReleaseInfo {
+  version: string | null
+  downloadUrl: string | null
+  remoteSetupPath: string | null
+  notes?: string | null
+  error?: string
+  source?: 'server' | null
+}
+
+export interface ExportManifest {
+  exportedAt: string
+  sourceRoot: string
+  topics: Record<string, number>
+  templates: number
+  users: number
+  whitelist: number
+  mediaFiles: number
+  warnings: string[]
 }
 
 export interface GuideDocument {

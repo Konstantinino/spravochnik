@@ -28,8 +28,13 @@ export interface AccountsData {
 }
 
 export interface SettingsData {
-  yandexToken: string
+  /** @deprecated Yandex Disk OAuth token — use authToken + serverUrl */
+  yandexToken?: string
+  serverUrl: string
+  authToken: string
+  lastSyncAt: string | null
   hasPendingChanges: boolean
+  offlineWarningShown?: boolean
 }
 
 export interface PublicUser {
@@ -84,7 +89,9 @@ function defaultAccounts(): AccountsData {
 
 function defaultSettings(): SettingsData {
   return {
-    yandexToken: '',
+    serverUrl: '',
+    authToken: '',
+    lastSyncAt: null,
     hasPendingChanges: false,
   }
 }
@@ -129,7 +136,11 @@ export function readSettings(): SettingsData {
     const raw = JSON.parse(fs.readFileSync(settingsPath(), 'utf8')) as SettingsData
     return {
       yandexToken: typeof raw.yandexToken === 'string' ? raw.yandexToken : '',
+      serverUrl: typeof raw.serverUrl === 'string' ? raw.serverUrl : '',
+      authToken: typeof raw.authToken === 'string' ? raw.authToken : '',
+      lastSyncAt: typeof raw.lastSyncAt === 'string' ? raw.lastSyncAt : null,
       hasPendingChanges: Boolean(raw.hasPendingChanges),
+      offlineWarningShown: Boolean(raw.offlineWarningShown),
     }
   } catch {
     return defaultSettings()
@@ -366,6 +377,31 @@ export function updateUserRole(userId: string, role: UserRole): PublicUser[] {
   return listUsersPublic()
 }
 
+export function updateUserProfile(
+  userId: string,
+  input: { name?: string; password?: string },
+): PublicUser[] {
+  const accounts = readAccounts()
+  const user = accounts.users.find((u) => u.id === userId)
+  if (!user) throw new Error('Пользователь не найден')
+
+  if (input.name !== undefined) {
+    const name = input.name.trim()
+    if (!name) throw new Error('Укажите имя')
+    user.name = name
+  }
+
+  if (input.password !== undefined && input.password.length > 0) {
+    if (input.password.length < 6) throw new Error('Пароль не короче 6 символов')
+    const salt = generateSalt()
+    user.salt = salt
+    user.passwordHash = hashPassword(input.password, salt)
+  }
+
+  writeAccounts(accounts)
+  return listUsersPublic()
+}
+
 export function deleteUser(userId: string): PublicUser[] {
   const accounts = readAccounts()
   const user = accounts.users.find((u) => u.id === userId)
@@ -442,6 +478,27 @@ export function removeWhitelistEmail(email: string): string[] {
 export function setYandexToken(token: string): SettingsData {
   const settings = readSettings()
   settings.yandexToken = token.trim()
+  writeSettings(settings)
+  return settings
+}
+
+export function setServerUrl(url: string): SettingsData {
+  const settings = readSettings()
+  settings.serverUrl = url.trim().replace(/\/+$/, '')
+  writeSettings(settings)
+  return settings
+}
+
+export function setAuthToken(token: string): SettingsData {
+  const settings = readSettings()
+  settings.authToken = token.trim()
+  writeSettings(settings)
+  return settings
+}
+
+export function setLastSyncAt(iso: string | null): SettingsData {
+  const settings = readSettings()
+  settings.lastSyncAt = iso
   writeSettings(settings)
   return settings
 }

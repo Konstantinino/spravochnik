@@ -1,5 +1,8 @@
-import { app } from 'electron'
 import path from 'node:path'
+import os from 'node:os'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
 
 export const DATA_FILES = [
   'guide.json',
@@ -13,6 +16,7 @@ export const ACCOUNTS_FILE = 'accounts.json'
 export const SETTINGS_FILE = 'settings.json'
 export const SESSION_FILE = 'session.json'
 export const PENDING_MEDIA_FILE = 'pending-media.json'
+export const PENDING_OPERATIONS_FILE = 'pending-operations.json'
 export const SYNC_LOCK_FILE = 'sync.lock.json'
 export const APP_UPDATE_FILE = 'app-update.json'
 export const YANDEX_FOLDER = 'REST INFO'
@@ -43,7 +47,16 @@ export const DEPARTMENTS: Department[] = [
 ]
 
 export function getUserDataRoot(): string {
-  return path.join(app.getPath('userData'), 'REST-INFO')
+  try {
+    const { app } = require('electron') as typeof import('electron')
+    if (typeof app?.getPath === 'function') {
+      return path.join(app.getPath('userData'), 'REST-INFO')
+    }
+  } catch {
+    /* CLI / non-Electron */
+  }
+  const appData = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming')
+  return path.join(appData, 'rest-info', 'REST-INFO')
 }
 
 export function getMediaDir(): string {
@@ -72,8 +85,13 @@ export function draftImageRelativePath(draftId: string, fileName: string): strin
 }
 
 export function getSeedDataDir(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'data')
+  try {
+    const { app } = require('electron') as typeof import('electron')
+    if (app?.isPackaged) {
+      return path.join(process.resourcesPath, 'data')
+    }
+  } catch {
+    /* CLI */
   }
   return path.join(__dirname, '../resources/data')
 }

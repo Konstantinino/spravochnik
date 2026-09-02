@@ -899,7 +899,10 @@ export function replaceSettingsPreservingToken(remotePath: string): void {
     }
     const local = readSettings()
     writeSettings({
-      yandexToken: local.yandexToken,
+      yandexToken: local.yandexToken ?? '',
+      serverUrl: local.serverUrl ?? '',
+      authToken: local.authToken ?? '',
+      lastSyncAt: local.lastSyncAt ?? null,
       hasPendingChanges: local.hasPendingChanges || Boolean(remote.hasPendingChanges),
     })
   } catch {

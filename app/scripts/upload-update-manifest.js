@@ -1,5 +1,6 @@
 /**
- * Uploads app-update.json (+ optional Setup.exe) to Yandex Disk using local app token.
+ * @deprecated Legacy — v2 uses upload-release.js on SQL server.
+ * Uploads app-update.json (+ optional Setup.exe) to Yandex Disk.
  * When uploading a new Setup, deletes other REST-INFO-Setup-*.exe files in updates/.
  * Usage: node scripts/upload-update-manifest.js [path-to-setup.exe]
  */

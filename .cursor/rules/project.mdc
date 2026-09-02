@@ -1,0 +1,27 @@
+---
+description: REST INFO project context for AI agents
+alwaysApply: true
+---
+
+# REST INFO — контекст проекта
+
+Канонический репозиторий: **только `spravochnik-repo/`**. Не работать в `app/` или `spravochnik-main/` в родительской папке.
+
+## Архитектура
+
+- v2: Electron client (`app/`) + Node/Express/PostgreSQL server (`server/`) + Docker
+- Яндекс.Диск — legacy; данные выгружены в `REST-INFO-export/` (gitignore)
+- Handoff: `AGENTS.md`, `docs/PROJECT-STATUS.md`
+
+## Dev на Windows пользователя
+
+- Node: `C:\Program Files\nodejs\` — добавлять в PATH
+- Docker **нет** → сервер: `cd server && npm run dev:local`
+- Клиент: `cd app && npm run dev`
+
+## Важно
+
+- Не коммитить: `.env`, `REST-INFO-export/`, токены
+- Коммиты — только по запросу пользователя
+- Production deploy — см. `docs/DEPLOY-FOR-PROGRAMMER.md`
+- Bootstrap admin: `kostya.alone18@yandex.ru`

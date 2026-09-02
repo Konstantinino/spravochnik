@@ -1076,6 +1076,47 @@ mark.find-hit--active {
   margin-top: 4px;
 }
 
+.sync-conflict-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+  max-height: 320px;
+}
+
+.sync-conflict-compare-pane {
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  padding: 8px;
+  overflow: auto;
+}
+
+.sync-conflict-compare-pane h3 {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+}
+
+.sync-conflict-compare-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.sync-conflict-item.is-active {
+  outline: 2px solid var(--accent, #4a9eff);
+  border-radius: 8px;
+}
+
+.sync-conflict-item__select {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  color: inherit;
+}
 .sync-conflict-modal {
   width: min(640px, 100%);
   display: flex;
@@ -1445,6 +1486,20 @@ mark.find-hit--active {
   border: 1px solid rgba(31, 58, 76, 0.15);
 }
 
+.settings-app-download {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.settings-app-download__btn {
+  padding: 6px 14px;
+  font-size: 0.95rem;
+}
+
 .settings-table {
   width: 100%;
   border-collapse: collapse;
@@ -1464,12 +1519,71 @@ mark.find-hit--active {
   border-radius: 6px;
   border: 1px solid var(--border);
   background: #fff;
+  min-width: 120px;
 }
 
-.settings-table__actions {
+.settings-table__controls-head {
   width: 1%;
   white-space: nowrap;
-  text-align: right;
+}
+
+.settings-table__controls {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.settings-table__controls-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.settings-table__controls-inner select {
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+
+.settings-table__controls-inner .settings-role-locked {
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+
+.settings-table__edit-btn,
+.settings-table__delete-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.settings-user-delete-modal {
+  width: min(440px, 100%);
+}
+
+.settings-user-delete-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.settings-user-delete-modal__confirm {
+  font-weight: 600;
+}
+
+.settings-user-edit-modal {
+  width: min(420px, 100%);
+}
+
+.settings-user-edit-modal__email {
+  margin: 0;
+}
+
+.settings-user-edit-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .settings-role-locked {

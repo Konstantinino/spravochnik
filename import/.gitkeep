@@ -1,0 +1,2 @@
+# Положите сюда папку REST-INFO-export перед импортом:
+# docker compose exec api node dist/import-from-json.js /import/REST-INFO-export

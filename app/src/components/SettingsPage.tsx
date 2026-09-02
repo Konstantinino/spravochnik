@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { PublicUser, SyncStatus, UserRole } from '../types'
+import type { LatestReleaseInfo, PublicUser, SyncStatus, UserRole } from '../types'
 import { ROLE_LABELS } from '../types'
 
 /** Roles that can be assigned in settings (owner/admin is locked). */
@@ -18,6 +18,15 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [hasToken, setHasToken] = useState(false)
   const [ownerEmail, setOwnerEmail] = useState('')
+  const [latestRelease, setLatestRelease] = useState<LatestReleaseInfo | null>(null)
+  const [downloadingLatest, setDownloadingLatest] = useState(false)
+  const [editingUser, setEditingUser] = useState<PublicUser | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editPasswordConfirm, setEditPasswordConfirm] = useState('')
+  const [savingUser, setSavingUser] = useState(false)
+  const [deletingUser, setDeletingUser] = useState<PublicUser | null>(null)
+  const [deletingUserInProgress, setDeletingUserInProgress] = useState(false)
 
   async function reload() {
     const [u, w, s, sync] = await Promise.all([
@@ -35,6 +44,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   useEffect(() => {
     void reload().catch((e) => setError(e instanceof Error ? e.message : 'Ошибка загрузки'))
+    void window.spravochnik.getLatestRelease().then(setLatestRelease).catch(() => undefined)
     return window.spravochnik.onSyncStatus((status) => {
       setSyncStatus(status)
       if (status.code === 'up_to_date' || status.code === 'pending') {
@@ -50,22 +60,87 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     try {
       const next = await window.spravochnik.setUserRole({ userId, role })
       setUsers(next)
-      setInfo('Роль обновлена и отправлена на Яндекс.Диск.')
+      setInfo('Роль обновлена на сервере.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка')
     }
   }
 
-  async function removeUser(userId: string, name: string) {
-    if (!window.confirm(`Удалить пользователя «${name}»?`)) return
+  function openDeleteUser(user: PublicUser) {
+    setError(null)
+    setInfo(null)
+    setDeletingUser(user)
+  }
+
+  function closeDeleteUser() {
+    setDeletingUser(null)
+  }
+
+  async function confirmDeleteUser() {
+    if (!deletingUser) return
+    setDeletingUserInProgress(true)
     setError(null)
     setInfo(null)
     try {
-      const next = await window.spravochnik.deleteUser(userId)
+      const next = await window.spravochnik.deleteUser(deletingUser.id)
       setUsers(next)
-      setInfo('Пользователь удалён и изменения отправлены на Диск.')
+      setInfo('Пользователь удалён на сервере.')
+      closeDeleteUser()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка')
+    } finally {
+      setDeletingUserInProgress(false)
+    }
+  }
+
+  function openEditUser(user: PublicUser) {
+    setError(null)
+    setInfo(null)
+    setEditingUser(user)
+    setEditName(user.name)
+    setEditPassword('')
+    setEditPasswordConfirm('')
+  }
+
+  function closeEditUser() {
+    setEditingUser(null)
+    setEditName('')
+    setEditPassword('')
+    setEditPasswordConfirm('')
+  }
+
+  async function saveEditedUser() {
+    if (!editingUser) return
+    const name = editName.trim()
+    if (!name) {
+      setError('Укажите имя')
+      return
+    }
+    if (editPassword && editPassword.length < 6) {
+      setError('Пароль не короче 6 символов')
+      return
+    }
+    if (editPassword && editPassword !== editPasswordConfirm) {
+      setError('Пароли не совпадают')
+      return
+    }
+
+    setError(null)
+    setInfo(null)
+    setSavingUser(true)
+    try {
+      const next = await window.spravochnik.updateUser({
+        userId: editingUser.id,
+        name,
+        ...(editPassword ? { password: editPassword } : {}),
+      })
+      setUsers(next)
+      setInfo('Данные пользователя обновлены.')
+      closeEditUser()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка')
+    } finally {
+      setSavingUser(false)
     }
   }
 
@@ -76,7 +151,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       const next = await window.spravochnik.addWhitelist(newEmail)
       setWhitelist(next)
       setNewEmail('')
-      setInfo('Почта добавлена в белый список и отправлена на Диск.')
+      setInfo('Почта добавлена в белый список на сервере.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка')
     }
@@ -89,6 +164,26 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       setWhitelist(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка')
+    }
+  }
+
+  const canDownloadLatest = Boolean(latestRelease?.downloadUrl || latestRelease?.remoteSetupPath)
+
+  async function handleDownloadLatest() {
+    if (!canDownloadLatest || downloadingLatest) return
+    setError(null)
+    setInfo(null)
+    setDownloadingLatest(true)
+    try {
+      const result = await window.spravochnik.downloadLatestRelease()
+      if (result.canceled) return
+      if (!result.ok && result.error) {
+        setError(result.error)
+      } else if (result.ok) {
+        setInfo('Установщик сохранён.')
+      }
+    } finally {
+      setDownloadingLatest(false)
     }
   }
 
@@ -109,12 +204,39 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
           <h2>Подключение</h2>
           <p className="settings-sync-status">
             Статус: <strong>{syncStatus?.label ?? '—'}</strong>
-            {hasToken ? '' : ' · токен не задан'}
           </p>
           <p className="muted settings-section__hint">
-            OAuth-токен Яндекс.Диска задаётся на экране входа (шестерёнка в углу). Без токена
-            синхронизация недоступна.
+            Адрес сервера задаётся на экране входа (шестерёнка в углу). Данные синхронизируются с
+            вашим REST INFO сервером.
           </p>
+        </section>
+
+        <section className="settings-section">
+          <h2>Приложение</h2>
+          <p className="settings-app-download">
+            Скачать последнюю версию приложения{' '}
+            <button
+              type="button"
+              className="btn btn-primary settings-app-download__btn"
+              onClick={() => void handleDownloadLatest()}
+              disabled={downloadingLatest || !canDownloadLatest}
+              title={
+                latestRelease?.version
+                  ? `Скачать REST INFO ${latestRelease.version}`
+                  : 'Скачать установщик'
+              }
+            >
+              {downloadingLatest ? 'Скачивание…' : 'Скачать'}
+            </button>
+          </p>
+          {latestRelease?.version && (
+            <p className="muted settings-section__hint">
+              Последняя версия на сервере: {latestRelease.version}
+            </p>
+          )}
+          {latestRelease?.error && !canDownloadLatest && (
+            <p className="muted settings-section__hint">{latestRelease.error}</p>
+          )}
         </section>
 
         <section className="settings-section">
@@ -127,8 +249,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               <tr>
                 <th>Имя</th>
                 <th>Почта</th>
-                <th>Роль</th>
-                <th></th>
+                <th className="settings-table__controls-head">Роль</th>
               </tr>
             </thead>
             <tbody>
@@ -136,41 +257,48 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                 <tr key={u.id}>
                   <td>{u.name}</td>
                   <td>{u.email}</td>
-                  <td>
-                    {u.isOwner || u.role === 'admin' ? (
-                      <span className="settings-role-locked" title="Роль владельца нельзя изменить">
-                        {ROLE_LABELS.admin}
-                      </span>
-                    ) : (
-                      <select
-                        value={u.role}
-                        onChange={(e) => void changeRole(u.id, e.target.value as UserRole)}
-                        aria-label={`Роль ${u.name}`}
-                      >
-                        {ASSIGNABLE_ROLES.map((role) => (
-                          <option key={role} value={role}>
-                            {ROLE_LABELS[role]}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </td>
-                  <td className="settings-table__actions">
-                    {!u.isOwner && u.role !== 'admin' && (
+                  <td className="settings-table__controls">
+                    <div className="settings-table__controls-inner">
+                      {u.isOwner || u.role === 'admin' ? (
+                        <span className="settings-role-locked" title="Роль владельца нельзя изменить">
+                          {ROLE_LABELS.admin}
+                        </span>
+                      ) : (
+                        <select
+                          value={u.role}
+                          onChange={(e) => void changeRole(u.id, e.target.value as UserRole)}
+                          aria-label={`Роль ${u.name}`}
+                        >
+                          {ASSIGNABLE_ROLES.map((role) => (
+                            <option key={role} value={role}>
+                              {ROLE_LABELS[role]}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       <button
                         type="button"
-                        className="btn btn-ghost"
-                        onClick={() => void removeUser(u.id, u.name)}
+                        className="btn btn-ghost settings-table__edit-btn"
+                        onClick={() => openEditUser(u)}
                       >
-                        Удалить
+                        Изменить
                       </button>
-                    )}
+                      {!u.isOwner && u.role !== 'admin' && (
+                        <button
+                          type="button"
+                          className="btn btn-danger settings-table__delete-btn"
+                          onClick={() => openDeleteUser(u)}
+                        >
+                          Удалить
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="muted">
+                  <td colSpan={3} className="muted">
                     Пока никто не зарегистрировался
                   </td>
                 </tr>
@@ -214,6 +342,121 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
           </ul>
         </section>
       </div>
+
+      {deletingUser && (
+        <div className="modal-backdrop" role="presentation" onClick={closeDeleteUser}>
+          <div
+            className="modal settings-user-delete-modal"
+            role="dialog"
+            aria-labelledby="settings-user-delete-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal__header">
+              <h2 id="settings-user-delete-title">Удалить пользователя?</h2>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={closeDeleteUser}
+                disabled={deletingUserInProgress}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal__body">
+              <p>
+                Пользователь <strong>{deletingUser.name}</strong> ({deletingUser.email}) будет
+                удалён. Это действие нельзя отменить.
+              </p>
+              <div className="settings-user-delete-modal__actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={closeDeleteUser}
+                  disabled={deletingUserInProgress}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger settings-user-delete-modal__confirm"
+                  onClick={() => void confirmDeleteUser()}
+                  disabled={deletingUserInProgress}
+                >
+                  {deletingUserInProgress ? 'Удаление…' : 'Удалить'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
+        <div className="modal-backdrop" role="presentation" onClick={closeEditUser}>
+          <div
+            className="modal settings-user-edit-modal"
+            role="dialog"
+            aria-labelledby="settings-user-edit-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal__header">
+              <h2 id="settings-user-edit-title">Изменить пользователя</h2>
+              <button type="button" className="btn btn-ghost" onClick={closeEditUser}>
+                ✕
+              </button>
+            </div>
+            <div className="modal__body">
+              <p className="muted settings-user-edit-modal__email">{editingUser.email}</p>
+              <label className="field">
+                <span>Имя</span>
+                <input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  autoFocus
+                />
+              </label>
+              <label className="field">
+                <span>Новый пароль</span>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Оставьте пустым, если не меняете"
+                  autoComplete="new-password"
+                />
+              </label>
+              {editPassword && (
+                <label className="field">
+                  <span>Повтор пароля</span>
+                  <input
+                    type="password"
+                    value={editPasswordConfirm}
+                    onChange={(e) => setEditPasswordConfirm(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </label>
+              )}
+              <div className="settings-user-edit-modal__actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={closeEditUser}
+                  disabled={savingUser}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void saveEditedUser()}
+                  disabled={savingUser}
+                >
+                  {savingUser ? 'Сохранение…' : 'Сохранить'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

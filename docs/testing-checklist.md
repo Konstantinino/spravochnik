@@ -1,0 +1,41 @@
+# Чеклист тестирования REST INFO v2
+
+> Статус выполнения: см. [PROJECT-STATUS.md](PROJECT-STATUS.md). Полный E2E на production — **после deploy**.
+
+## Сервер
+
+- [ ] `docker compose up -d --build` — контейнеры стартуют
+- [ ] `curl http://localhost:3000/health` → `{"ok":true}`
+- [ ] `POST /auth/register` с whitelist email → JWT
+- [ ] `POST /auth/login` → JWT
+- [ ] `GET /departments/support/topics` → список тем
+- [ ] `POST /departments/support/topics` → создание
+- [ ] `PUT /departments/:dept/topics/:id` с неверным If-Match → 409
+- [ ] `GET /sync/changes?full=true` → полный snapshot
+- [ ] `node dist/import-from-json.js <data-dir>` — импорт с Диска
+
+## Клиент — онлайн
+
+- [ ] Указать URL сервера → вход → full sync
+- [ ] Чтение тем без сети (после sync) — оффлайн
+- [ ] Создание темы — сразу на сервере
+- [ ] Редактирование — lock на сервере, unlock при выходе
+- [ ] Два редактора одну тему — второй получает «занята»
+
+## Клиент — оффлайн
+
+- [ ] Отключить сеть → редактировать тему → «Сохранено локально»
+- [ ] Кнопка «Синхронизировать» → очередь уходит на сервер
+
+## Конфликты
+
+- [ ] Изменить тему оффлайн + изменить на сервере → sync → модалка + сравнение рядом
+
+## Обновления
+
+- [ ] `POST /admin/releases` + Setup в `/data/updates/`
+- [ ] Клиент показывает «Обновить» при новой версии
+
+## Legacy
+
+- [ ] `STORAGE_BACKEND=yandex` — старая синхронизация через Диск

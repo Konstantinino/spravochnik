@@ -1,22 +1,163 @@
+# REST INFO — инструкция для AI-агента
+
+Корпоративный справочник (Electron + React + Node.js API + PostgreSQL). Репозиторий: https://github.com/Konstantinino/spravochnik
+
+## Где работать
+
+**Единственный канонический репозиторий:** `spravochnik-repo/` (этот каталог).
+
+Не путать с дубликатами в родительской папке `REST INFO/`:
+- `app/` — устаревшая копия
+- `spravochnik-main/` — устаревшая копия
+
+## Архитектура v2 (текущая)
+
+| Компонент | Путь | Стек |
+|---|---|---|
+| PC-клиент | `app/` | Electron 35, React 19, Vite, TypeScript |
+| Сервер API | `server/` | Node 20, Express, PostgreSQL, JWT |
+| Docker | `docker-compose.yml` | postgres:16 + api |
+| Данные для деплоя | `REST-INFO-export/` | JSON + media (в `.gitignore`) |
+
+**Синхронизация:** клиент читает локальный кэш (`%AppData%\rest-info\REST-INFO\`), пишет на сервер онлайн, оффлайн — очередь `pending-operations.json`.
+
+**Legacy:** Яндекс.Диск — только `STORAGE_BACKEND=yandex` или разовые скрипты в `scripts/`. **Sync и updates в v2 — только сервер.**
+
+## Обновления приложения (v2)
+
+- Проверка: `GET /app/update` на `serverUrl`, **только при наличии сети**
+- Публикация: `app/scripts/upload-release.js`
+- Яндекс.Диск в `updates.ts` **удалён**
+
 ## graphify
 
-This project has a graphify knowledge graph at `graphify-out/`.
-
-Rules:
-- Before answering architecture or codebase questions, run `graphify query "<question>"` or read `graphify-out/GRAPH_REPORT.md` for god nodes and community structure
-- If `graphify-out/wiki/index.md` exists, navigate it instead of reading raw files
-- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
-- Open `graphify-out/graph.html` in a browser for an interactive map of the codebase
-
-Rebuild the full code map (no API key):
+Перед исследованием кодовой базы:
 
 ```powershell
-graphify . --code-only
-graphify cluster-only .
+graphify query "<вопрос>"
 ```
 
-After `git pull`:
+После изменений кода:
 
 ```powershell
 graphify update .
 ```
+
+См. также `graphify-out/GRAPH_REPORT.md`.
+
+## Ключевые модули
+
+### Клиент (`app/electron/`)
+
+| Файл | Назначение |
+|---|---|
+| `main.ts` | IPC, auth, CRUD, admin |
+| `server-api.ts` | HTTP-клиент к REST API |
+| `server-sync.ts` | pull/push, конфликты, очередь |
+| `sync-backend.ts` | server vs yandex по `STORAGE_BACKEND` |
+| `auth-store.ts` | accounts.json, settings, сессия |
+| `updates.ts` | проверка/скачивание обновлений с сервера |
+| `export-for-server.ts` | упаковка данных (CLI, не UI) |
+
+### Сервер (`server/src/`)
+
+| Файл | Назначение |
+|---|---|
+| `index.ts` | Express app, роуты |
+| `routes/auth.ts` | login, register, JWT |
+| `routes/admin.ts` | users, whitelist, releases, PUT users (имя/пароль) |
+| `routes/topics.ts` | CRUD тем, блокировки |
+| `routes/sync.ts` | GET /sync/changes |
+| `routes/updates.ts` | GET /app/update, download |
+| `import-from-json.ts` | импорт из REST-INFO-export |
+| `dev-local.ts` | embedded PostgreSQL без Docker (Windows dev) |
+| `reset-password.ts` | сброс пароля (recovery) |
+
+### UI (`app/src/components/`)
+
+| Файл | Назначение |
+|---|---|
+| `AuthScreen.tsx` | вход, URL сервера |
+| `SettingsPage.tsx` | admin: пользователи, whitelist, скачать Setup |
+| `Viewer.tsx`, `Header.tsx` | основной UI |
+
+## Документация
+
+| Файл | Для кого |
+|---|---|
+| [docs/PROJECT-STATUS.md](docs/PROJECT-STATUS.md) | **Текущий статус, блокеры, следующие шаги** |
+| [docs/DEPLOY-FOR-PROGRAMMER.md](docs/DEPLOY-FOR-PROGRAMMER.md) | Серверный программист |
+| [docs/server-deploy.md](docs/server-deploy.md) | Docker deploy |
+| [docs/migration-from-yandex.md](docs/migration-from-yandex.md) | Миграция данных |
+| [docs/legacy-yandex-disk.md](docs/legacy-yandex-disk.md) | Откат на v1 |
+| [docs/scripts.md](docs/scripts.md) | **Описание скриптов** |
+| [docs/testing-checklist.md](docs/testing-checklist.md) | E2E чеклист |
+
+## Команды разработки
+
+### Windows (машина пользователя)
+
+Node.js установлен в `C:\Program Files\nodejs\`, но **не всегда в PATH**:
+
+```powershell
+$env:Path = "C:\Program Files\nodejs;" + $env:Path
+```
+
+**Docker на Windows нет** — сервер локально через embedded Postgres:
+
+```powershell
+cd server
+npm install
+npm run dev:local
+# API: http://127.0.0.1:3000, Postgres: port 5433
+```
+
+**Клиент:**
+
+```powershell
+cd app
+npm install
+npm run dev
+```
+
+### Linux / production
+
+```bash
+docker compose up -d --build
+docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
+```
+
+### Сборка установщика
+
+```powershell
+cd app
+npm run dist:ascii
+# → app/release/REST-INFO-Setup-1.2.0.exe
+```
+
+## Владелец / bootstrap
+
+- Email: `kostya.alone18@yandex.ru` (env `BOOTSTRAP_ADMIN_EMAIL`)
+- Авто-admin, всегда в whitelist
+
+## Известные проблемы
+
+1. **Windows embedded Postgres (WIN1251):** импорт `templates.json` с emoji может падать локально; в Docker/Linux — OK.
+2. **Локальный dev-сервер ≠ production:** `127.0.0.1:3000` содержит тестовые данные; полный снимок — `REST-INFO-export/`.
+3. **Admin IPC** (роли, whitelist): частично local + queue, не все операции идут напрямую на API.
+4. **`REST-INFO-export/`** в `.gitignore` — не коммитить (пароли в accounts.json).
+5. **Incremental sync:** исправлен баг обнуления users; merge вместо replace.
+
+## Правила для агента
+
+- Минимальный diff, не рефакторить без запроса
+- Коммиты — только по явной просьбе пользователя
+- Работать только в `spravochnik-repo/`
+- Не коммитить `.env`, токены, `REST-INFO-export/`
+- После правок кода: `graphify update .`
+
+## Версии
+
+- Клиент: **1.2.0** (`app/package.json`)
+- Сервер: **1.0.0** (`server/package.json`)
+- Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

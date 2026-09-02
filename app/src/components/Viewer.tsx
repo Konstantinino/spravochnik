@@ -109,6 +109,34 @@ export function Viewer({
   }, [editing])
 
   useEffect(() => {
+    if (!editing || !item) return
+
+    let cancelled = false
+    const lockId = item.id
+
+    void (async () => {
+      try {
+        await window.spravochnik.lockTopic({ departmentId, topicId: lockId })
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Тема занята другим редактором')
+          setEditing(false)
+        }
+      }
+    })()
+
+    const renew = window.setInterval(() => {
+      void window.spravochnik.renewTopicLock({ departmentId, topicId: lockId }).catch(() => undefined)
+    }, 60_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(renew)
+      void window.spravochnik.unlockTopic({ departmentId, topicId: lockId }).catch(() => undefined)
+    }
+  }, [editing, item?.id, departmentId])
+
+  useEffect(() => {
     setEditing(false)
     setError(null)
     setFindOpen(false)

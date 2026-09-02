@@ -3,7 +3,6 @@ import path from 'node:path'
 import {
   ACCOUNTS_FILE,
   DATA_FILES,
-  getMediaDir,
   getUserDataRoot,
 } from './paths'
 import { readAccounts } from './auth-store'
@@ -55,20 +54,6 @@ function copyFileSafe(src: string, dest: string): boolean {
   fs.mkdirSync(path.dirname(dest), { recursive: true })
   fs.copyFileSync(src, dest)
   return true
-}
-
-function countMediaFiles(dir: string): number {
-  if (!fs.existsSync(dir)) return 0
-  let count = 0
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
-      count += countMediaFiles(full)
-    } else {
-      count += 1
-    }
-  }
-  return count
 }
 
 function copyMediaTree(src: string, dest: string): number {

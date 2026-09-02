@@ -393,7 +393,7 @@ export function updateUserProfile(
 
   if (input.password !== undefined && input.password.length > 0) {
     if (input.password.length < 6) throw new Error('Пароль не короче 6 символов')
-    const salt = generateSalt()
+    const salt = randomBytes(16).toString('hex')
     user.salt = salt
     user.passwordHash = hashPassword(input.password, salt)
   }

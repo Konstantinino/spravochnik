@@ -16,7 +16,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
-  const [hasToken, setHasToken] = useState(false)
   const [ownerEmail, setOwnerEmail] = useState('')
   const [latestRelease, setLatestRelease] = useState<LatestReleaseInfo | null>(null)
   const [downloadingLatest, setDownloadingLatest] = useState(false)
@@ -37,7 +36,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     ])
     setUsers(u)
     setWhitelist(w)
-    setHasToken(s.hasToken)
     setOwnerEmail(s.ownerEmail)
     setSyncStatus(sync)
   }

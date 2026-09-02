@@ -1,12 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
-  ACCOUNTS_FILE,
-  DATA_FILES,
   DEPARTMENTS,
   departmentById,
   getUserDataRoot,
-  getMediaDir,
   type DepartmentId,
 } from './paths'
 import {
@@ -112,10 +109,6 @@ export function getSyncStatus(): SyncStatus {
     ...currentStatus,
     hasPendingChanges: settings.hasPendingChanges || hasPendingOperations(),
   }
-}
-
-function deptFileName(deptId: DepartmentId): string {
-  return departmentById(deptId).fileName
 }
 
 function applyTopicToLocal(deptId: DepartmentId, topic: Record<string, unknown>): void {

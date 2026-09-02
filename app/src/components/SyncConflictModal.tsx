@@ -34,7 +34,6 @@ export function SyncConflictModal({ conflicts, onResolve, onClose }: SyncConflic
   const [compareOpen, setCompareOpen] = useState(false)
 
   const active = conflicts[activeIdx]
-  const activeKey = active ? `${active.fileName}:${active.id}` : ''
 
   const allChosen = useMemo(
     () => conflicts.every((c) => choices[`${c.fileName}:${c.id}`]),

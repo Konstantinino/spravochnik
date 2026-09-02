@@ -121,136 +121,6 @@
       "source_location": "L11"
     },
     {
-      "id": "app_electron_auth_store_accountsdata",
-      "label": "AccountsData",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "accountsdata",
-      "source_file": "app/electron/auth-store.ts",
-      "source_location": "L23"
-    },
-    {
-      "id": "app_electron_pending_operations_operationtype",
-      "label": "OperationType",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "operationtype",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L5"
-    },
-    {
-      "id": "app_electron_pending_operations_pendingoperation",
-      "label": "PendingOperation",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pendingoperation",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L17"
-    },
-    {
-      "id": "app_electron_pending_operations_pendingoperationsdata",
-      "label": "PendingOperationsData",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pendingoperationsdata",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L27"
-    },
-    {
-      "id": "app_electron_server_sync_conflictresolution",
-      "label": "ConflictResolution",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "conflictresolution",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L72"
-    },
-    {
-      "id": "app_electron_server_sync_statuslistener",
-      "label": "StatusListener",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "statuslistener",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L78"
-    },
-    {
-      "id": "app_electron_server_sync_syncchangesresponse",
-      "label": "SyncChangesResponse",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "syncchangesresponse",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L187"
-    },
-    {
-      "id": "app_electron_server_sync_syncconflictinfo",
-      "label": "SyncConflictInfo",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "syncconflictinfo",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L51"
-    },
-    {
-      "id": "app_electron_server_sync_syncstatus",
-      "label": "SyncStatus",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "syncstatus",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L62"
-    },
-    {
-      "id": "app_electron_server_sync_syncstatuscode",
-      "label": "SyncStatusCode",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "syncstatuscode",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L37"
-    },
-    {
       "id": "app_electron_yandex_sync_conflictresolution",
       "label": "ConflictResolution",
       "_callable": true,
@@ -758,17 +628,56 @@
       "source_location": "L32"
     },
     {
-      "id": "app_electron_server_api_serverapierror",
-      "label": "ServerApiError",
+      "id": "app_electron_server_sync_conflictresolution",
+      "label": "ConflictResolution",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 2,
       "community_name": "main.ts",
       "file_type": "code",
-      "norm_label": "serverapierror",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L5"
+      "norm_label": "conflictresolution",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L72"
+    },
+    {
+      "id": "app_electron_server_sync_syncconflictinfo",
+      "label": "SyncConflictInfo",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "syncconflictinfo",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L51"
+    },
+    {
+      "id": "app_electron_server_sync_syncstatus",
+      "label": "SyncStatus",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "syncstatus",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L62"
+    },
+    {
+      "id": "app_electron_server_sync_syncstatuscode",
+      "label": "SyncStatusCode",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "syncstatuscode",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L37"
     },
     {
       "id": "app_electron_updates_latestreleaseinfo",
@@ -925,6 +834,97 @@
       "norm_label": "topicviewfilter",
       "source_file": "app/src/types.ts",
       "source_location": "L14"
+    },
+    {
+      "id": "app_electron_auth_store_accountsdata",
+      "label": "AccountsData",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "accountsdata",
+      "source_file": "app/electron/auth-store.ts",
+      "source_location": "L23"
+    },
+    {
+      "id": "app_electron_pending_operations_operationtype",
+      "label": "OperationType",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "operationtype",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "app_electron_pending_operations_pendingoperation",
+      "label": "PendingOperation",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pendingoperation",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L17"
+    },
+    {
+      "id": "app_electron_pending_operations_pendingoperationsdata",
+      "label": "PendingOperationsData",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pendingoperationsdata",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L27"
+    },
+    {
+      "id": "app_electron_server_api_serverapierror",
+      "label": "ServerApiError",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "serverapierror",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "app_electron_server_sync_statuslistener",
+      "label": "StatusListener",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "statuslistener",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L78"
+    },
+    {
+      "id": "app_electron_server_sync_syncchangesresponse",
+      "label": "SyncChangesResponse",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "syncchangesresponse",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L187"
     },
     {
       "id": "app_src_components_imagescaledialog_imagescaledialogprops",
@@ -1318,18 +1318,6 @@
       "source_location": "L134"
     },
     {
-      "id": "app_electron_auth_store_setlastsyncat",
-      "label": "setLastSyncAt()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "setlastsyncat()",
-      "source_file": "app/electron/auth-store.ts",
-      "source_location": "L499"
-    },
-    {
       "id": "app_electron_auth_store_setpendingchanges",
       "label": "setPendingChanges()",
       "_callable": true,
@@ -1342,42 +1330,6 @@
       "source_location": "L154"
     },
     {
-      "id": "app_electron_auth_store_settingspath",
-      "label": "settingsPath()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "settingspath()",
-      "source_file": "app/electron/auth-store.ts",
-      "source_location": "L58"
-    },
-    {
-      "id": "app_electron_auth_store_writesettings",
-      "label": "writeSettings()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "writesettings()",
-      "source_file": "app/electron/auth-store.ts",
-      "source_location": "L150"
-    },
-    {
-      "id": "app_electron_paths_departmentbyid",
-      "label": "departmentById()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "departmentbyid()",
-      "source_file": "app/electron/paths.ts",
-      "source_location": "L99"
-    },
-    {
       "id": "app_electron_paths_getuserdataroot",
       "label": "getUserDataRoot()",
       "_callable": true,
@@ -1388,306 +1340,6 @@
       "norm_label": "getuserdataroot()",
       "source_file": "app/electron/paths.ts",
       "source_location": "L49"
-    },
-    {
-      "id": "app_electron_pending_media_clearpendingmedia",
-      "label": "clearPendingMedia()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "clearpendingmedia()",
-      "source_file": "app/electron/pending-media.ts",
-      "source_location": "L40"
-    },
-    {
-      "id": "app_electron_pending_operations_clearpendingoperations",
-      "label": "clearPendingOperations()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "clearpendingoperations()",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L48"
-    },
-    {
-      "id": "app_electron_pending_operations_haspendingoperations",
-      "label": "hasPendingOperations()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "haspendingoperations()",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L68"
-    },
-    {
-      "id": "app_electron_pending_operations_opspath",
-      "label": "opsPath()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "opspath()",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L31"
-    },
-    {
-      "id": "app_electron_pending_operations_queueoperation",
-      "label": "queueOperation()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "queueoperation()",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L52"
-    },
-    {
-      "id": "app_electron_pending_operations_readpendingoperations",
-      "label": "readPendingOperations()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "readpendingoperations()",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L35"
-    },
-    {
-      "id": "app_electron_pending_operations_removeoperation",
-      "label": "removeOperation()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "removeoperation()",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L62"
-    },
-    {
-      "id": "app_electron_pending_operations_writependingoperations",
-      "label": "writePendingOperations()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "writependingoperations()",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L44"
-    },
-    {
-      "id": "app_electron_server_sync_applytopictolocal",
-      "label": "applyTopicToLocal()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "applytopictolocal()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L121"
-    },
-    {
-      "id": "app_electron_server_sync_deptfilename",
-      "label": "deptFileName()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "deptfilename()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L117"
-    },
-    {
-      "id": "app_electron_server_sync_discardlocalchanges",
-      "label": "discardLocalChanges()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "discardlocalchanges()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L571"
-    },
-    {
-      "id": "app_electron_server_sync_downloadmissingmedia",
-      "label": "downloadMissingMedia()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "downloadmissingmedia()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L162"
-    },
-    {
-      "id": "app_electron_server_sync_emit",
-      "label": "emit()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "emit()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L89"
-    },
-    {
-      "id": "app_electron_server_sync_getsyncstatus",
-      "label": "getSyncStatus()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "getsyncstatus()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L109"
-    },
-    {
-      "id": "app_electron_server_sync_marklocalchange",
-      "label": "markLocalChange()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "marklocalchange()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L494"
-    },
-    {
-      "id": "app_electron_server_sync_markofflinepending",
-      "label": "markOfflinePending()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "markofflinepending()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L499"
-    },
-    {
-      "id": "app_electron_server_sync_onsyncstatus",
-      "label": "onSyncStatus()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "onsyncstatus()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L103"
-    },
-    {
-      "id": "app_electron_server_sync_pullfromserver",
-      "label": "pullFromServer()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pullfromserver()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L198"
-    },
-    {
-      "id": "app_electron_server_sync_pushaccountsfile",
-      "label": "pushAccountsFile()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pushaccountsfile()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L567"
-    },
-    {
-      "id": "app_electron_server_sync_pushtoserver",
-      "label": "pushToServer()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pushtoserver()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L365"
-    },
-    {
-      "id": "app_electron_server_sync_refreshstatusfromsettings",
-      "label": "refreshStatusFromSettings()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "refreshstatusfromsettings()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L578"
-    },
-    {
-      "id": "app_electron_server_sync_removetopicfromlocal",
-      "label": "removeTopicFromLocal()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "removetopicfromlocal()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L138"
-    },
-    {
-      "id": "app_electron_server_sync_resolvesyncconflicts",
-      "label": "resolveSyncConflicts()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "resolvesyncconflicts()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L458"
-    },
-    {
-      "id": "app_electron_server_sync_trypushtopiconline",
-      "label": "tryPushTopicOnline()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "trypushtopiconline()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L508"
-    },
-    {
-      "id": "app_electron_server_sync_writefulldepttopics",
-      "label": "writeFullDeptTopics()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "writefulldepttopics()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L148"
     },
     {
       "id": "app_electron_sync_base_basedir",
@@ -3466,6 +3118,18 @@
       "source_location": "L492"
     },
     {
+      "id": "app_electron_auth_store_setlastsyncat",
+      "label": "setLastSyncAt()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "setlastsyncat()",
+      "source_file": "app/electron/auth-store.ts",
+      "source_location": "L499"
+    },
+    {
       "id": "app_electron_auth_store_setserverurl",
       "label": "setServerUrl()",
       "_callable": true,
@@ -3476,6 +3140,18 @@
       "norm_label": "setserverurl()",
       "source_file": "app/electron/auth-store.ts",
       "source_location": "L485"
+    },
+    {
+      "id": "app_electron_auth_store_settingspath",
+      "label": "settingsPath()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "settingspath()",
+      "source_file": "app/electron/auth-store.ts",
+      "source_location": "L58"
     },
     {
       "id": "app_electron_auth_store_setwhitelist",
@@ -3572,6 +3248,18 @@
       "norm_label": "writesession()",
       "source_file": "app/electron/auth-store.ts",
       "source_location": "L323"
+    },
+    {
+      "id": "app_electron_auth_store_writesettings",
+      "label": "writeSettings()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "writesettings()",
+      "source_file": "app/electron/auth-store.ts",
+      "source_location": "L150"
     },
     {
       "id": "app_electron_main_cacheserveruser",
@@ -3694,40 +3382,52 @@
       "source_location": "L180"
     },
     {
-      "id": "app_electron_server_api_authheaders",
-      "label": "authHeaders()",
+      "id": "app_electron_media_download_downloadmediaimage",
+      "label": "downloadMediaImage()",
       "_callable": true,
       "_origin": "ast",
       "community": 2,
       "community_name": "main.ts",
       "file_type": "code",
-      "norm_label": "authheaders()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L22"
+      "norm_label": "downloadmediaimage()",
+      "source_file": "app/electron/media-download.ts",
+      "source_location": "L34"
     },
     {
-      "id": "app_electron_server_api_baseurl",
-      "label": "baseUrl()",
+      "id": "app_electron_media_download_localpathfromspravochnikurl",
+      "label": "localPathFromSpravochnikUrl()",
       "_callable": true,
       "_origin": "ast",
       "community": 2,
       "community_name": "main.ts",
       "file_type": "code",
-      "norm_label": "baseurl()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L16"
+      "norm_label": "localpathfromspravochnikurl()",
+      "source_file": "app/electron/media-download.ts",
+      "source_location": "L8"
     },
     {
-      "id": "app_electron_server_api_downloadmediafile",
-      "label": "downloadMediaFile()",
+      "id": "app_electron_media_download_suggestednamefromsrc",
+      "label": "suggestedNameFromSrc()",
       "_callable": true,
       "_origin": "ast",
       "community": 2,
       "community_name": "main.ts",
       "file_type": "code",
-      "norm_label": "downloadmediafile()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L130"
+      "norm_label": "suggestednamefromsrc()",
+      "source_file": "app/electron/media-download.ts",
+      "source_location": "L19"
+    },
+    {
+      "id": "app_electron_paths_getseeddatadir",
+      "label": "getSeedDataDir()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "getseeddatadir()",
+      "source_file": "app/electron/paths.ts",
+      "source_location": "L87"
     },
     {
       "id": "app_electron_server_api_isserverreachable",
@@ -3740,114 +3440,6 @@
       "norm_label": "isserverreachable()",
       "source_file": "app/electron/server-api.ts",
       "source_location": "L70"
-    },
-    {
-      "id": "app_electron_server_api_locktopic",
-      "label": "lockTopic()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": "locktopic()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L148"
-    },
-    {
-      "id": "app_electron_server_api_renewtopiclock",
-      "label": "renewTopicLock()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": "renewtopiclock()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L156"
-    },
-    {
-      "id": "app_electron_server_api_serverapierror_constructor",
-      "label": ".constructor()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": ".constructor()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L9"
-    },
-    {
-      "id": "app_electron_server_api_serverfetch",
-      "label": "serverFetch()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": "serverfetch()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L29"
-    },
-    {
-      "id": "app_electron_server_api_serverlogin",
-      "label": "serverLogin()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": "serverlogin()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L81"
-    },
-    {
-      "id": "app_electron_server_api_serverregister",
-      "label": "serverRegister()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": "serverregister()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L92"
-    },
-    {
-      "id": "app_electron_server_api_unlocktopic",
-      "label": "unlockTopic()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": "unlocktopic()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L152"
-    },
-    {
-      "id": "app_electron_server_api_uploadmediafile",
-      "label": "uploadMediaFile()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": "uploadmediafile()",
-      "source_file": "app/electron/server-api.ts",
-      "source_location": "L104"
-    },
-    {
-      "id": "app_electron_server_sync_replayoperation",
-      "label": "replayOperation()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 2,
-      "community_name": "main.ts",
-      "file_type": "code",
-      "norm_label": "replayoperation()",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L297"
     },
     {
       "id": "app_electron_sync_backend_discardlocalchanges",
@@ -4522,42 +4114,6 @@
       "source_location": "L39"
     },
     {
-      "id": "app_electron_media_download_downloadmediaimage",
-      "label": "downloadMediaImage()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "compilerOptions",
-      "file_type": "code",
-      "norm_label": "downloadmediaimage()",
-      "source_file": "app/electron/media-download.ts",
-      "source_location": "L34"
-    },
-    {
-      "id": "app_electron_media_download_localpathfromspravochnikurl",
-      "label": "localPathFromSpravochnikUrl()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "compilerOptions",
-      "file_type": "code",
-      "norm_label": "localpathfromspravochnikurl()",
-      "source_file": "app/electron/media-download.ts",
-      "source_location": "L8"
-    },
-    {
-      "id": "app_electron_media_download_suggestednamefromsrc",
-      "label": "suggestedNameFromSrc()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "compilerOptions",
-      "file_type": "code",
-      "norm_label": "suggestednamefromsrc()",
-      "source_file": "app/electron/media-download.ts",
-      "source_location": "L19"
-    },
-    {
       "id": "app_src_components_syncconflictmodal_comparepane",
       "label": "ComparePane()",
       "_callable": true,
@@ -4964,6 +4520,450 @@
       "norm_label": "istopicviewfilter()",
       "source_file": "app/src/types.ts",
       "source_location": "L43"
+    },
+    {
+      "id": "app_electron_paths_departmentbyid",
+      "label": "departmentById()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "departmentbyid()",
+      "source_file": "app/electron/paths.ts",
+      "source_location": "L99"
+    },
+    {
+      "id": "app_electron_pending_operations_clearpendingoperations",
+      "label": "clearPendingOperations()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "clearpendingoperations()",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L48"
+    },
+    {
+      "id": "app_electron_pending_operations_haspendingoperations",
+      "label": "hasPendingOperations()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "haspendingoperations()",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L68"
+    },
+    {
+      "id": "app_electron_pending_operations_opspath",
+      "label": "opsPath()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "opspath()",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "app_electron_pending_operations_queueoperation",
+      "label": "queueOperation()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "queueoperation()",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L52"
+    },
+    {
+      "id": "app_electron_pending_operations_readpendingoperations",
+      "label": "readPendingOperations()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "readpendingoperations()",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L35"
+    },
+    {
+      "id": "app_electron_pending_operations_removeoperation",
+      "label": "removeOperation()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "removeoperation()",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L62"
+    },
+    {
+      "id": "app_electron_pending_operations_writependingoperations",
+      "label": "writePendingOperations()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "writependingoperations()",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L44"
+    },
+    {
+      "id": "app_electron_server_api_authheaders",
+      "label": "authHeaders()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "authheaders()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L22"
+    },
+    {
+      "id": "app_electron_server_api_baseurl",
+      "label": "baseUrl()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "baseurl()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "app_electron_server_api_downloadmediafile",
+      "label": "downloadMediaFile()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "downloadmediafile()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L130"
+    },
+    {
+      "id": "app_electron_server_api_locktopic",
+      "label": "lockTopic()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "locktopic()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L148"
+    },
+    {
+      "id": "app_electron_server_api_renewtopiclock",
+      "label": "renewTopicLock()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "renewtopiclock()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L156"
+    },
+    {
+      "id": "app_electron_server_api_serverapierror_constructor",
+      "label": ".constructor()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": ".constructor()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "app_electron_server_api_serverfetch",
+      "label": "serverFetch()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "serverfetch()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L29"
+    },
+    {
+      "id": "app_electron_server_api_serverlogin",
+      "label": "serverLogin()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "serverlogin()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L81"
+    },
+    {
+      "id": "app_electron_server_api_serverregister",
+      "label": "serverRegister()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "serverregister()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L92"
+    },
+    {
+      "id": "app_electron_server_api_unlocktopic",
+      "label": "unlockTopic()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "unlocktopic()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L152"
+    },
+    {
+      "id": "app_electron_server_api_uploadmediafile",
+      "label": "uploadMediaFile()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "uploadmediafile()",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L104"
+    },
+    {
+      "id": "app_electron_server_sync_applytopictolocal",
+      "label": "applyTopicToLocal()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "applytopictolocal()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L121"
+    },
+    {
+      "id": "app_electron_server_sync_deptfilename",
+      "label": "deptFileName()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "deptfilename()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L117"
+    },
+    {
+      "id": "app_electron_server_sync_discardlocalchanges",
+      "label": "discardLocalChanges()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "discardlocalchanges()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L571"
+    },
+    {
+      "id": "app_electron_server_sync_downloadmissingmedia",
+      "label": "downloadMissingMedia()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "downloadmissingmedia()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L162"
+    },
+    {
+      "id": "app_electron_server_sync_emit",
+      "label": "emit()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "emit()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L89"
+    },
+    {
+      "id": "app_electron_server_sync_getsyncstatus",
+      "label": "getSyncStatus()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "getsyncstatus()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L109"
+    },
+    {
+      "id": "app_electron_server_sync_marklocalchange",
+      "label": "markLocalChange()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "marklocalchange()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L494"
+    },
+    {
+      "id": "app_electron_server_sync_markofflinepending",
+      "label": "markOfflinePending()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "markofflinepending()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L499"
+    },
+    {
+      "id": "app_electron_server_sync_onsyncstatus",
+      "label": "onSyncStatus()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "onsyncstatus()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L103"
+    },
+    {
+      "id": "app_electron_server_sync_pullfromserver",
+      "label": "pullFromServer()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pullfromserver()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L198"
+    },
+    {
+      "id": "app_electron_server_sync_pushaccountsfile",
+      "label": "pushAccountsFile()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pushaccountsfile()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L567"
+    },
+    {
+      "id": "app_electron_server_sync_pushtoserver",
+      "label": "pushToServer()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pushtoserver()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L365"
+    },
+    {
+      "id": "app_electron_server_sync_refreshstatusfromsettings",
+      "label": "refreshStatusFromSettings()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "refreshstatusfromsettings()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L578"
+    },
+    {
+      "id": "app_electron_server_sync_removetopicfromlocal",
+      "label": "removeTopicFromLocal()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "removetopicfromlocal()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L138"
+    },
+    {
+      "id": "app_electron_server_sync_replayoperation",
+      "label": "replayOperation()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "replayoperation()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L297"
+    },
+    {
+      "id": "app_electron_server_sync_resolvesyncconflicts",
+      "label": "resolveSyncConflicts()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "resolvesyncconflicts()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L458"
+    },
+    {
+      "id": "app_electron_server_sync_trypushtopiconline",
+      "label": "tryPushTopicOnline()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "trypushtopiconline()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L508"
+    },
+    {
+      "id": "app_electron_server_sync_writefulldepttopics",
+      "label": "writeFullDeptTopics()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "writefulldepttopics()",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L148"
     },
     {
       "id": "app_src_components_imagescaledialog_imagescaledialog",
@@ -5434,18 +5434,6 @@
       "source_location": "L62"
     },
     {
-      "id": "app_electron_paths_getseeddatadir",
-      "label": "getSeedDataDir()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 6,
-      "community_name": "paths.ts",
-      "file_type": "code",
-      "norm_label": "getseeddatadir()",
-      "source_file": "app/electron/paths.ts",
-      "source_location": "L87"
-    },
-    {
       "id": "app_electron_paths_gettopicimagesdir",
       "label": "getTopicImagesDir()",
       "_callable": true,
@@ -5468,6 +5456,18 @@
       "norm_label": "topicimagerelativepath()",
       "source_file": "app/electron/paths.ts",
       "source_location": "L78"
+    },
+    {
+      "id": "app_electron_pending_media_clearpendingmedia",
+      "label": "clearPendingMedia()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "paths.ts",
+      "file_type": "code",
+      "norm_label": "clearpendingmedia()",
+      "source_file": "app/electron/pending-media.ts",
+      "source_location": "L40"
     },
     {
       "id": "app_electron_pending_media_normalizerel",
@@ -5762,94 +5762,6 @@
       "source_location": "L7"
     },
     {
-      "id": "app_electron_paths_pending_operations_file",
-      "label": "PENDING_OPERATIONS_FILE",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pending_operations_file",
-      "source_file": "app/electron/paths.ts",
-      "source_location": "L19"
-    },
-    {
-      "id": "app_electron_pending_operations",
-      "label": "pending-operations.ts",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pending-operations.ts",
-      "source_file": "app/electron/pending-operations.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "app_electron_server_sync",
-      "label": "server-sync.ts",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "server-sync.ts",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "app_electron_server_sync_currentstatus",
-      "label": "currentStatus",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "currentstatus",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L81"
-    },
-    {
-      "id": "app_electron_server_sync_listeners",
-      "label": "listeners",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "listeners",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L80"
-    },
-    {
-      "id": "app_electron_server_sync_pendingconflicts",
-      "label": "pendingConflicts",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pendingconflicts",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L87"
-    },
-    {
-      "id": "app_electron_server_sync_pullfromyandex",
-      "label": "pullFromYandex",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pullfromyandex",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L596"
-    },
-    {
-      "id": "app_electron_server_sync_pushtoyandex",
-      "label": "pushToYandex",
-      "_origin": "ast",
-      "community": 1,
-      "community_name": "yandex-sync.ts",
-      "file_type": "code",
-      "norm_label": "pushtoyandex",
-      "source_file": "app/electron/server-sync.ts",
-      "source_location": "L597"
-    },
-    {
       "id": "app_electron_sync_base",
       "label": "sync-base.ts",
       "_origin": "ast",
@@ -5936,7 +5848,7 @@
       "node_kind": "heading",
       "norm_label": "graphify",
       "source_file": "AGENTS.md",
-      "source_location": "L26"
+      "source_location": "L32"
     },
     {
       "id": "agents_linux_production",
@@ -5948,7 +5860,7 @@
       "node_kind": "heading",
       "norm_label": "linux / production",
       "source_file": "AGENTS.md",
-      "source_location": "L116"
+      "source_location": "L123"
     },
     {
       "id": "agents_rest_info_\u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044f_\u0434\u043b\u044f_ai_\u0430\u0433\u0435\u043d\u0442\u0430",
@@ -5972,7 +5884,7 @@
       "node_kind": "heading",
       "norm_label": "ui (`app/src/components/`)",
       "source_file": "AGENTS.md",
-      "source_location": "L70"
+      "source_location": "L76"
     },
     {
       "id": "agents_windows_\u043c\u0430\u0448\u0438\u043d\u0430_\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f",
@@ -5984,7 +5896,7 @@
       "node_kind": "heading",
       "norm_label": "windows (\u043c\u0430\u0448\u0438\u043d\u0430 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f)",
       "source_file": "AGENTS.md",
-      "source_location": "L91"
+      "source_location": "L98"
     },
     {
       "id": "agents_\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430_v2_\u0442\u0435\u043a\u0443\u0449\u0430\u044f",
@@ -6008,7 +5920,7 @@
       "node_kind": "heading",
       "norm_label": "\u0432\u0435\u0440\u0441\u0438\u0438",
       "source_file": "AGENTS.md",
-      "source_location": "L152"
+      "source_location": "L159"
     },
     {
       "id": "agents_\u0432\u043b\u0430\u0434\u0435\u043b\u0435\u0446_bootstrap",
@@ -6020,7 +5932,7 @@
       "node_kind": "heading",
       "norm_label": "\u0432\u043b\u0430\u0434\u0435\u043b\u0435\u0446 / bootstrap",
       "source_file": "AGENTS.md",
-      "source_location": "L131"
+      "source_location": "L138"
     },
     {
       "id": "agents_\u0433\u0434\u0435_\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c",
@@ -6044,7 +5956,7 @@
       "node_kind": "heading",
       "norm_label": "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f",
       "source_file": "AGENTS.md",
-      "source_location": "L78"
+      "source_location": "L84"
     },
     {
       "id": "agents_\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0435_\u043f\u0440\u043e\u0431\u043b\u0435\u043c\u044b",
@@ -6056,7 +5968,7 @@
       "node_kind": "heading",
       "norm_label": "\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0435 \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u044b",
       "source_file": "AGENTS.md",
-      "source_location": "L136"
+      "source_location": "L143"
     },
     {
       "id": "agents_\u043a\u043b\u0438\u0435\u043d\u0442_app_electron",
@@ -6068,7 +5980,7 @@
       "node_kind": "heading",
       "norm_label": "\u043a\u043b\u0438\u0435\u043d\u0442 (`app/electron/`)",
       "source_file": "AGENTS.md",
-      "source_location": "L44"
+      "source_location": "L50"
     },
     {
       "id": "agents_\u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435_\u043c\u043e\u0434\u0443\u043b\u0438",
@@ -6080,7 +5992,7 @@
       "node_kind": "heading",
       "norm_label": "\u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435 \u043c\u043e\u0434\u0443\u043b\u0438",
       "source_file": "AGENTS.md",
-      "source_location": "L42"
+      "source_location": "L48"
     },
     {
       "id": "agents_\u043a\u043e\u043c\u0430\u043d\u0434\u044b_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0438",
@@ -6092,7 +6004,19 @@
       "node_kind": "heading",
       "norm_label": "\u043a\u043e\u043c\u0430\u043d\u0434\u044b \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0438",
       "source_file": "AGENTS.md",
-      "source_location": "L89"
+      "source_location": "L96"
+    },
+    {
+      "id": "agents_\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f_\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f_v2",
+      "label": "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f (v2)",
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "REST INFO \u2014 \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044f \u0434\u043b\u044f AI-\u0430\u0433\u0435\u043d\u0442\u0430",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f (v2)",
+      "source_file": "AGENTS.md",
+      "source_location": "L26"
     },
     {
       "id": "agents_\u043f\u0440\u0430\u0432\u0438\u043b\u0430_\u0434\u043b\u044f_\u0430\u0433\u0435\u043d\u0442\u0430",
@@ -6104,7 +6028,7 @@
       "node_kind": "heading",
       "norm_label": "\u043f\u0440\u0430\u0432\u0438\u043b\u0430 \u0434\u043b\u044f \u0430\u0433\u0435\u043d\u0442\u0430",
       "source_file": "AGENTS.md",
-      "source_location": "L144"
+      "source_location": "L151"
     },
     {
       "id": "agents_\u0441\u0431\u043e\u0440\u043a\u0430_\u0443\u0441\u0442\u0430\u043d\u043e\u0432\u0449\u0438\u043a\u0430",
@@ -6116,7 +6040,7 @@
       "node_kind": "heading",
       "norm_label": "\u0441\u0431\u043e\u0440\u043a\u0430 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u0449\u0438\u043a\u0430",
       "source_file": "AGENTS.md",
-      "source_location": "L123"
+      "source_location": "L130"
     },
     {
       "id": "agents_\u0441\u0435\u0440\u0432\u0435\u0440_server_src",
@@ -6128,7 +6052,7 @@
       "node_kind": "heading",
       "norm_label": "\u0441\u0435\u0440\u0432\u0435\u0440 (`server/src/`)",
       "source_file": "AGENTS.md",
-      "source_location": "L56"
+      "source_location": "L62"
     },
     {
       "id": "app_electron_guide_merge",
@@ -6294,7 +6218,7 @@
       "node_kind": "heading",
       "norm_label": "legacy: \u044f\u043d\u0434\u0435\u043a\u0441.\u0434\u0438\u0441\u043a",
       "source_file": "README.md",
-      "source_location": "L239"
+      "source_location": "L81"
     },
     {
       "id": "readme_rest_info",
@@ -6318,7 +6242,7 @@
       "node_kind": "heading",
       "norm_label": "\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430 v2",
       "source_file": "README.md",
-      "source_location": "L17"
+      "source_location": "L9"
     },
     {
       "id": "readme_\u0434\u0430\u043d\u043d\u044b\u0435_\u0434\u043b\u044f_production",
@@ -6330,7 +6254,7 @@
       "node_kind": "heading",
       "norm_label": "\u0434\u0430\u043d\u043d\u044b\u0435 \u0434\u043b\u044f production",
       "source_file": "README.md",
-      "source_location": "L51"
+      "source_location": "L26"
     },
     {
       "id": "readme_\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f",
@@ -6342,55 +6266,7 @@
       "node_kind": "heading",
       "norm_label": "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f",
       "source_file": "README.md",
-      "source_location": "L29"
-    },
-    {
-      "id": "readme_\u0438\u043c\u043f\u043e\u0440\u0442_\u0434\u0430\u043d\u043d\u044b\u0445",
-      "label": "\u0418\u043c\u043f\u043e\u0440\u0442 \u0434\u0430\u043d\u043d\u044b\u0445",
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "REST INFO",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "\u0438\u043c\u043f\u043e\u0440\u0442 \u0434\u0430\u043d\u043d\u044b\u0445",
-      "source_file": "README.md",
-      "source_location": "L189"
-    },
-    {
-      "id": "readme_\u043a\u043b\u0438\u0435\u043d\u0442",
-      "label": "\u041a\u043b\u0438\u0435\u043d\u0442",
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "REST INFO",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "\u043a\u043b\u0438\u0435\u043d\u0442",
-      "source_file": "README.md",
-      "source_location": "L139"
-    },
-    {
-      "id": "readme_\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f_\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f",
-      "label": "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f",
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "REST INFO",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f",
-      "source_file": "README.md",
-      "source_location": "L115"
-    },
-    {
-      "id": "readme_\u043f\u043e\u0432\u0442\u043e\u0440\u043d\u044b\u0439_\u044d\u043a\u0441\u043f\u043e\u0440\u0442_\u0441_\u044f\u043d\u0434\u0435\u043a\u0441_\u0434\u0438\u0441\u043a\u0430_\u0435\u0441\u043b\u0438_\u043d\u0443\u0436\u0435\u043d",
-      "label": "\u041f\u043e\u0432\u0442\u043e\u0440\u043d\u044b\u0439 \u044d\u043a\u0441\u043f\u043e\u0440\u0442 \u0441 \u042f\u043d\u0434\u0435\u043a\u0441.\u0414\u0438\u0441\u043a\u0430 (\u0435\u0441\u043b\u0438 \u043d\u0443\u0436\u0435\u043d)",
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "REST INFO",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "\u043f\u043e\u0432\u0442\u043e\u0440\u043d\u044b\u0438 \u044d\u043a\u0441\u043f\u043e\u0440\u0442 \u0441 \u044f\u043d\u0434\u0435\u043a\u0441.\u0434\u0438\u0441\u043a\u0430 (\u0435\u0441\u043b\u0438 \u043d\u0443\u0436\u0435\u043d)",
-      "source_file": "README.md",
-      "source_location": "L201"
+      "source_location": "L15"
     },
     {
       "id": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
@@ -6402,55 +6278,19 @@
       "node_kind": "heading",
       "norm_label": "\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
       "source_file": "README.md",
-      "source_location": "L135"
+      "source_location": "L51"
     },
     {
-      "id": "readme_\u0440\u043e\u043b\u0438",
-      "label": "\u0420\u043e\u043b\u0438",
+      "id": "readme_\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f_\u0438_\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
+      "label": "\u0421\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f \u0438 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
       "_origin": "ast",
       "community": 14,
       "community_name": "REST INFO",
       "file_type": "document",
       "node_kind": "heading",
-      "norm_label": "\u0440\u043e\u043b\u0438",
+      "norm_label": "\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f \u0438 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
       "source_file": "README.md",
-      "source_location": "L83"
-    },
-    {
-      "id": "readme_\u0441\u0435\u0440\u0432\u0435\u0440_docker_linux",
-      "label": "\u0421\u0435\u0440\u0432\u0435\u0440 (Docker, Linux)",
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "REST INFO",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "\u0441\u0435\u0440\u0432\u0435\u0440 (docker, linux)",
-      "source_file": "README.md",
-      "source_location": "L155"
-    },
-    {
-      "id": "readme_\u0441\u0435\u0440\u0432\u0435\u0440_windows_\u0431\u0435\u0437_docker",
-      "label": "\u0421\u0435\u0440\u0432\u0435\u0440 (Windows \u0431\u0435\u0437 Docker)",
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "REST INFO",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "\u0441\u0435\u0440\u0432\u0435\u0440 (windows \u0431\u0435\u0437 docker)",
-      "source_file": "README.md",
-      "source_location": "L169"
-    },
-    {
-      "id": "readme_\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f",
-      "label": "\u0421\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f",
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "REST INFO",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f",
-      "source_file": "README.md",
-      "source_location": "L99"
+      "source_location": "L39"
     },
     {
       "id": "readme_\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430",
@@ -6462,7 +6302,7 @@
       "node_kind": "heading",
       "norm_label": "\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430",
       "source_file": "README.md",
-      "source_location": "L213"
+      "source_location": "L69"
     },
     {
       "id": "readme_\u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430_\u043d\u0430_\u043f\u043a",
@@ -6474,7 +6314,7 @@
       "node_kind": "heading",
       "norm_label": "\u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 \u043d\u0430 \u043f\u043a",
       "source_file": "README.md",
-      "source_location": "L65"
+      "source_location": "L30"
     },
     {
       "id": "app_vite_config",
@@ -7434,6 +7274,28 @@
       "source_location": "L1"
     },
     {
+      "id": "app_electron_media_download",
+      "label": "media-download.ts",
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "media-download.ts",
+      "source_file": "app/electron/media-download.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "app_electron_media_download_image_extensions",
+      "label": "IMAGE_EXTENSIONS",
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "code",
+      "norm_label": "image_extensions",
+      "source_file": "app/electron/media-download.ts",
+      "source_location": "L6"
+    },
+    {
       "id": "app_electron_paths_app_update_file",
       "label": "APP_UPDATE_FILE",
       "_origin": "ast",
@@ -7456,14 +7318,14 @@
       "source_location": "L23"
     },
     {
-      "id": "app_electron_server_api",
-      "label": "server-api.ts",
+      "id": "app_electron_preload",
+      "label": "preload.ts",
       "_origin": "ast",
       "community": 2,
       "community_name": "main.ts",
       "file_type": "code",
-      "norm_label": "server-api.ts",
-      "source_file": "app/electron/server-api.ts",
+      "norm_label": "preload.ts",
+      "source_file": "app/electron/preload.ts",
       "source_location": "L1"
     },
     {
@@ -7575,6 +7437,17 @@
       "norm_label": "listeners",
       "source_file": "app/electron/updates.ts",
       "source_location": "L44"
+    },
+    {
+      "id": "ref_electron",
+      "label": "electron",
+      "_origin": "ast",
+      "community": 2,
+      "community_name": "main.ts",
+      "file_type": "concept",
+      "norm_label": "electron",
+      "source_file": "app/tsconfig.node.json",
+      "source_location": "L19"
     },
     {
       "id": "scripts_push_yandex_restore",
@@ -8081,18 +7954,6 @@
       "source_location": "L22"
     },
     {
-      "id": "docs_scripts",
-      "label": "scripts.md",
-      "_origin": "ast",
-      "community": 24,
-      "community_name": "\u0421\u043a\u0440\u0438\u043f\u0442\u044b REST INFO",
-      "file_type": "document",
-      "node_kind": "page",
-      "norm_label": "scripts.md",
-      "source_file": "docs/scripts.md",
-      "source_location": "L1"
-    },
-    {
       "id": "docs_scripts_app_scripts_dist_ascii_js",
       "label": "`app/scripts/dist-ascii.js`",
       "_origin": "ast",
@@ -8392,7 +8253,7 @@
       "source_location": "L14"
     },
     {
-      "id": "server_tsconfig_json_ref_src",
+      "id": "ref_src",
       "label": "src/**/*",
       "_origin": "ast",
       "community": 25,
@@ -8580,7 +8441,7 @@
       "node_kind": "heading",
       "norm_label": "\u0434\u0430\u043d\u043d\u044b\u0435",
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L41"
+      "source_location": "L48"
     },
     {
       "id": "docs_project_status_\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f",
@@ -8592,7 +8453,7 @@
       "node_kind": "heading",
       "norm_label": "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f",
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L48"
+      "source_location": "L55"
     },
     {
       "id": "docs_project_status_\u0438\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f_\u0432_\u0445\u043e\u0434\u0435_dev",
@@ -8604,7 +8465,7 @@
       "node_kind": "heading",
       "norm_label": "\u0438\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u0432 \u0445\u043e\u0434\u0435 dev",
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L55"
+      "source_location": "L62"
     },
     {
       "id": "docs_project_status_\u043a\u043b\u0438\u0435\u043d\u0442_app",
@@ -8628,7 +8489,7 @@
       "node_kind": "heading",
       "norm_label": "\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u0430\u044f dev-\u0441\u0440\u0435\u0434\u0430 (windows \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f)",
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L82"
+      "source_location": "L90"
     },
     {
       "id": "docs_project_status_\u0441\u0435\u0440\u0432\u0435\u0440_server",
@@ -8643,6 +8504,18 @@
       "source_location": "L15"
     },
     {
+      "id": "docs_project_status_\u0441\u043a\u0440\u0438\u043f\u0442\u044b_\u0438_\u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435",
+      "label": "\u0421\u043a\u0440\u0438\u043f\u0442\u044b \u0438 \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435",
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "REST INFO \u2014 \u0441\u0442\u0430\u0442\u0443\u0441 \u043f\u0440\u043e\u0435\u043a\u0442\u0430 (handoff)",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "\u0441\u043a\u0440\u0438\u043f\u0442\u044b \u0438 \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435",
+      "source_file": "docs/PROJECT-STATUS.md",
+      "source_location": "L42"
+    },
+    {
       "id": "docs_project_status_\u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0435_\u0448\u0430\u0433\u0438_\u0434\u043b\u044f_\u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430",
       "label": "\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0435 \u0448\u0430\u0433\u0438 (\u0434\u043b\u044f \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430)",
       "_origin": "ast",
@@ -8652,7 +8525,7 @@
       "node_kind": "heading",
       "norm_label": "\u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0435 \u0448\u0430\u0433\u0438 (\u0434\u043b\u044f \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430)",
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L119"
+      "source_location": "L127"
     },
     {
       "id": "docs_project_status_\u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0435_\u0448\u0430\u0433\u0438_\u0434\u043b\u044f_\u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u0438\u0441\u0442\u0430",
@@ -8664,7 +8537,7 @@
       "node_kind": "heading",
       "norm_label": "\u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0435 \u0448\u0430\u0433\u0438 (\u0434\u043b\u044f \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u0438\u0441\u0442\u0430)",
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L130"
+      "source_location": "L138"
     },
     {
       "id": "docs_project_status_\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430_\u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u044f",
@@ -8676,7 +8549,7 @@
       "node_kind": "heading",
       "norm_label": "\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430 \u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u044f",
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L97"
+      "source_location": "L105"
     },
     {
       "id": "docs_project_status_\u0442\u0435\u043a\u0443\u0449\u0430\u044f_\u0444\u0430\u0437\u0430",
@@ -8700,7 +8573,7 @@
       "node_kind": "heading",
       "norm_label": "\u0447\u0442\u043e \u043d\u0435 \u0441\u0434\u0435\u043b\u0430\u043d\u043e / pending",
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L65"
+      "source_location": "L73"
     },
     {
       "id": "docs_project_status_\u0447\u0442\u043e_\u0441\u0434\u0435\u043b\u0430\u043d\u043e",
@@ -8768,39 +8641,6 @@
       "norm_label": "root",
       "source_file": "scripts/pull-yandex-export.mjs",
       "source_location": "L16"
-    },
-    {
-      "id": "app_electron_media_download",
-      "label": "media-download.ts",
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "compilerOptions",
-      "file_type": "code",
-      "norm_label": "media-download.ts",
-      "source_file": "app/electron/media-download.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "app_electron_media_download_image_extensions",
-      "label": "IMAGE_EXTENSIONS",
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "compilerOptions",
-      "file_type": "code",
-      "norm_label": "image_extensions",
-      "source_file": "app/electron/media-download.ts",
-      "source_location": "L6"
-    },
-    {
-      "id": "app_electron_preload",
-      "label": "preload.ts",
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "compilerOptions",
-      "file_type": "code",
-      "norm_label": "preload.ts",
-      "source_file": "app/electron/preload.ts",
-      "source_location": "L1"
     },
     {
       "id": "app_tsconfig_node",
@@ -9010,17 +8850,6 @@
       "norm_label": "es2022",
       "source_file": "app/tsconfig.node.json",
       "source_location": "L4"
-    },
-    {
-      "id": "ref_electron",
-      "label": "electron",
-      "_origin": "ast",
-      "community": 3,
-      "community_name": "compilerOptions",
-      "file_type": "concept",
-      "norm_label": "electron",
-      "source_file": "app/tsconfig.node.json",
-      "source_location": "L19"
     },
     {
       "id": "ref_node",
@@ -9366,6 +9195,18 @@
       "node_kind": "page",
       "norm_label": "project-status.md",
       "source_file": "docs/PROJECT-STATUS.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "docs_scripts",
+      "label": "scripts.md",
+      "_origin": "ast",
+      "community": 32,
+      "community_name": "AGENTS.md",
+      "file_type": "document",
+      "node_kind": "page",
+      "norm_label": "scripts.md",
+      "source_file": "docs/scripts.md",
       "source_location": "L1"
     },
     {
@@ -9739,6 +9580,94 @@
       "source_file": "pg"
     },
     {
+      "id": "app_electron_pending_operations",
+      "label": "pending-operations.ts",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pending-operations.ts",
+      "source_file": "app/electron/pending-operations.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "app_electron_server_api",
+      "label": "server-api.ts",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "server-api.ts",
+      "source_file": "app/electron/server-api.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "app_electron_server_sync",
+      "label": "server-sync.ts",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "server-sync.ts",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "app_electron_server_sync_currentstatus",
+      "label": "currentStatus",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "currentstatus",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L81"
+    },
+    {
+      "id": "app_electron_server_sync_listeners",
+      "label": "listeners",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "listeners",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L80"
+    },
+    {
+      "id": "app_electron_server_sync_pendingconflicts",
+      "label": "pendingConflicts",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pendingconflicts",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L87"
+    },
+    {
+      "id": "app_electron_server_sync_pullfromyandex",
+      "label": "pullFromYandex",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pullfromyandex",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L596"
+    },
+    {
+      "id": "app_electron_server_sync_pushtoyandex",
+      "label": "pushToYandex",
+      "_origin": "ast",
+      "community": 41,
+      "community_name": "server-sync.ts",
+      "file_type": "code",
+      "norm_label": "pushtoyandex",
+      "source_file": "app/electron/server-sync.ts",
+      "source_location": "L597"
+    },
+    {
       "id": "app_src_components_imagescaledialog",
       "label": "ImageScaleDialog.tsx",
       "_origin": "ast",
@@ -9913,6 +9842,17 @@
       "norm_label": "pending_media_file",
       "source_file": "app/electron/paths.ts",
       "source_location": "L18"
+    },
+    {
+      "id": "app_electron_paths_pending_operations_file",
+      "label": "PENDING_OPERATIONS_FILE",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "paths.ts",
+      "file_type": "code",
+      "norm_label": "pending_operations_file",
+      "source_file": "app/electron/paths.ts",
+      "source_location": "L19"
     },
     {
       "id": "app_electron_paths_require",
@@ -19318,7 +19258,7 @@
     },
     {
       "source": "server_tsconfig_include",
-      "target": "server_tsconfig_json_ref_src",
+      "target": "ref_src",
       "relation": "extends",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -25043,7 +24983,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L131",
+      "source_location": "L138",
       "weight": 1.0
     },
     {
@@ -25054,7 +24994,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L136",
+      "source_location": "L143",
       "weight": 1.0
     },
     {
@@ -25065,7 +25005,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L144",
+      "source_location": "L151",
       "weight": 1.0
     },
     {
@@ -25076,12 +25016,12 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L152",
+      "source_location": "L159",
       "weight": 1.0
     },
     {
       "source": "agents_rest_info_\u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044f_\u0434\u043b\u044f_ai_\u0430\u0433\u0435\u043d\u0442\u0430",
-      "target": "agents_graphify",
+      "target": "agents_\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f_\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f_v2",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -25092,13 +25032,24 @@
     },
     {
       "source": "agents_rest_info_\u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044f_\u0434\u043b\u044f_ai_\u0430\u0433\u0435\u043d\u0442\u0430",
+      "target": "agents_graphify",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AGENTS.md",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "agents_rest_info_\u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044f_\u0434\u043b\u044f_ai_\u0430\u0433\u0435\u043d\u0442\u0430",
       "target": "agents_\u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435_\u043c\u043e\u0434\u0443\u043b\u0438",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L42",
+      "source_location": "L48",
       "weight": 1.0
     },
     {
@@ -25120,7 +25071,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L78",
+      "source_location": "L84",
       "weight": 1.0
     },
     {
@@ -25131,7 +25082,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L89",
+      "source_location": "L96",
       "weight": 1.0
     },
     {
@@ -25142,7 +25093,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L44",
+      "source_location": "L50",
       "weight": 1.0
     },
     {
@@ -25153,7 +25104,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L56",
+      "source_location": "L62",
       "weight": 1.0
     },
     {
@@ -25164,7 +25115,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L70",
+      "source_location": "L76",
       "weight": 1.0
     },
     {
@@ -25175,7 +25126,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L116",
+      "source_location": "L123",
       "weight": 1.0
     },
     {
@@ -25186,7 +25137,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L123",
+      "source_location": "L130",
       "weight": 1.0
     },
     {
@@ -25197,7 +25148,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L91",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
@@ -31340,13 +31291,24 @@
     },
     {
       "source": "docs_project_status_rest_info_\u0441\u0442\u0430\u0442\u0443\u0441_\u043f\u0440\u043e\u0435\u043a\u0442\u0430_handoff",
+      "target": "docs_project_status_\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430_\u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u044f",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/PROJECT-STATUS.md",
+      "source_location": "L105",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_project_status_rest_info_\u0441\u0442\u0430\u0442\u0443\u0441_\u043f\u0440\u043e\u0435\u043a\u0442\u0430_handoff",
       "target": "docs_project_status_\u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0435_\u0448\u0430\u0433\u0438_\u0434\u043b\u044f_\u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L119",
+      "source_location": "L127",
       "weight": 1.0
     },
     {
@@ -31368,7 +31330,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L130",
+      "source_location": "L138",
       "weight": 1.0
     },
     {
@@ -31390,7 +31352,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L65",
+      "source_location": "L73",
       "weight": 1.0
     },
     {
@@ -31401,18 +31363,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L82",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_project_status_rest_info_\u0441\u0442\u0430\u0442\u0443\u0441_\u043f\u0440\u043e\u0435\u043a\u0442\u0430_handoff",
-      "target": "docs_project_status_\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430_\u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u044f",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L97",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
@@ -31439,18 +31390,18 @@
     },
     {
       "source": "docs_project_status_\u0447\u0442\u043e_\u0441\u0434\u0435\u043b\u0430\u043d\u043e",
-      "target": "docs_project_status_\u0434\u0430\u043d\u043d\u044b\u0435",
+      "target": "docs_project_status_\u0441\u043a\u0440\u0438\u043f\u0442\u044b_\u0438_\u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PROJECT-STATUS.md",
-      "source_location": "L41",
+      "source_location": "L42",
       "weight": 1.0
     },
     {
       "source": "docs_project_status_\u0447\u0442\u043e_\u0441\u0434\u0435\u043b\u0430\u043d\u043e",
-      "target": "docs_project_status_\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f",
+      "target": "docs_project_status_\u0434\u0430\u043d\u043d\u044b\u0435",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -31461,13 +31412,24 @@
     },
     {
       "source": "docs_project_status_\u0447\u0442\u043e_\u0441\u0434\u0435\u043b\u0430\u043d\u043e",
-      "target": "docs_project_status_\u0438\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f_\u0432_\u0445\u043e\u0434\u0435_dev",
+      "target": "docs_project_status_\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PROJECT-STATUS.md",
       "source_location": "L55",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_project_status_\u0447\u0442\u043e_\u0441\u0434\u0435\u043b\u0430\u043d\u043e",
+      "target": "docs_project_status_\u0438\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f_\u0432_\u0445\u043e\u0434\u0435_dev",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/PROJECT-STATUS.md",
+      "source_location": "L62",
       "weight": 1.0
     },
     {
@@ -31824,68 +31786,13 @@
     },
     {
       "source": "readme_rest_info",
-      "target": "readme_\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f_\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L115",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_rest_info",
-      "target": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L135",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_rest_info",
-      "target": "readme_\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430_v2",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L17",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_rest_info",
-      "target": "readme_\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L213",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_rest_info",
-      "target": "readme_legacy_\u044f\u043d\u0434\u0435\u043a\u0441_\u0434\u0438\u0441\u043a",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L239",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_rest_info",
       "target": "readme_\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L29",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -31896,7 +31803,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L51",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -31907,84 +31814,62 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L65",
+      "source_location": "L30",
       "weight": 1.0
     },
     {
       "source": "readme_rest_info",
-      "target": "readme_\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f",
+      "target": "readme_\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f_\u0438_\u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L99",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
-      "source": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
-      "target": "readme_\u043a\u043b\u0438\u0435\u043d\u0442",
+      "source": "readme_rest_info",
+      "target": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L139",
+      "source_location": "L51",
       "weight": 1.0
     },
     {
-      "source": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
-      "target": "readme_\u0441\u0435\u0440\u0432\u0435\u0440_docker_linux",
+      "source": "readme_rest_info",
+      "target": "readme_\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L155",
+      "source_location": "L69",
       "weight": 1.0
     },
     {
-      "source": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
-      "target": "readme_\u0441\u0435\u0440\u0432\u0435\u0440_windows_\u0431\u0435\u0437_docker",
+      "source": "readme_rest_info",
+      "target": "readme_legacy_\u044f\u043d\u0434\u0435\u043a\u0441_\u0434\u0438\u0441\u043a",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L169",
+      "source_location": "L81",
       "weight": 1.0
     },
     {
-      "source": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
-      "target": "readme_\u0438\u043c\u043f\u043e\u0440\u0442_\u0434\u0430\u043d\u043d\u044b\u0445",
+      "source": "readme_rest_info",
+      "target": "readme_\u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0430_v2",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L189",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
-      "target": "readme_\u043f\u043e\u0432\u0442\u043e\u0440\u043d\u044b\u0439_\u044d\u043a\u0441\u043f\u043e\u0440\u0442_\u0441_\u044f\u043d\u0434\u0435\u043a\u0441_\u0434\u0438\u0441\u043a\u0430_\u0435\u0441\u043b\u0438_\u043d\u0443\u0436\u0435\u043d",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L201",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_\u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430_\u043d\u0430_\u043f\u043a",
-      "target": "readme_\u0440\u043e\u043b\u0438",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L83",
+      "source_location": "L9",
       "weight": 1.0
     },
     {
@@ -33551,7 +33436,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L82",
+      "source_location": "L88",
       "weight": 1.0
     },
     {
@@ -33562,7 +33447,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L83",
+      "source_location": "L89",
       "weight": 1.0
     },
     {
@@ -33573,7 +33458,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L84",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
@@ -33584,7 +33469,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L85",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -33595,7 +33480,18 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L86",
+      "source_location": "L92",
+      "weight": 1.0
+    },
+    {
+      "source": "agents",
+      "target": "docs_scripts",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "AGENTS.md",
+      "source_location": "L93",
       "weight": 1.0
     },
     {
@@ -33606,7 +33502,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "AGENTS.md",
-      "source_location": "L87",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -33710,35 +33606,13 @@
     },
     {
       "source": "readme",
-      "target": "agents",
-      "relation": "references",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L13",
-      "weight": 1.0
-    },
-    {
-      "source": "readme",
-      "target": "docs_project_status",
-      "relation": "references",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "README.md",
-      "source_location": "L13",
-      "weight": 1.0
-    },
-    {
-      "source": "readme",
       "target": "docs_deploy_for_programmer",
       "relation": "references",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L39",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -33749,7 +33623,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L41",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -33760,7 +33634,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L43",
+      "source_location": "L22",
       "weight": 1.0
     },
     {
@@ -33771,7 +33645,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L45",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -33782,7 +33656,29 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "README.md",
-      "source_location": "L47",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "readme",
+      "target": "agents",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "readme",
+      "target": "docs_project_status",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "README.md",
+      "source_location": "L7",
       "weight": 1.0
     },
     {
@@ -34050,5 +33946,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e99c08d61a95674574ae1f3d77141a79c90cac60"
+  "built_at_commit": "963960151985c59ee1870c666b81be71d0105dcd"
 }

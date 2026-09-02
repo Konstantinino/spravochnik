@@ -68,6 +68,7 @@ import {
   getUpdateStatus,
   onUpdateStatus,
 } from './updates'
+import { downloadMediaImage } from './media-download'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -398,6 +399,7 @@ function registerIpc(): void {
           parent_id?: number | null
           has_children?: boolean
           party?: 'supplier' | 'customer'
+          archived?: boolean
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
           image_display?: Record<string, number>
@@ -469,6 +471,45 @@ function registerIpc(): void {
                     : 'supplier',
             }
           : {}),
+      }
+
+      const oldArchived = Boolean(list[idx].archived)
+      const nextArchived =
+        payload.item.archived !== undefined ? Boolean(payload.item.archived) : oldArchived
+      if (nextArchived) {
+        list[idx].archived = true
+      } else {
+        delete list[idx].archived
+      }
+
+      function collectDescendants(rootId: number): number[] {
+        const byParent = new Map<number, number[]>()
+        for (const row of list) {
+          const pid = typeof row.parent_id === 'number' ? row.parent_id : null
+          const id = typeof row.id === 'number' ? row.id : null
+          if (pid == null || id == null) continue
+          const arr = byParent.get(pid) ?? []
+          arr.push(id)
+          byParent.set(pid, arr)
+        }
+        const stack = [...(byParent.get(rootId) ?? [])]
+        const seen = new Set<number>()
+        while (stack.length) {
+          const id = stack.pop()!
+          if (seen.has(id)) continue
+          seen.add(id)
+          for (const child of byParent.get(id) ?? []) stack.push(child)
+        }
+        return [...seen]
+      }
+
+      if (nextArchived !== oldArchived) {
+        for (const id of collectDescendants(payload.item.id)) {
+          const row = list.find((r) => r.id === id)
+          if (!row) continue
+          if (nextArchived) row.archived = true
+          else delete row.archived
+        }
       }
 
       if (payload.item.image_display !== undefined) {
@@ -635,6 +676,8 @@ function registerIpc(): void {
     }
     return ''
   })
+
+  ipcMain.handle('media:download', (_event, resolvedSrc: string) => downloadMediaImage(resolvedSrc))
 
   ipcMain.handle('updates:status', () => getUpdateStatus())
   ipcMain.handle('updates:check', () => checkForUpdates())

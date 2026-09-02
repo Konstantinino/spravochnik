@@ -1,15 +1,15 @@
-import type { SupportParty } from '../types'
-import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
+import type { TopicViewFilter } from '../types'
+import { TOPIC_VIEW_FILTER_LABELS } from '../types'
 
 interface SearchProps {
   value: string
   onChange: (value: string) => void
   canAdd?: boolean
   onAdd?: () => void
-  /** Техподдержка: фильтр Поставщик / Заказчик */
-  partyFilter?: SupportParty
-  onPartyFilterChange?: (party: SupportParty) => void
-  showPartyFilter?: boolean
+  listFilter?: TopicViewFilter
+  onListFilterChange?: (filter: TopicViewFilter) => void
+  filterOptions?: TopicViewFilter[]
+  showListFilter?: boolean
   searchInBody?: boolean
   onSearchInBodyChange?: (value: boolean) => void
 }
@@ -19,9 +19,10 @@ export function Search({
   onChange,
   canAdd,
   onAdd,
-  partyFilter,
-  onPartyFilterChange,
-  showPartyFilter,
+  listFilter,
+  onListFilterChange,
+  filterOptions = [],
+  showListFilter,
   searchInBody = false,
   onSearchInBodyChange,
 }: SearchProps) {
@@ -70,17 +71,17 @@ export function Search({
           <span>Искать также в тексте тем</span>
         </label>
       ) : null}
-      {showPartyFilter && partyFilter && onPartyFilterChange ? (
+      {showListFilter && listFilter && onListFilterChange && filterOptions.length > 0 ? (
         <label className="party-filter">
-          <span className="visually-hidden">Поставщик или заказчик</span>
+          <span className="visually-hidden">Фильтр тем</span>
           <select
-            value={partyFilter}
-            onChange={(e) => onPartyFilterChange(e.target.value as SupportParty)}
-            aria-label="Поставщик или заказчик"
+            value={listFilter}
+            onChange={(e) => onListFilterChange(e.target.value as TopicViewFilter)}
+            aria-label="Фильтр тем"
           >
-            {SUPPORT_PARTIES.map((p) => (
+            {filterOptions.map((p) => (
               <option key={p} value={p}>
-                {SUPPORT_PARTY_LABELS[p]}
+                {TOPIC_VIEW_FILTER_LABELS[p]}
               </option>
             ))}
           </select>

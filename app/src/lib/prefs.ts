@@ -1,7 +1,8 @@
-import type { DepartmentId } from '../types'
-import { DEPARTMENTS } from '../types'
+import type { DepartmentId, TopicViewFilter } from '../types'
+import { DEPARTMENTS, isTopicViewFilter } from '../types'
 
 const KEY_PREFIX = 'rest-info:department:'
+const FILTER_KEY_PREFIX = 'rest-info:list-filter:'
 const REMEMBER_KEY = 'rest-info:remember-logins'
 /** Legacy single-account key */
 const REMEMBER_KEY_LEGACY = 'rest-info:remember-login'
@@ -23,6 +24,31 @@ export function loadSavedDepartment(userId: string): DepartmentId | null {
 export function saveDepartment(userId: string, departmentId: DepartmentId): void {
   try {
     localStorage.setItem(KEY_PREFIX + userId, departmentId)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadSavedListFilter(
+  userId: string,
+  departmentId: DepartmentId,
+): TopicViewFilter | null {
+  try {
+    const raw = localStorage.getItem(`${FILTER_KEY_PREFIX}${userId}:${departmentId}`)
+    if (raw && isTopicViewFilter(raw)) return raw
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+export function saveListFilter(
+  userId: string,
+  departmentId: DepartmentId,
+  filter: TopicViewFilter,
+): void {
+  try {
+    localStorage.setItem(`${FILTER_KEY_PREFIX}${userId}:${departmentId}`, filter)
   } catch {
     /* ignore */
   }
@@ -84,6 +110,25 @@ export function upsertRememberedLogin(email: string, password: string): void {
     writeLogins([{ email: email.trim(), password }, ...prev])
   } catch {
     /* ignore */
+  }
+}
+
+/** Remove one saved login by email. Returns true if an entry was removed. */
+export function removeRememberedLogin(email: string): boolean {
+  try {
+    const normalized = normalizeEmail(email)
+    if (!normalized) return false
+    const prev = loadRememberedLogins()
+    const next = prev.filter((item) => normalizeEmail(item.email) !== normalized)
+    if (next.length === prev.length) return false
+    if (next.length === 0) {
+      localStorage.removeItem(REMEMBER_KEY)
+    } else {
+      writeLogins(next)
+    }
+    return true
+  } catch {
+    return false
   }
 }
 

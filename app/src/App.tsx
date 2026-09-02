@@ -7,9 +7,14 @@ import { TopicEditorModal } from './components/TopicEditorModal'
 import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
 import { SyncConflictModal } from './components/SyncConflictModal'
-import { getItems, filterItemsByParty, getItemParty } from './lib/data'
+import { getItems, filterItemsByView, getItemParty } from './lib/data'
 import { buildTopicSearchFilter } from './lib/search'
-import { loadSavedDepartment, saveDepartment } from './lib/prefs'
+import {
+  loadSavedDepartment,
+  saveDepartment,
+  loadSavedListFilter,
+  saveListFilter,
+} from './lib/prefs'
 import type {
   ConflictResolution,
   DepartmentId,
@@ -18,14 +23,35 @@ import type {
   ImageDisplayMap,
   PublicUser,
   SupportParty,
+  TopicViewFilter,
   SyncStatus,
 } from './types'
-import { DEPARTMENTS } from './types'
+import {
+  DEPARTMENTS,
+  DEPT_VIEW_FILTERS,
+  SUPPORT_VIEW_FILTERS,
+  isSupportParty,
+} from './types'
 
 const defaultSync: SyncStatus = {
   code: 'idle',
   label: 'Готово',
   hasPendingChanges: false,
+}
+
+function resolveListFilter(
+  userId: string,
+  departmentId: DepartmentId,
+  canEdit: boolean,
+): TopicViewFilter {
+  const saved = loadSavedListFilter(userId, departmentId)
+  if (saved === 'archive' && !canEdit) return 'all'
+  if (departmentId === 'support') {
+    if (saved === 'archive' || saved === 'all' || isSupportParty(saved)) return saved!
+    return 'all'
+  }
+  if (saved === 'archive' || saved === 'all') return saved
+  return 'all'
 }
 
 export default function App() {
@@ -36,7 +62,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [query, setQuery] = useState('')
   const [searchInBody, setSearchInBody] = useState(false)
-  const [supportParty, setSupportParty] = useState<SupportParty>('supplier')
+  const [listFilter, setListFilter] = useState<TopicViewFilter>('all')
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorMode, setEditorMode] = useState<'add' | 'edit'>('add')
   const [editorParentId, setEditorParentId] = useState<number | null>(null)
@@ -47,6 +73,7 @@ export default function App() {
   const [pushing, setPushing] = useState(false)
   const [busyLeft, setBusyLeft] = useState<number | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
+  const [navHistory, setNavHistory] = useState<number[]>([])
   const pushInFlight = useRef(false)
 
   useEffect(() => {
@@ -54,6 +81,8 @@ export default function App() {
       if (u) {
         const saved = loadSavedDepartment(u.id)
         if (saved) setDepartmentId(saved)
+        const canEditUser = u.role === 'editor' || u.role === 'admin'
+        setListFilter(resolveListFilter(u.id, saved ?? 'support', canEditUser))
       }
       setUser(u)
     })
@@ -73,15 +102,32 @@ export default function App() {
 
   function handleDepartmentChange(id: DepartmentId) {
     setDepartmentId(id)
-    setSupportParty('supplier')
-    if (user) saveDepartment(user.id, id)
+    setNavHistory([])
+    if (user) {
+      saveDepartment(user.id, id)
+      const canEditUser = user.role === 'editor' || user.role === 'admin'
+      setListFilter(resolveListFilter(user.id, id, canEditUser))
+    } else {
+      setListFilter('all')
+    }
   }
 
   function handleAuthenticated(u: PublicUser) {
     const saved = loadSavedDepartment(u.id)
+    const dept = saved ?? 'support'
     if (saved) setDepartmentId(saved)
     else setDepartmentId('support')
+    const canEditUser = u.role === 'editor' || u.role === 'admin'
+    setListFilter(resolveListFilter(u.id, dept, canEditUser))
     setUser(u)
+  }
+
+  function handleListFilterChange(filter: TopicViewFilter) {
+    setListFilter(filter)
+    setQuery('')
+    setSelectedId(null)
+    setNavHistory([])
+    if (user) saveListFilter(user.id, departmentId, filter)
   }
 
   const load = useCallback(async (id: DepartmentId) => {
@@ -195,15 +241,46 @@ export default function App() {
 
   const items: GuideItem[] = useMemo(() => (guide ? getItems(guide) : []), [guide])
 
-  const visibleItems: GuideItem[] = useMemo(() => {
-    if (departmentId !== 'support') return items
-    return filterItemsByParty(items, supportParty)
-  }, [items, departmentId, supportParty])
+  const canEdit = user?.role === 'editor' || user?.role === 'admin'
+  const isAdmin = user?.role === 'admin'
+
+  const visibleItems: GuideItem[] = useMemo(
+    () => filterItemsByView(items, listFilter),
+    [items, listFilter],
+  )
+
+  const filterOptions: TopicViewFilter[] = useMemo(() => {
+    const base =
+      departmentId === 'support' ? [...SUPPORT_VIEW_FILTERS] : [...DEPT_VIEW_FILTERS]
+    if (canEdit) base.push('archive')
+    return base
+  }, [departmentId, canEdit])
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
     [items, selectedId],
   )
+
+  function selectTopicFromSidebar(id: number) {
+    setNavHistory([])
+    setSelectedId(id)
+  }
+
+  function navigateToTopic(id: number) {
+    if (id === selectedId) return
+    setNavHistory((history) => (selectedId != null ? [...history, selectedId] : history))
+    setSelectedId(id)
+  }
+
+  function navigateBack() {
+    setNavHistory((history) => {
+      if (history.length === 0) return history
+      const next = [...history]
+      const prevId = next.pop()!
+      setSelectedId(prevId)
+      return next
+    })
+  }
 
   useEffect(() => {
     if (selectedId == null) return
@@ -216,9 +293,6 @@ export default function App() {
     () => buildTopicSearchFilter(visibleItems, query, { searchInBody }),
     [visibleItems, query, searchInBody],
   )
-
-  const canEdit = user?.role === 'editor' || user?.role === 'admin'
-  const isAdmin = user?.role === 'admin'
 
   const displaySyncStatus: SyncStatus = useMemo(() => {
     if (syncStatus.code === 'busy' && busyLeft != null) {
@@ -258,8 +332,13 @@ export default function App() {
       })
       setGuide(data)
       setSelectedId(payload.id)
-      if (payload.departmentId === 'support' && payload.party) {
-        setSupportParty(payload.party)
+      if (
+        payload.departmentId === 'support' &&
+        payload.party &&
+        listFilter !== 'all' &&
+        listFilter !== 'archive'
+      ) {
+        handleListFilterChange(payload.party)
       }
       return
     }
@@ -283,8 +362,13 @@ export default function App() {
       const newest = list.reduce((a, b) => (a.id > b.id ? a : b))
       setSelectedId(newest.id)
       setQuery('')
-      if (payload.departmentId === 'support' && payload.party) {
-        setSupportParty(payload.party)
+      if (
+        payload.departmentId === 'support' &&
+        payload.party &&
+        listFilter !== 'all' &&
+        listFilter !== 'archive'
+      ) {
+        handleListFilterChange(payload.party)
       }
     } else {
       setDepartmentId(payload.departmentId)
@@ -309,8 +393,30 @@ export default function App() {
       },
     })
     setGuide(data)
-    if (departmentId === 'support' && payload.party) {
-      setSupportParty(payload.party)
+    if (
+      departmentId === 'support' &&
+      payload.party &&
+      listFilter !== 'all' &&
+      listFilter !== 'archive'
+    ) {
+      handleListFilterChange(payload.party)
+    }
+  }
+
+  async function handleToggleArchive() {
+    if (!selected || !canEdit) return
+    const nextArchived = !selected.archived
+    const data = await window.spravochnik.updateItem({
+      departmentId,
+      item: {
+        ...selected,
+        archived: nextArchived,
+      },
+    })
+    setGuide(data)
+    if (nextArchived && listFilter !== 'archive') {
+      setSelectedId(null)
+      setNavHistory([])
     }
   }
 
@@ -334,6 +440,7 @@ export default function App() {
     })
     setGuide(data)
     setSelectedId(null)
+    setNavHistory([])
   }
 
   if (user === undefined) {
@@ -358,7 +465,7 @@ export default function App() {
       const parent = items.find((i) => i.id === editorParentId)
       if (parent) return getItemParty(parent)
     }
-    return supportParty
+    return isSupportParty(listFilter) ? listFilter : 'supplier'
   })()
 
   return (
@@ -384,13 +491,10 @@ export default function App() {
             canAdd={!!canEdit}
             searchInBody={searchInBody}
             onSearchInBodyChange={setSearchInBody}
-            showPartyFilter={departmentId === 'support'}
-            partyFilter={supportParty}
-            onPartyFilterChange={(party) => {
-              setSupportParty(party)
-              setQuery('')
-              setSelectedId(null)
-            }}
+            showListFilter
+            listFilter={listFilter}
+            filterOptions={filterOptions}
+            onListFilterChange={handleListFilterChange}
             onAdd={() => {
               setEditorMode('add')
               setEditorInitial(null)
@@ -407,7 +511,7 @@ export default function App() {
               <TopicList
                 items={visibleItems}
                 selectedId={selectedId}
-                onSelect={setSelectedId}
+                onSelect={selectTopicFromSidebar}
                 searchFilter={searchFilter}
               />
             )}
@@ -419,13 +523,17 @@ export default function App() {
           <Viewer
             item={selected}
             items={visibleItems}
+            allItems={items}
             departmentId={departmentId}
             canEdit={!!canEdit && !!selected}
             isAdmin={!!isAdmin && !!selected}
-            onSelect={setSelectedId}
+            canGoBack={navHistory.length > 0}
+            onBack={navigateBack}
+            onNavigateToTopic={navigateToTopic}
             onSave={handleInlineSave}
             onSaveImageDisplay={handleSaveImageDisplay}
             onDelete={handleDelete}
+            onToggleArchive={canEdit ? () => void handleToggleArchive() : undefined}
             onAddSubtopic={() => {
               if (!selected) return
               setEditorMode('add')

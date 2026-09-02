@@ -33,6 +33,12 @@ export interface SpravochnikApi {
     draftId?: string
   }) => Promise<{ markdownPath: string; url: string; relativeFsPath: string } | null>
   resolveMediaUrl: (relativePath: string, topicId?: number) => Promise<string>
+  downloadMediaImage: (resolvedSrc: string) => Promise<{
+    ok: boolean
+    error?: string
+    canceled?: boolean
+    path?: string
+  }>
   getDataPath: () => Promise<string>
 
   getCurrentUser: () => Promise<PublicUser | null>

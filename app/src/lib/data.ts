@@ -1,4 +1,4 @@
-import type { GuideItem, SupportParty } from '../types'
+import type { GuideItem, SupportParty, TopicViewFilter } from '../types'
 import { isSupportParty } from '../types'
 
 export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[] }): GuideItem[] {
@@ -10,8 +10,27 @@ export function getItemParty(item: GuideItem): SupportParty {
   return isSupportParty(item.party) ? item.party : 'supplier'
 }
 
-export function filterItemsByParty(items: GuideItem[], party: SupportParty): GuideItem[] {
-  return items.filter((item) => getItemParty(item) === party)
+export function isArchived(item: GuideItem): boolean {
+  return Boolean(item.archived)
+}
+
+/**
+ * Filter sidebar list.
+ * - archive: only archived
+ * - all / supplier / customer: exclude archived; party filter for support
+ */
+export function filterItemsByView(items: GuideItem[], filter: TopicViewFilter): GuideItem[] {
+  if (filter === 'archive') {
+    return items.filter((item) => isArchived(item))
+  }
+  const active = items.filter((item) => !isArchived(item))
+  if (filter === 'all') return active
+  return active.filter((item) => getItemParty(item) === filter)
+}
+
+/** @deprecated use filterItemsByView */
+export function filterItemsByParty(items: GuideItem[], party: TopicViewFilter): GuideItem[] {
+  return filterItemsByView(items, party)
 }
 
 export function buildTree(items: GuideItem[]): GuideItem[] {

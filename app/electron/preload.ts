@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('spravochnik', {
     ipcRenderer.invoke('save-topic-image-clipboard', payload),
   resolveMediaUrl: (relativePath: string, topicId?: number) =>
     ipcRenderer.invoke('resolve-media-url', relativePath, topicId),
+  downloadMediaImage: (resolvedSrc: string) => ipcRenderer.invoke('media:download', resolvedSrc),
   getDataPath: () => ipcRenderer.invoke('get-data-path'),
 
   getCurrentUser: () => ipcRenderer.invoke('auth:current-user'),

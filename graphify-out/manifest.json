@@ -12,10 +12,10 @@
     "semantic_hash": "48f62e0638397bef54e632b24f954c7d"
   },
   "app/electron/main.ts": {
-    "mtime": 1788334064.5742095,
-    "seen": 1788334605.0110288,
-    "ast_hash": "926a22f62b8f361775b552b725107282",
-    "semantic_hash": "926a22f62b8f361775b552b725107282"
+    "mtime": 1788336173.6263382,
+    "seen": 1788340173.4269326,
+    "ast_hash": "ab7363760b8ce172fad1de19a36bf9e5",
+    "semantic_hash": ""
   },
   "app/electron/paths.ts": {
     "mtime": 1788334064.5742095,
@@ -30,10 +30,10 @@
     "semantic_hash": "7a376ac96e45dc37eaf23c8fd059df8d"
   },
   "app/electron/preload.ts": {
-    "mtime": 1788334064.5742095,
-    "seen": 1788334605.0110319,
-    "ast_hash": "dff30a56486b798871c4bb6ee66187b7",
-    "semantic_hash": "dff30a56486b798871c4bb6ee66187b7"
+    "mtime": 1788335769.8951983,
+    "seen": 1788340173.4269402,
+    "ast_hash": "b98d54fc43422089567b84073ece4240",
+    "semantic_hash": ""
   },
   "app/electron/sync-base.ts": {
     "mtime": 1788334064.5752094,
@@ -114,16 +114,16 @@
     "semantic_hash": "453e88b5097b5b2e71df058cc0dabaa0"
   },
   "app/src/App.tsx": {
-    "mtime": 1788334064.5802095,
-    "seen": 1788334605.011044,
-    "ast_hash": "ba2c1d6a46bff2dc87851358b99247d8",
-    "semantic_hash": "ba2c1d6a46bff2dc87851358b99247d8"
+    "mtime": 1788336193.4724422,
+    "seen": 1788340173.4269595,
+    "ast_hash": "360372041d1ba276f724249cfae4c356",
+    "semantic_hash": ""
   },
   "app/src/components/AuthScreen.tsx": {
-    "mtime": 1788334064.5802095,
-    "seen": 1788334605.0110457,
-    "ast_hash": "e473c1b4855aac72c26bf6f67cb40e84",
-    "semantic_hash": "e473c1b4855aac72c26bf6f67cb40e84"
+    "mtime": 1788335641.149093,
+    "seen": 1788340173.426961,
+    "ast_hash": "95a4788388fc22af00cb1bedc50f15e0",
+    "semantic_hash": ""
   },
   "app/src/components/Header.tsx": {
     "mtime": 1788334064.5802095,
@@ -144,10 +144,10 @@
     "semantic_hash": "4d69dd93058226b6adf9a06f1967e3c9"
   },
   "app/src/components/Search.tsx": {
-    "mtime": 1788334064.5812094,
-    "seen": 1788334605.0110514,
-    "ast_hash": "5cc1b40ed39cf22e9c2689c40e8f17ff",
-    "semantic_hash": "5cc1b40ed39cf22e9c2689c40e8f17ff"
+    "mtime": 1788336158.773137,
+    "seen": 1788340173.426966,
+    "ast_hash": "95df39ba1116b0c7494c70da92192601",
+    "semantic_hash": ""
   },
   "app/src/components/SettingsPage.tsx": {
     "mtime": 1788334064.5812094,
@@ -174,16 +174,16 @@
     "semantic_hash": "9a07bc22c5349e6ecea6def8ecb449a7"
   },
   "app/src/components/Viewer.tsx": {
-    "mtime": 1788334064.5822096,
-    "seen": 1788334605.011056,
-    "ast_hash": "a839b6d0b75c0cd3eeeb60e9d9e34a39",
-    "semantic_hash": "a839b6d0b75c0cd3eeeb60e9d9e34a39"
+    "mtime": 1788340077.2303035,
+    "seen": 1788340173.4269726,
+    "ast_hash": "0d2d03c5fb0961f78ca674787b369bb1",
+    "semantic_hash": ""
   },
   "app/src/lib/data.ts": {
-    "mtime": 1788334064.5822096,
-    "seen": 1788334605.011057,
-    "ast_hash": "849fb982b9efe71b120047c85b71b871",
-    "semantic_hash": "849fb982b9efe71b120047c85b71b871"
+    "mtime": 1788336152.8593817,
+    "seen": 1788340173.426974,
+    "ast_hash": "c29686530a70211f4a4c89401fc78be3",
+    "semantic_hash": ""
   },
   "app/src/lib/findHighlight.ts": {
     "mtime": 1788334064.5832095,
@@ -198,16 +198,16 @@
     "semantic_hash": "aabc81ee2a9056aa5fc9420f89616c5b"
   },
   "app/src/lib/markdown.ts": {
-    "mtime": 1788334064.5832095,
-    "seen": 1788334605.0110595,
-    "ast_hash": "add83ffeac9b9cd557335fa4c1cb7888",
-    "semantic_hash": "add83ffeac9b9cd557335fa4c1cb7888"
+    "mtime": 1788335984.429143,
+    "seen": 1788340173.4269779,
+    "ast_hash": "98c6c54bbaae19230c37dcd962a0a8b1",
+    "semantic_hash": ""
   },
   "app/src/lib/prefs.ts": {
-    "mtime": 1788334064.5832095,
-    "seen": 1788334605.0110602,
-    "ast_hash": "4ddd10f0c30f99b6de313ad953ae6745",
-    "semantic_hash": "4ddd10f0c30f99b6de313ad953ae6745"
+    "mtime": 1788336155.1664426,
+    "seen": 1788340173.426979,
+    "ast_hash": "b3a753022f44a7ed4a3391698dc4e3c0",
+    "semantic_hash": ""
   },
   "app/src/lib/search.ts": {
     "mtime": 1788334064.5832095,
@@ -228,16 +228,16 @@
     "semantic_hash": "ae5ba6e2a7dd8eebbfdf240f4696ab7a"
   },
   "app/src/types.ts": {
-    "mtime": 1788334064.5842102,
-    "seen": 1788334605.0110636,
-    "ast_hash": "23caca0082b845bef5ebc7f551677314",
-    "semantic_hash": "23caca0082b845bef5ebc7f551677314"
+    "mtime": 1788336150.962172,
+    "seen": 1788340173.4269848,
+    "ast_hash": "8b011c5af1db4ffa283e3f8f3dfa0ab4",
+    "semantic_hash": ""
   },
   "app/src/vite-env.d.ts": {
-    "mtime": 1788334064.5842102,
-    "seen": 1788334605.0110643,
-    "ast_hash": "c184184cbbdbdc39e35eef5c02a0a859",
-    "semantic_hash": "c184184cbbdbdc39e35eef5c02a0a859"
+    "mtime": 1788335770.2641528,
+    "seen": 1788340173.426986,
+    "ast_hash": "1543301a37e741c476197d2401e8a3c7",
+    "semantic_hash": ""
   },
   "app/tsconfig.json": {
     "mtime": 1788334064.5842102,
@@ -315,6 +315,12 @@
     "mtime": 1788334064.5862105,
     "seen": 1788335204.6523676,
     "ast_hash": "75f34b17b6095e09d92150beed707f95",
+    "semantic_hash": ""
+  },
+  "app/electron/media-download.ts": {
+    "mtime": 1788335768.320309,
+    "seen": 1788340173.4269347,
+    "ast_hash": "3599dbfac36a376de7093c24b34f4233",
     "semantic_hash": ""
   }
 }

@@ -1,10 +1,10 @@
 {
   "0": "App.tsx",
   "1": "yandex-sync.ts",
-  "2": "auth-store.ts",
+  "2": "updates.ts",
   "3": "compilerOptions",
   "4": "App",
-  "5": "Viewer",
+  "5": "Viewer.tsx",
   "6": "paths.ts",
   "7": "package.json",
   "8": "compilerOptions",
@@ -13,6 +13,6 @@
   "11": "guide-merge.ts",
   "12": "dist-ascii.js",
   "13": "upload-update-manifest.js",
-  "14": "SettingsPage",
+  "14": "REST INFO",
   "15": "vite.config.ts"
 }

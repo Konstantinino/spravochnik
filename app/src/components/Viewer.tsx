@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { DepartmentId, GuideItem, ImageDisplayMap, SupportParty } from '../types'
@@ -11,7 +11,7 @@ import {
   normalizeImageDisplayKey,
   withImageScale,
 } from '../lib/imageDisplay'
-import { mediaSrcFromMarkdownUrl, isAllowedMarkdownImageSrc } from '../lib/markdown'
+import { mediaSrcFromMarkdownUrl, isAllowedMarkdownImageSrc, parseTopicLinkHref } from '../lib/markdown'
 import { focusCursor, insertAtCursor } from '../lib/textInsert'
 import { ImageScaleDialog } from './ImageScaleDialog'
 import { ParentTopicField } from './ParentTopicField'
@@ -19,10 +19,13 @@ import { ParentTopicField } from './ParentTopicField'
 interface ViewerProps {
   item: GuideItem | null
   items: GuideItem[]
+  allItems: GuideItem[]
   departmentId: DepartmentId
   canEdit: boolean
   isAdmin: boolean
-  onSelect: (id: number) => void
+  canGoBack: boolean
+  onBack: () => void
+  onNavigateToTopic: (id: number) => void
   onSave: (payload: {
     question: string
     answer: string
@@ -31,6 +34,7 @@ interface ViewerProps {
   }) => Promise<void>
   onSaveImageDisplay: (image_display: ImageDisplayMap | undefined) => Promise<void>
   onDelete: () => Promise<void>
+  onToggleArchive?: () => void
   onAddSubtopic: () => void
 }
 
@@ -51,13 +55,17 @@ type ScaleEditorState = {
 export function Viewer({
   item,
   items,
+  allItems,
   departmentId,
   canEdit,
   isAdmin,
-  onSelect,
+  canGoBack,
+  onBack,
+  onNavigateToTopic,
   onSave,
   onSaveImageDisplay,
   onDelete,
+  onToggleArchive,
   onAddSubtopic,
 }: ViewerProps) {
   const [editing, setEditing] = useState(false)
@@ -298,6 +306,24 @@ export function Viewer({
     })
   }
 
+  function openLightbox(resolvedSrc: string) {
+    setLightboxSrc(resolvedSrc)
+    setImgMenu(null)
+  }
+
+  async function downloadImage(resolvedSrc: string) {
+    setImgMenu(null)
+    setError(null)
+    try {
+      const result = await window.spravochnik.downloadMediaImage(resolvedSrc)
+      if (result.error && !result.canceled) {
+        setError(result.error)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось скачать изображение')
+    }
+  }
+
   function applyDraftScale(nextScale: number) {
     if (!scaleEditor) return
     displayDirtyRef.current = true
@@ -328,6 +354,29 @@ export function Viewer({
     await persistDisplay(map)
   }
 
+  function renderTopicLink(href: string | undefined, linkChildren: ReactNode) {
+    const topicId = parseTopicLinkHref(href)
+    if (topicId != null && allItems.some((entry) => entry.id === topicId)) {
+      return (
+        <a
+          href={href}
+          className="viewer-topic-link"
+          onClick={(e) => {
+            e.preventDefault()
+            onNavigateToTopic(topicId)
+          }}
+        >
+          {linkChildren}
+        </a>
+      )
+    }
+    return (
+      <a href={href} target="_blank" rel="noreferrer">
+        {linkChildren}
+      </a>
+    )
+  }
+
   function renderTopicImage(rawSrc: string, alt: string) {
     const key = normalizeImageDisplayKey(rawSrc)
     const resolved = mediaSrcFromMarkdownUrl(rawSrc, current.id)
@@ -344,6 +393,7 @@ export function Viewer({
             ? { width: `${scale}%`, maxWidth: 'none', height: 'auto' }
             : undefined
         }
+        onClick={() => openLightbox(resolved)}
         onContextMenu={(e) => openImageMenu(e, key, resolved)}
       />
     )
@@ -351,20 +401,17 @@ export function Viewer({
 
   return (
     <article className="viewer">
-      <div className="viewer__header">
-        {editing ? (
-          <input
-            className="viewer__title-input"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            aria-label="Название темы"
-          />
-        ) : (
-          <h1 className="viewer__title">{current.question}</h1>
-        )}
+      {!editing && (
+        <div className="viewer__toolbar">
+          <div className="viewer__toolbar-start">
+            {canGoBack && (
+              <button type="button" className="btn btn-secondary" onClick={onBack}>
+                ← Назад
+              </button>
+            )}
+          </div>
 
-        <div className="viewer__actions">
-          {!editing && (
+          <div className="viewer__actions">
             <button
               type="button"
               className="icon-btn--light"
@@ -379,32 +426,55 @@ export function Viewer({
                 />
               </svg>
             </button>
-          )}
 
-          {canEdit && !editing && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                closeFind()
-                setEditing(true)
-              }}
-            >
-              Изменить
-            </button>
-          )}
+            {canEdit && (
+              <>
+                <button type="button" className="btn btn-secondary" onClick={onAddSubtopic}>
+                  Добавить подтему
+                </button>
+                {onToggleArchive && (
+                  <button type="button" className="btn btn-secondary" onClick={onToggleArchive}>
+                    {current.archived ? 'Из архива' : 'В архив'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    closeFind()
+                    setEditing(true)
+                  }}
+                >
+                  Изменить
+                </button>
+              </>
+            )}
 
-          {isAdmin && !editing && (
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => void handleDelete()}
-              disabled={deleting}
-            >
-              {deleting ? 'Удаление…' : 'Удалить'}
-            </button>
-          )}
+            {isAdmin && (
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+              >
+                {deleting ? 'Удаление…' : 'Удалить'}
+              </button>
+            )}
+          </div>
         </div>
+      )}
+
+      <div className="viewer__header">
+        {editing ? (
+          <input
+            className="viewer__title-input"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            aria-label="Название темы"
+          />
+        ) : (
+          <h1 className="viewer__title">{current.question}</h1>
+        )}
       </div>
 
       {findOpen && !editing && (
@@ -454,14 +524,6 @@ export function Viewer({
         </div>
       )}
 
-      {canEdit && !editing && (
-        <div className="viewer__subtopic-bar">
-          <button type="button" className="btn btn-secondary" onClick={onAddSubtopic}>
-            Добавить подтему
-          </button>
-        </div>
-      )}
-
       {children.length > 0 && !editing && (
         <ul className="viewer-children">
           {children.map((child) => (
@@ -469,7 +531,7 @@ export function Viewer({
               <button
                 type="button"
                 className={`viewer-children__item${child.id === current.id ? ' is-selected' : ''}`}
-                onClick={() => onSelect(child.id)}
+                onClick={() => onNavigateToTopic(child.id)}
               >
                 {child.question || 'Без названия'}
               </button>
@@ -568,11 +630,7 @@ export function Viewer({
                   }
                   return renderTopicImage(raw, alt || '')
                 },
-                a: ({ href, children: linkChildren }) => (
-                  <a href={href} target="_blank" rel="noreferrer">
-                    {linkChildren}
-                  </a>
-                ),
+                a: ({ href, children: linkChildren }) => renderTopicLink(href, linkChildren),
               }}
             >
               {current.answer}
@@ -623,12 +681,17 @@ export function Viewer({
             type="button"
             className="image-ctx-menu__item"
             role="menuitem"
-            onClick={() => {
-              setLightboxSrc(imgMenu.resolvedSrc)
-              setImgMenu(null)
-            }}
+            onClick={() => openLightbox(imgMenu.resolvedSrc)}
           >
             Открыть фото на весь экран
+          </button>
+          <button
+            type="button"
+            className="image-ctx-menu__item"
+            role="menuitem"
+            onClick={() => void downloadImage(imgMenu.resolvedSrc)}
+          >
+            Скачать
           </button>
         </div>
       )}

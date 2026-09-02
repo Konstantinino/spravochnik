@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { PublicUser, SyncStatus } from '../types'
 import {
   loadRememberedLogins,
+  removeRememberedLogin,
   upsertRememberedLogin,
   type RememberedLogin,
 } from '../lib/prefs'
@@ -204,6 +205,20 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     setRememberMe(true)
   }
 
+  function forgetSavedLogin(item: RememberedLogin, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    removeRememberedLogin(item.email)
+    const next = loadRememberedLogins()
+    setSavedLogins(next)
+    if (email.trim().toLowerCase() === item.email.trim().toLowerCase()) {
+      setEmail('')
+      setPassword('')
+      setPasswordConfirm('')
+    }
+    if (next.length === 0) setEmailMenuOpen(false)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
@@ -353,13 +368,22 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             {emailMenuOpen && savedLogins.length > 0 && (
               <ul className="auth-email-menu" role="listbox">
                 {savedLogins.map((item) => (
-                  <li key={item.email}>
+                  <li key={item.email} className="auth-email-menu__row">
                     <button
                       type="button"
                       className="auth-email-menu__item"
                       onClick={() => pickSavedLogin(item)}
                     >
                       {item.email}
+                    </button>
+                    <button
+                      type="button"
+                      className="auth-email-menu__remove"
+                      onClick={(e) => forgetSavedLogin(item, e)}
+                      aria-label={`Удалить сохранённый вход ${item.email}`}
+                      title="Удалить сохранение"
+                    >
+                      ×
                     </button>
                   </li>
                 ))}

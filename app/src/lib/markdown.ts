@@ -35,3 +35,20 @@ export function isAllowedMarkdownImageSrc(url: string): boolean {
     /^https?:\/\//i.test(url)
   )
 }
+
+/** Internal topic link: `#123`, `#topic-123`, `topic:123`. Returns null if not a topic link. */
+export function parseTopicLinkHref(href: string | undefined): number | null {
+  if (!href) return null
+  const trimmed = href.trim()
+  const hashMatch = trimmed.match(/^#(?:topic-)?(\d+)$/i)
+  if (hashMatch) {
+    const id = Number(hashMatch[1])
+    return Number.isFinite(id) ? id : null
+  }
+  const topicMatch = trimmed.match(/^topic:(?:\/\/)?(\d+)$/i)
+  if (topicMatch) {
+    const id = Number(topicMatch[1])
+    return Number.isFinite(id) ? id : null
+  }
+  return null
+}

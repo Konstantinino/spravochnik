@@ -286,5 +286,35 @@
     "seen": 1788334605.0110712,
     "ast_hash": "5ab518c19a1fece2b2becb0ae07bf8a2",
     "semantic_hash": "5ab518c19a1fece2b2becb0ae07bf8a2"
+  },
+  "AGENTS.md": {
+    "mtime": 1788334627.8592002,
+    "seen": 1788335204.6523623,
+    "ast_hash": "2fea76e5ac95a1367ca05ba2a4970e7e",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1788334064.5722098,
+    "seen": 1788335204.6523643,
+    "ast_hash": "95ba42aa63ba95929f305e0a59cb2758",
+    "semantic_hash": ""
+  },
+  "app/README.md": {
+    "mtime": 1788334064.5732093,
+    "seen": 1788335204.6523657,
+    "ast_hash": "83c39bae9edd1bbf890aa29a51c3ea33",
+    "semantic_hash": ""
+  },
+  "app/index.html": {
+    "mtime": 1788334064.5762103,
+    "seen": 1788335204.6523664,
+    "ast_hash": "6065a40be9412d840d6a6da5025ec16a",
+    "semantic_hash": ""
+  },
+  "info.txt": {
+    "mtime": 1788334064.5862105,
+    "seen": 1788335204.6523676,
+    "ast_hash": "75f34b17b6095e09d92150beed707f95",
+    "semantic_hash": ""
   }
 }

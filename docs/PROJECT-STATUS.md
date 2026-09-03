@@ -8,7 +8,9 @@
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows: UI-правки 3 сент. (сортировка, ссылки/`+`-пикер, markdown, Setup **1.2.1**) — в `spravochnik-repo/`, graphify обновлён. Production: nginx `client_max_body_size` должен быть ≥120M для upload Setup (~81 МБ), иначе **413**.
+Локально на Windows: UI и роли 3 сент. (сортировка, ссылки/`+`-пикер, markdown, **вложение файлов до 10 МБ**, роль **owner**, место на сервере, Setup **1.2.1**) — в `spravochnik-repo/`, graphify обновлён. Production: nginx `client_max_body_size` должен быть ≥120M для upload Setup (~81 МБ), иначе **413**.
+
+**Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
 ---
 
@@ -22,7 +24,8 @@
 - [x] Media upload/download (лимит **120 МБ**; пути `updates/*` → `UPDATES_DIR`)
 - [x] Sync: `GET /sync/changes` (full + incremental)
 - [x] App updates: `GET /app/update`, download Setup.exe
-- [x] Admin: users, roles, whitelist, releases, **PUT /admin/users/:id** (имя/пароль)
+- [x] Admin: users, роли **owner / admin / editor / user**, whitelist, releases, **PUT /admin/users/:id**, **POST /admin/transfer-ownership**, **GET /admin/storage-stats** (только owner)
+- [x] Миграции `002_user_department.sql`, `003_owner_role.sql`
 - [x] `import-from-json.ts` — импорт из REST-INFO-export
 - [x] Docker Compose + nginx prod overlay (`client_max_body_size 120M`)
 - [x] `dev-local.ts` — embedded Postgres для Windows без Docker
@@ -34,7 +37,8 @@
 - [x] `sync-backend.ts` — server по умолчанию, yandex legacy
 - [x] AuthScreen: URL сервера
 - [x] Online CRUD → API, offline → queue
-- [x] SettingsPage: пользователи, роли, whitelist, **Изменить** (имя/пароль), скачать Setup
+- [x] SettingsPage: пользователи, роли (**админ выдаёт владелец**), whitelist, **Изменить** / **Удалить**, передача владения, скачать Setup
+- [x] Владелец: в настройках блок «Место на сервере» — объём по отделам (текст / фото / файлы)
 - [x] SyncConflictModal (side-by-side)
 - [x] Topic lock при редактировании
 - [x] Updates с сервера, **только онлайн**, без Яндекс.Диска
@@ -43,6 +47,7 @@
 - [x] Список тем и подтем — **алфавит** (`compareTopicsByTitle` в `data.ts`)
 - [x] Markdown: фон цитат `>` и блоков кода в цвет шапки (`--header-blue-soft`)
 - [x] Ссылки между темами: в режиме правки **⋮** → «Скопировать ссылку»; в тексте **`+`** → плавающий список тем у курсора (пробел после `+` отменяет до нового `+`); выделение + `+` — ссылка на выделенное; переход + **← Назад**
+- [x] Вложение файлов в текст темы (до **10 МБ**): кнопка «Вставить файл» рядом с фото; в просмотре — карточка файла (открыть / скачать), не картинка; exe/скрипты запрещены
 - [x] `serverUrl` / сессия в `%AppData%\rest-info\REST-INFO\settings.json` — **переживают** установку новой версии Setup
 - [x] Клиент **1.2.1** собран (`REST-INFO-Setup-1.2.1.exe`); публикация на production может упираться в nginx 413 до деплоя лимита 120M
 
@@ -89,7 +94,7 @@
 | Задеплоить nginx 120M + media `updates/` fix; залить Setup 1.2.1 | **Высокий** | Админ / программист |
 | Указать production URL в клиентах | Средний | Админ |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
-| Wire admin IPC напрямую на server API (не queue) | Низкий | Dev |
+| Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |
 | Progress bar full media sync | Низкий | Dev |
 | Migration wizard yandexToken → serverUrl | Низкий | Dev |
 | E2E по testing-checklist на production | Средний | После deploy |

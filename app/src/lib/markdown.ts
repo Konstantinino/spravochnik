@@ -3,6 +3,7 @@ export function isTelegramFileId(value: string): boolean {
   if (!value) return false
   if (value.startsWith('media/')) return false
   if (value.startsWith('images/')) return false
+  if (value.startsWith('files/')) return false
   if (value.startsWith('spravochnik://')) return false
   if (/^https?:\/\//i.test(value)) return false
   if (/^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('./') || value.startsWith('../')) {
@@ -12,16 +13,16 @@ export function isTelegramFileId(value: string): boolean {
 }
 
 /**
- * Resolve markdown image src for display.
+ * Resolve markdown image/file src for display.
  * - spravochnik://… / media/… / http(s) — as-is (media → protocol)
- * - images/… — needs topicId → spravochnik://media/{topicId}/images/…
+ * - images/… or files/… — needs topicId → spravochnik://media/{topicId}/…
  */
 export function mediaSrcFromMarkdownUrl(url: string, topicId?: number | null): string {
   if (!url) return url
   if (url.startsWith('spravochnik://')) return url
   if (/^https?:\/\//i.test(url)) return url
   if (url.startsWith('media/')) return `spravochnik://${url}`
-  if (url.startsWith('images/') && topicId != null) {
+  if ((url.startsWith('images/') || url.startsWith('files/')) && topicId != null) {
     return `spravochnik://media/${topicId}/${url}`
   }
   return url
@@ -34,6 +35,23 @@ export function isAllowedMarkdownImageSrc(url: string): boolean {
     url.startsWith('spravochnik://') ||
     /^https?:\/\//i.test(url)
   )
+}
+
+/** Topic file attachment: `files/uuid.pdf`, `media/12/files/…`, `spravochnik://media/12/files/…`. */
+export function parseFileAttachmentHref(href: string | undefined): { storedName: string } | null {
+  if (!href) return null
+  const cleaned = href.replace(/\\/g, '/').replace(/^\/+/, '').trim()
+  const match = cleaned.match(/^(?:spravochnik:\/\/)?(?:media\/(?:_draft\/[^/]+|\d+)\/)?files\/([^/?#\s]+)$/i)
+  if (!match) return null
+  const storedName = match[1]
+  if (!storedName || storedName.includes('..') || storedName.includes('/')) return null
+  return { storedName }
+}
+
+/** Markdown snippet for an attached file: `[contract.pdf](files/uuid.pdf)`. */
+export function formatFileMarkdownLink(originalName: string, markdownPath: string): string {
+  const label = escapeMdLinkLabel(originalName.trim() || 'Файл')
+  return `[${label}](${markdownPath})`
 }
 
 /** Internal topic link: `#123`, `#topic-123`, `topic:123`. Returns null if not a topic link. */

@@ -1,12 +1,24 @@
 import { Router } from 'express'
-import { query, bumpGlobalVersion } from '../db/pool.js'
-import { generateSalt, hashPassword, isOwnerEmail, normalizeEmail } from '../lib/auth-utils.js'
+import type pg from 'pg'
+import { query, bumpGlobalVersion, withTransaction } from '../db/pool.js'
+import {
+  generateSalt,
+  hashPassword,
+  isOwnerRole,
+  isWorkDepartmentId,
+  normalizeEmail,
+  normalizeWorkDepartmentId,
+  parseUserRole,
+  type UserRole,
+  type WorkDepartmentId,
+} from '../lib/auth-utils.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
+import { DEPARTMENTS } from '../lib/topics.js'
 
 const BOOTSTRAP_ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'kostya.alone18@yandex.ru'
 
 export const adminRouter = Router()
-adminRouter.use(authMiddleware, requireRole('admin'))
+adminRouter.use(authMiddleware, requireRole('admin', 'owner'))
 
 function param(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value
@@ -17,29 +29,93 @@ function toPublicUser(row: {
   name: string
   email: string
   role: string
+  department_id?: string | null
 }): {
   id: string
   name: string
   email: string
-  role: string
+  role: UserRole
+  departmentId: WorkDepartmentId
   isOwner?: boolean
 } {
-  const owner = isOwnerEmail(row.email, BOOTSTRAP_ADMIN_EMAIL)
+  const role = parseUserRole(row.role)
   return {
     id: row.id,
     name: row.name,
     email: row.email,
-    role: owner ? 'admin' : row.role,
-    ...(owner ? { isOwner: true } : {}),
+    role,
+    departmentId: normalizeWorkDepartmentId(row.department_id),
+    ...(isOwnerRole(role) ? { isOwner: true } : {}),
   }
+}
+
+type WhitelistRow = { email: string; department_id: string }
+
+function toWhitelistEntry(row: WhitelistRow): { email: string; departmentId: WorkDepartmentId } {
+  return {
+    email: row.email,
+    departmentId: normalizeWorkDepartmentId(row.department_id),
+  }
+}
+
+async function fetchWhitelist(): Promise<{ email: string; departmentId: WorkDepartmentId }[]> {
+  const result = await query<WhitelistRow>(
+    'SELECT email, department_id FROM whitelist ORDER BY email',
+  )
+  return result.rows.map(toWhitelistEntry)
+}
+
+async function fetchUsers() {
+  const all = await query<{
+    id: string
+    name: string
+    email: string
+    role: string
+    department_id: string
+  }>('SELECT id, name, email, role, department_id FROM users ORDER BY created_at')
+  return all.rows.map(toPublicUser)
+}
+
+async function fetchOwner(): Promise<{ id: string; email: string } | null> {
+  const result = await query<{ id: string; email: string }>(
+    'SELECT id, email FROM users WHERE role = $1 LIMIT 1',
+    ['owner'],
+  )
+  return result.rows[0] ?? null
+}
+
+async function transferOwnershipInTx(
+  client: pg.PoolClient,
+  currentOwnerId: string,
+  successorId: string,
+): Promise<void> {
+  if (currentOwnerId === successorId) {
+    throw Object.assign(new Error('Нельзя передать владение самому себе'), { status: 400 })
+  }
+  const successor = await client.query<{ id: string; email: string; department_id: string }>(
+    'SELECT id, email, department_id FROM users WHERE id = $1',
+    [successorId],
+  )
+  if (!successor.rows[0]) {
+    throw Object.assign(new Error('Пользователь для передачи владения не найден'), { status: 404 })
+  }
+  await client.query(`UPDATE users SET role = 'admin' WHERE id = $1 AND role = 'owner'`, [
+    currentOwnerId,
+  ])
+  await client.query(`UPDATE users SET role = 'owner' WHERE id = $1`, [successorId])
+  await client.query(
+    `INSERT INTO whitelist (email, department_id) VALUES ($1, $2)
+     ON CONFLICT (email) DO NOTHING`,
+    [
+      normalizeEmail(successor.rows[0].email),
+      normalizeWorkDepartmentId(successor.rows[0].department_id),
+    ],
+  )
 }
 
 adminRouter.get('/users', async (_req, res) => {
   try {
-    const result = await query<{ id: string; name: string; email: string; role: string }>(
-      'SELECT id, name, email, role FROM users ORDER BY created_at',
-    )
-    res.json({ users: result.rows.map(toPublicUser) })
+    res.json({ users: await fetchUsers() })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
@@ -48,39 +124,77 @@ adminRouter.get('/users', async (_req, res) => {
 
 adminRouter.put('/users/:userId/role', async (req: AuthRequest, res) => {
   try {
+    const actor = req.user!
     const userId = param(req.params.userId)
-    const role = String(req.body.role ?? '')
+    const role = parseUserRole(req.body.role)
+    const requested = String(req.body.role ?? '')
 
-    if (role === 'admin') {
-      res.status(400).json({ error: 'Роль админа закреплена за владельцем' })
+    if (requested === 'owner' || role === 'owner') {
+      res.status(400).json({ error: 'Владение передаётся отдельным действием' })
       return
     }
-    if (role !== 'user' && role !== 'editor') {
+    if (requested !== 'user' && requested !== 'editor' && requested !== 'admin') {
       res.status(400).json({ error: 'Недопустимая роль' })
       return
     }
 
-    const userRes = await query<{ email: string }>('SELECT email FROM users WHERE id = $1', [
-      userId,
-    ])
+    const userRes = await query<{ id: string; email: string; role: string }>(
+      'SELECT id, email, role FROM users WHERE id = $1',
+      [userId],
+    )
     const user = userRes.rows[0]
     if (!user) {
       res.status(404).json({ error: 'Пользователь не найден' })
       return
     }
-    if (isOwnerEmail(user.email, BOOTSTRAP_ADMIN_EMAIL)) {
+    if (isOwnerRole(user.role)) {
       res.status(400).json({ error: 'Нельзя менять роль владельца' })
+      return
+    }
+    if (role === 'admin' && !isOwnerRole(actor.role)) {
+      res.status(403).json({ error: 'Назначить админа может только владелец' })
+      return
+    }
+    if (user.role === 'admin' && role !== 'admin' && !isOwnerRole(actor.role)) {
+      res.status(403).json({ error: 'Снять роль админа может только владелец' })
       return
     }
 
     await query('UPDATE users SET role = $1 WHERE id = $2', [role, userId])
     await bumpGlobalVersion()
 
-    const all = await query<{ id: string; name: string; email: string; role: string }>(
-      'SELECT id, name, email, role FROM users ORDER BY created_at',
-    )
-    res.json({ users: all.rows.map(toPublicUser) })
+    res.json({ users: await fetchUsers() })
   } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка' })
+  }
+})
+
+adminRouter.post('/transfer-ownership', async (req: AuthRequest, res) => {
+  try {
+    const actor = req.user!
+    if (!isOwnerRole(actor.role)) {
+      res.status(403).json({ error: 'Передать владение может только владелец' })
+      return
+    }
+    const successorId = String(req.body.userId ?? req.body.successorId ?? '').trim()
+    if (!successorId) {
+      res.status(400).json({ error: 'Укажите пользователя, которому передаёте владение' })
+      return
+    }
+
+    await withTransaction(async (client) => {
+      await transferOwnershipInTx(client, actor.id, successorId)
+      await bumpGlobalVersion(client)
+    })
+
+    res.json({ users: await fetchUsers() })
+  } catch (err) {
+    const status = (err as { status?: number }).status
+    if (status === 400 || status === 404) {
+      res.status(status).json({ error: (err as Error).message })
+      return
+    }
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
   }
@@ -88,16 +202,23 @@ adminRouter.put('/users/:userId/role', async (req: AuthRequest, res) => {
 
 adminRouter.put('/users/:userId', async (req: AuthRequest, res) => {
   try {
+    const actor = req.user!
     const userId = param(req.params.userId)
     const nameRaw = req.body.name
     const passwordRaw = req.body.password
+    const departmentRaw = req.body.departmentId ?? req.body.department_id
 
-    const userRes = await query<{ email: string }>('SELECT email FROM users WHERE id = $1', [
-      userId,
-    ])
+    const userRes = await query<{ id: string; email: string; role: string }>(
+      'SELECT id, email, role FROM users WHERE id = $1',
+      [userId],
+    )
     const user = userRes.rows[0]
     if (!user) {
       res.status(404).json({ error: 'Пользователь не найден' })
+      return
+    }
+    if (isOwnerRole(user.role) && actor.id !== user.id) {
+      res.status(403).json({ error: 'Владельца может изменить только он сам' })
       return
     }
 
@@ -128,6 +249,15 @@ adminRouter.put('/users/:userId', async (req: AuthRequest, res) => {
       params.push(salt)
     }
 
+    if (departmentRaw !== undefined) {
+      if (!isWorkDepartmentId(departmentRaw)) {
+        res.status(400).json({ error: 'Недопустимый отдел' })
+        return
+      }
+      updates.push(`department_id = $${paramIdx++}`)
+      params.push(departmentRaw)
+    }
+
     if (updates.length === 0) {
       res.status(400).json({ error: 'Нечего обновлять' })
       return
@@ -135,12 +265,20 @@ adminRouter.put('/users/:userId', async (req: AuthRequest, res) => {
 
     params.push(userId)
     await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIdx}`, params)
+
+    if (departmentRaw !== undefined && isWorkDepartmentId(departmentRaw)) {
+      const email = normalizeEmail(user.email)
+      await query(
+        `INSERT INTO whitelist (email, department_id) VALUES ($1, $2)
+         ON CONFLICT (email) DO UPDATE SET department_id = EXCLUDED.department_id`,
+        [email, departmentRaw],
+      )
+      console.log(`[admin] user ${userId} department -> ${departmentRaw}`)
+    }
+
     await bumpGlobalVersion()
 
-    const all = await query<{ id: string; name: string; email: string; role: string }>(
-      'SELECT id, name, email, role FROM users ORDER BY created_at',
-    )
-    res.json({ users: all.rows.map(toPublicUser) })
+    res.json({ users: await fetchUsers(), whitelist: await fetchWhitelist() })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
@@ -149,17 +287,41 @@ adminRouter.put('/users/:userId', async (req: AuthRequest, res) => {
 
 adminRouter.delete('/users/:userId', async (req: AuthRequest, res) => {
   try {
+    const actor = req.user!
     const userId = param(req.params.userId)
-    const userRes = await query<{ email: string }>('SELECT email FROM users WHERE id = $1', [
-      userId,
-    ])
+    const successorId = String(req.body?.successorId ?? '').trim()
+    const userRes = await query<{ id: string; email: string; role: string }>(
+      'SELECT id, email, role FROM users WHERE id = $1',
+      [userId],
+    )
     const user = userRes.rows[0]
     if (!user) {
       res.status(404).json({ error: 'Пользователь не найден' })
       return
     }
-    if (isOwnerEmail(user.email, BOOTSTRAP_ADMIN_EMAIL)) {
-      res.status(400).json({ error: 'Нельзя удалить владельца' })
+
+    if (isOwnerRole(user.role)) {
+      if (actor.id !== user.id) {
+        res.status(403).json({ error: 'Удалить владельца может только он сам' })
+        return
+      }
+      if (!successorId) {
+        res.status(400).json({
+          error: 'Сначала назначьте другого пользователя владельцем',
+        })
+        return
+      }
+      const email = normalizeEmail(user.email)
+      await withTransaction(async (client) => {
+        await transferOwnershipInTx(client, user.id, successorId)
+        await client.query('DELETE FROM users WHERE id = $1', [userId])
+        await client.query(
+          'INSERT INTO removed_emails (email) VALUES ($1) ON CONFLICT DO NOTHING',
+          [email],
+        )
+        await bumpGlobalVersion(client)
+      })
+      res.json({ users: await fetchUsers() })
       return
     }
 
@@ -168,11 +330,13 @@ adminRouter.delete('/users/:userId', async (req: AuthRequest, res) => {
     await query('INSERT INTO removed_emails (email) VALUES ($1) ON CONFLICT DO NOTHING', [email])
     await bumpGlobalVersion()
 
-    const all = await query<{ id: string; name: string; email: string; role: string }>(
-      'SELECT id, name, email, role FROM users ORDER BY created_at',
-    )
-    res.json({ users: all.rows.map(toPublicUser) })
+    res.json({ users: await fetchUsers() })
   } catch (err) {
+    const status = (err as { status?: number }).status
+    if (status === 400 || status === 404) {
+      res.status(status).json({ error: (err as Error).message })
+      return
+    }
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
   }
@@ -180,8 +344,7 @@ adminRouter.delete('/users/:userId', async (req: AuthRequest, res) => {
 
 adminRouter.get('/whitelist', async (_req, res) => {
   try {
-    const result = await query<{ email: string }>('SELECT email FROM whitelist ORDER BY email')
-    res.json({ whitelist: result.rows.map((r) => r.email) })
+    res.json({ whitelist: await fetchWhitelist() })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
@@ -190,25 +353,45 @@ adminRouter.get('/whitelist', async (_req, res) => {
 
 adminRouter.put('/whitelist', async (req, res) => {
   try {
-    const emails = Array.isArray(req.body.emails) ? req.body.emails : []
-    const cleaned = Array.from(
-      new Set(
-        emails
-          .map((e: unknown) => String(e).trim().toLowerCase())
-          .filter((e: string) => e && e.includes('@')),
-      ),
-    )
-    if (!cleaned.includes(normalizeEmail(BOOTSTRAP_ADMIN_EMAIL))) {
-      cleaned.push(normalizeEmail(BOOTSTRAP_ADMIN_EMAIL))
+    const raw = Array.isArray(req.body.emails)
+      ? req.body.emails
+      : Array.isArray(req.body.whitelist)
+        ? req.body.whitelist
+        : []
+
+    const byEmail = new Map<string, WorkDepartmentId>()
+    for (const item of raw) {
+      if (typeof item === 'string') {
+        const email = normalizeEmail(item)
+        if (email.includes('@')) byEmail.set(email, 'support')
+        continue
+      }
+      if (item && typeof item === 'object') {
+        const email = normalizeEmail(String((item as { email?: unknown }).email ?? ''))
+        if (!email.includes('@')) continue
+        byEmail.set(
+          email,
+          normalizeWorkDepartmentId((item as { departmentId?: unknown }).departmentId),
+        )
+      }
+    }
+
+    const owner = await fetchOwner()
+    const mustKeep = owner ? normalizeEmail(owner.email) : normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
+    if (!byEmail.has(mustKeep)) {
+      byEmail.set(mustKeep, 'support')
     }
 
     await query('DELETE FROM whitelist')
-    for (const email of cleaned) {
-      await query('INSERT INTO whitelist (email) VALUES ($1) ON CONFLICT DO NOTHING', [email])
+    for (const [email, departmentId] of byEmail) {
+      await query(
+        'INSERT INTO whitelist (email, department_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [email, departmentId],
+      )
     }
     await bumpGlobalVersion()
 
-    res.json({ whitelist: cleaned })
+    res.json({ whitelist: await fetchWhitelist() })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
@@ -222,10 +405,14 @@ adminRouter.post('/whitelist', async (req, res) => {
       res.status(400).json({ error: 'Некорректная почта' })
       return
     }
-    await query('INSERT INTO whitelist (email) VALUES ($1) ON CONFLICT DO NOTHING', [email])
+    const departmentId = normalizeWorkDepartmentId(req.body.departmentId)
+    await query(
+      `INSERT INTO whitelist (email, department_id) VALUES ($1, $2)
+       ON CONFLICT (email) DO UPDATE SET department_id = EXCLUDED.department_id`,
+      [email, departmentId],
+    )
     await bumpGlobalVersion()
-    const result = await query<{ email: string }>('SELECT email FROM whitelist ORDER BY email')
-    res.json({ whitelist: result.rows.map((r) => r.email) })
+    res.json({ whitelist: await fetchWhitelist() })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
@@ -234,15 +421,18 @@ adminRouter.post('/whitelist', async (req, res) => {
 
 adminRouter.delete('/whitelist/:email', async (req, res) => {
   try {
-    const email = normalizeEmail(decodeURIComponent(req.params.email))
-    if (email === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)) {
-      res.status(400).json({ error: 'Нельзя удалить почту основного админа' })
+    const email = normalizeEmail(decodeURIComponent(param(req.params.email)))
+    const owner = await fetchOwner()
+    const protectedEmail = owner
+      ? normalizeEmail(owner.email)
+      : normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
+    if (email === protectedEmail) {
+      res.status(400).json({ error: 'Нельзя удалить почту владельца' })
       return
     }
     await query('DELETE FROM whitelist WHERE email = $1', [email])
     await bumpGlobalVersion()
-    const result = await query<{ email: string }>('SELECT email FROM whitelist ORDER BY email')
-    res.json({ whitelist: result.rows.map((r) => r.email) })
+    res.json({ whitelist: await fetchWhitelist() })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
@@ -271,5 +461,137 @@ adminRouter.post('/releases', async (req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
+  }
+})
+
+function toByteCount(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.round(value))
+  if (typeof value === 'string' && value.trim()) {
+    const n = Number(value)
+    if (Number.isFinite(n)) return Math.max(0, Math.round(n))
+  }
+  return 0
+}
+
+adminRouter.get('/storage-stats', requireRole('owner'), async (_req, res) => {
+  try {
+    const textResult = await query<{ department_id: string; bytes: string | number }>(
+      `SELECT department_id,
+              COALESCE(SUM(
+                octet_length(COALESCE(question, '')) + octet_length(COALESCE(answer, ''))
+              ), 0) AS bytes
+         FROM topics
+        WHERE deleted_at IS NULL
+        GROUP BY department_id`,
+    )
+
+    const mediaResult = await query<{
+      department_id: string | null
+      kind: 'photos' | 'files'
+      bytes: string | number
+    }>(
+      `WITH parsed AS (
+         SELECT
+           COALESCE(m.size_bytes, 0) AS size_bytes,
+           NULLIF(m.department_id, '') AS media_dept,
+           CASE
+             WHEN m.relative_path ~ '(^|/)images/' THEN 'photos'
+             WHEN m.relative_path ~* '\\.(png|jpe?g|gif|webp|bmp)$' THEN 'photos'
+             ELSE 'files'
+           END AS kind,
+           COALESCE(
+             m.topic_id,
+             NULLIF((regexp_match(m.relative_path, '^media/([0-9]+)/'))[1], '')::int
+           ) AS parsed_topic_id
+         FROM media_files m
+         WHERE m.deleted_at IS NULL
+           AND m.relative_path NOT LIKE 'media/_draft/%'
+           AND m.relative_path NOT LIKE 'updates/%'
+       ),
+       resolved AS (
+         SELECT
+           p.kind,
+           p.size_bytes,
+           COALESCE(p.media_dept, t.department_id) AS department_id
+         FROM parsed p
+         LEFT JOIN LATERAL (
+           SELECT department_id
+             FROM topics
+            WHERE deleted_at IS NULL
+              AND id = p.parsed_topic_id
+            ORDER BY CASE WHEN department_id = p.media_dept THEN 0 ELSE 1 END
+            LIMIT 1
+         ) t ON true
+       )
+       SELECT department_id, kind, SUM(size_bytes) AS bytes
+         FROM resolved
+        GROUP BY department_id, kind`,
+    )
+
+    const deptIds = Object.keys(DEPARTMENTS) as Array<keyof typeof DEPARTMENTS>
+    const byId = new Map(
+      deptIds.map((id) => [
+        id,
+        {
+          id,
+          label: DEPARTMENTS[id].label,
+          textBytes: 0,
+          photoBytes: 0,
+          fileBytes: 0,
+          totalBytes: 0,
+        },
+      ]),
+    )
+
+    let unassignedPhotoBytes = 0
+    let unassignedFileBytes = 0
+
+    for (const row of textResult.rows) {
+      const entry = byId.get(row.department_id as keyof typeof DEPARTMENTS)
+      if (entry) entry.textBytes = toByteCount(row.bytes)
+    }
+
+    for (const row of mediaResult.rows) {
+      const bytes = toByteCount(row.bytes)
+      const entry = row.department_id
+        ? byId.get(row.department_id as keyof typeof DEPARTMENTS)
+        : undefined
+      if (entry) {
+        if (row.kind === 'photos') entry.photoBytes += bytes
+        else entry.fileBytes += bytes
+      } else if (row.kind === 'photos') {
+        unassignedPhotoBytes += bytes
+      } else {
+        unassignedFileBytes += bytes
+      }
+    }
+
+    const departments = deptIds.map((id) => {
+      const entry = byId.get(id)!
+      entry.totalBytes = entry.textBytes + entry.photoBytes + entry.fileBytes
+      return entry
+    })
+
+    const totalBytes =
+      departments.reduce((sum, d) => sum + d.totalBytes, 0) +
+      unassignedPhotoBytes +
+      unassignedFileBytes
+
+    res.json({
+      totalBytes,
+      departments,
+      ...(unassignedPhotoBytes + unassignedFileBytes > 0
+        ? {
+            unassigned: {
+              photoBytes: unassignedPhotoBytes,
+              fileBytes: unassignedFileBytes,
+              totalBytes: unassignedPhotoBytes + unassignedFileBytes,
+            },
+          }
+        : {}),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка расчёта места' })
   }
 })

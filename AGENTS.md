@@ -53,11 +53,12 @@ graphify update .
 
 | Файл | Назначение |
 |---|---|
-| `main.ts` | IPC, auth, CRUD, admin |
+| `main.ts` | IPC, auth, CRUD, admin, storage-stats |
 | `server-api.ts` | HTTP-клиент к REST API |
 | `server-sync.ts` | pull/push, конфликты, очередь |
 | `sync-backend.ts` | server vs yandex по `STORAGE_BACKEND` |
 | `auth-store.ts` | accounts.json, settings, сессия |
+| `topic-media.ts` | фото темы + вложения файлов (до 10 МБ) |
 | `updates.ts` | проверка/скачивание обновлений с сервера |
 | `export-for-server.ts` | упаковка данных (CLI, не UI) |
 
@@ -67,7 +68,7 @@ graphify update .
 |---|---|
 | `index.ts` | Express app, роуты |
 | `routes/auth.ts` | login, register, JWT |
-| `routes/admin.ts` | users, whitelist, releases, PUT users (имя/пароль) |
+| `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner) |
 | `routes/topics.ts` | CRUD тем, блокировки |
 | `routes/sync.ts` | GET /sync/changes |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
@@ -83,13 +84,13 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | Файл | Назначение |
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
-| `SettingsPage.tsx` | admin: пользователи, whitelist, скачать Setup |
-| `Viewer.tsx`, `Header.tsx` | просмотр/правка темы; ⋮ → копия ссылки; ← Назад |
+| `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере по отделам |
+| `Viewer.tsx`, `Header.tsx` | просмотр/правка темы; ⋮ → копия ссылки; ← Назад; вложение файлов |
 | `TopicLinkPicker.tsx` | плавающий выбор темы по `+` у курсора |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
 | `TopicList.tsx` | дерево тем (корни через `buildTree`) |
 | `lib/data.ts` | фильтры, `compareTopicsByTitle`, children |
-| `lib/markdown.ts` | media src, `parseTopicLinkHref`, формат ссылки темы |
+| `lib/markdown.ts` | media src, ссылки тем, вложения `files/` |
 | `lib/textInsert.ts` | вставка / `+query` / обёртка выделения ссылкой |
 | `lib/textareaCaret.ts` | координаты каретки для пикера |
 | `styles.css` | UI; markdown blockquote/pre — `--header-blue-soft` |
@@ -151,15 +152,18 @@ npm run dist:ascii
 ## Владелец / bootstrap
 
 - Email: `kostya.alone18@yandex.ru` (env `BOOTSTRAP_ADMIN_EMAIL`)
-- Авто-admin, всегда в whitelist
+- Первый владелец: роль `owner` (не `admin`), всегда в whitelist
+- Владелец может выдавать роль `admin` другим; править/удалять владельца может только он сам
+- Удаление владельца — только после передачи владения другому пользователю (`POST /admin/transfer-ownership` или `DELETE` с `successorId`)
 
 ## Известные проблемы
 
 1. **Windows embedded Postgres (WIN1251):** импорт `templates.json` с emoji может падать локально; в Docker/Linux — OK.
-2. **Локальный dev-сервер ≠ production:** `127.0.0.1:3000` содержит тестовые данные; полный снимок — `REST-INFO-export/`.
-3. **Admin IPC** (роли, whitelist): частично local + queue, не все операции идут напрямую на API.
-4. **`REST-INFO-export/`** в `.gitignore` — не коммитить (пароли в accounts.json).
+2. **Локальный dev-сервер ≠ production:** `127.0.0.1:3000` содержит тестовые данные; полный снимок — `REST-INFO-export/`. Правка темы с production-кэшем при URL локального сервера → «тема не найдена».
+3. **Admin IPC** (whitelist set/remove): частично local + queue; роли, удаление пользователя, передача владения и **место на сервере** идут на API онлайн.
+4. **`REST-INFO-export/`** в `.gitignore` — не коммитить (пароли в accounts.json). Не коммитить `REST-INFO-export.rar` / `.zip`.
 5. **Incremental sync:** исправлен баг обнуления users; merge вместо replace.
+6. **Оффлайн-удаление темы** (admin/owner): в очередь `delete_topic`; «Синхронизировать» удаляет на сервере вместе с подтемами.
 
 ## Правила для агента
 

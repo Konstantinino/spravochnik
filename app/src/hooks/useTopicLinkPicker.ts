@@ -6,7 +6,7 @@ import {
   replaceRangeWithTopicLink,
 } from '../lib/textInsert'
 import { clampPickerPosition, getTextareaCaretRect } from '../lib/textareaCaret'
-import type { TopicLinkPickerState } from './TopicLinkPicker'
+import type { TopicLinkPickerState } from '../components/TopicLinkPicker'
 
 export function useTopicLinkPicker(textareaRef: React.RefObject<HTMLTextAreaElement | null>) {
   const [linkPicker, setLinkPicker] = useState<TopicLinkPickerState | null>(null)
@@ -77,7 +77,7 @@ export function useTopicLinkPicker(textareaRef: React.RefObject<HTMLTextAreaElem
   )
 
   const handleAnswerKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>, answer: string) => {
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       const el = textareaRef.current
       if (!el) return
 

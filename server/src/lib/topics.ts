@@ -47,8 +47,30 @@ export const DEPARTMENTS: Record<
   templates: { label: 'Шаблоны', listKey: 'templates' },
 }
 
+export type WorkDepartmentId = 'support' | 'lawyers' | 'managers' | 'spp'
+
+export const WORK_DEPARTMENT_IDS: WorkDepartmentId[] = [
+  'support',
+  'lawyers',
+  'managers',
+  'spp',
+]
+
 export function isValidDepartment(id: string): boolean {
   return id in DEPARTMENTS
+}
+
+export function isWorkDepartmentId(value: unknown): value is WorkDepartmentId {
+  return (
+    value === 'support' ||
+    value === 'lawyers' ||
+    value === 'managers' ||
+    value === 'spp'
+  )
+}
+
+export function normalizeWorkDepartmentId(value: unknown): WorkDepartmentId {
+  return isWorkDepartmentId(value) ? value : 'support'
 }
 
 export async function refreshHasChildren(

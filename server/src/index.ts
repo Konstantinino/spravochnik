@@ -3,7 +3,7 @@ import cors from 'cors'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runMigrations } from './migrate.js'
-import { ensureBootstrapWhitelist, authRouter } from './routes/auth.js'
+import { ensureBootstrapWhitelist, ensureOwnerRole, authRouter } from './routes/auth.js'
 import { adminRouter } from './routes/admin.js'
 import { topicsRouter } from './routes/topics.js'
 import { mediaRouter } from './routes/media.js'
@@ -20,6 +20,7 @@ async function main(): Promise<void> {
 
   await runMigrations()
   await ensureBootstrapWhitelist()
+  await ensureOwnerRole()
 
   const app = express()
   app.use(

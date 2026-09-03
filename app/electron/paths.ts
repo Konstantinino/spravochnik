@@ -29,7 +29,32 @@ export type DepartmentId =
   | 'spp'
   | 'templates'
 
-export type UserRole = 'user' | 'editor' | 'admin'
+export type WorkDepartmentId = Exclude<DepartmentId, 'templates'>
+
+export type UserRole = 'user' | 'editor' | 'admin' | 'owner'
+
+export const STAFF_ROLES: UserRole[] = ['admin', 'owner']
+export const CONTENT_EDITOR_ROLES: UserRole[] = ['editor', 'admin', 'owner']
+
+export function isUserRole(value: unknown): value is UserRole {
+  return value === 'user' || value === 'editor' || value === 'admin' || value === 'owner'
+}
+
+export function parseUserRole(value: unknown): UserRole {
+  return isUserRole(value) ? value : 'user'
+}
+
+export function isStaffRole(role: string | undefined | null): boolean {
+  return role === 'admin' || role === 'owner'
+}
+
+export function canEditContent(role: string | undefined | null): boolean {
+  return role === 'editor' || isStaffRole(role)
+}
+
+export function isOwnerRole(role: string | undefined | null): boolean {
+  return role === 'owner'
+}
 
 export interface Department {
   id: DepartmentId
@@ -45,6 +70,23 @@ export const DEPARTMENTS: Department[] = [
   { id: 'spp', label: 'СПП', fileName: 'guide_spp.json', listKey: 'questions' },
   { id: 'templates', label: 'Шаблоны', fileName: 'templates.json', listKey: 'templates' },
 ]
+
+export const WORK_DEPARTMENTS: Department[] = DEPARTMENTS.filter(
+  (d): d is Department & { id: WorkDepartmentId } => d.id !== 'templates',
+)
+
+export function isWorkDepartmentId(value: unknown): value is WorkDepartmentId {
+  return (
+    value === 'support' ||
+    value === 'lawyers' ||
+    value === 'managers' ||
+    value === 'spp'
+  )
+}
+
+export function normalizeWorkDepartmentId(value: unknown): WorkDepartmentId {
+  return isWorkDepartmentId(value) ? value : 'support'
+}
 
 export function getUserDataRoot(): string {
   try {
@@ -74,6 +116,17 @@ export function getDraftImagesDir(draftId: string): string {
   return path.join(getMediaDir(), '_draft', safe, 'images')
 }
 
+/** Topic attachments: media/{topicId}/files */
+export function getTopicFilesDir(topicId: number | string): string {
+  return path.join(getMediaDir(), String(topicId), 'files')
+}
+
+/** Draft attachments before topic has an id: media/_draft/{draftId}/files */
+export function getDraftFilesDir(draftId: string): string {
+  const safe = draftId.replace(/[^a-zA-Z0-9_-]/g, '')
+  return path.join(getMediaDir(), '_draft', safe, 'files')
+}
+
 /** Relative POSIX path under userData root, e.g. media/12/images/a.jpg */
 export function topicImageRelativePath(topicId: number | string, fileName: string): string {
   return `media/${topicId}/images/${fileName}`
@@ -82,6 +135,15 @@ export function topicImageRelativePath(topicId: number | string, fileName: strin
 export function draftImageRelativePath(draftId: string, fileName: string): string {
   const safe = draftId.replace(/[^a-zA-Z0-9_-]/g, '')
   return `media/_draft/${safe}/images/${fileName}`
+}
+
+export function topicFileRelativePath(topicId: number | string, fileName: string): string {
+  return `media/${topicId}/files/${fileName}`
+}
+
+export function draftFileRelativePath(draftId: string, fileName: string): string {
+  const safe = draftId.replace(/[^a-zA-Z0-9_-]/g, '')
+  return `media/_draft/${safe}/files/${fileName}`
 }
 
 export function getSeedDataDir(): string {

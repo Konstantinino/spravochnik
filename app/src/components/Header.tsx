@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DepartmentId, PublicUser, SyncStatus, UpdateInfo, UserRole } from '../types'
-import { DEPARTMENTS, ROLE_LABELS } from '../types'
+import { DEPARTMENTS, ROLE_LABELS, isStaffRole } from '../types'
 
 interface HeaderProps {
   departmentId: DepartmentId
@@ -96,22 +96,30 @@ export function Header({
 
       <label className="app-header__dept">
         <span className="visually-hidden">Отдел</span>
-        <select
-          value={departmentId}
-          onChange={(e) => onDepartmentChange(e.target.value as DepartmentId)}
-          aria-label="Отдел"
-          disabled={interactionLocked}
-        >
-          {DEPARTMENTS.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.label}
-            </option>
-          ))}
-        </select>
+        {isStaffRole(user.role) ? (
+          <select
+            value={departmentId}
+            onChange={(e) => onDepartmentChange(e.target.value as DepartmentId)}
+            aria-label="Отдел"
+            disabled={interactionLocked}
+          >
+            {DEPARTMENTS.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="app-header__dept-label" aria-label="Отдел">
+            {DEPARTMENTS.find((d) => d.id === user.departmentId)?.label ??
+              DEPARTMENTS.find((d) => d.id === departmentId)?.label ??
+              'Отдел'}
+          </span>
+        )}
       </label>
 
       <div className="app-header__actions">
-        {user.role === 'admin' && (
+        {isStaffRole(user.role) && (
           <button
             type="button"
             className="icon-btn"

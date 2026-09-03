@@ -50,7 +50,7 @@ nano .env
 |---|---|---|
 | `DB_PASSWORD` | длинная случайная строка | Пароль PostgreSQL |
 | `JWT_SECRET` | длинная случайная строка | Секрет для JWT-токенов |
-| `BOOTSTRAP_ADMIN_EMAIL` | kostya.alone18@yandex.ru | Email владельца (авто-admin) |
+| `BOOTSTRAP_ADMIN_EMAIL` | kostya.alone18@yandex.ru | Email первого владельца (роль `owner` + whitelist) |
 | `CORS_ORIGIN` | `*` или `https://...` | CORS для клиента |
 
 ---

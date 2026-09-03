@@ -17,6 +17,7 @@ import {
   writeSettings,
   readAccounts,
   mergeAccountsData,
+  coerceAccountsData,
   getCurrentUser,
   type AccountsData,
 } from './auth-store'
@@ -835,13 +836,7 @@ async function pullAndMergeAccounts(token: string, force: boolean): Promise<void
       whitelist?: unknown
       removedEmails?: unknown
     }
-    const remote: AccountsData = {
-      users: Array.isArray(raw.users) ? (raw.users as AccountsData['users']) : [],
-      whitelist: Array.isArray(raw.whitelist) ? (raw.whitelist as string[]) : [],
-      removedEmails: Array.isArray(raw.removedEmails)
-        ? (raw.removedEmails as string[])
-        : [],
-    }
+    const remote: AccountsData = coerceAccountsData(raw)
     const preferLocalRoles = !force && readSettings().hasPendingChanges
     const merged = mergeAccountsData(local, remote, { preferLocalRoles })
     writeAccounts(merged)

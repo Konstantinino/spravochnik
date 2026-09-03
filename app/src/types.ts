@@ -5,7 +5,54 @@ export type DepartmentId =
   | 'spp'
   | 'templates'
 
-export type UserRole = 'user' | 'editor' | 'admin'
+export interface StorageKindBytes {
+  photoBytes: number
+  fileBytes: number
+  totalBytes: number
+}
+
+export interface DepartmentStorageStats {
+  id: DepartmentId
+  label: string
+  textBytes: number
+  photoBytes: number
+  fileBytes: number
+  totalBytes: number
+}
+
+export interface StorageStats {
+  totalBytes: number
+  departments: DepartmentStorageStats[]
+  unassigned?: StorageKindBytes
+}
+
+/** Home department for users / whitelist — excludes «Шаблоны» */
+export type WorkDepartmentId = Exclude<DepartmentId, 'templates'>
+
+export type UserRole = 'user' | 'editor' | 'admin' | 'owner'
+
+export const STAFF_ROLES: UserRole[] = ['admin', 'owner']
+export const CONTENT_EDITOR_ROLES: UserRole[] = ['editor', 'admin', 'owner']
+
+export function isUserRole(value: unknown): value is UserRole {
+  return value === 'user' || value === 'editor' || value === 'admin' || value === 'owner'
+}
+
+export function parseUserRole(value: unknown): UserRole {
+  return isUserRole(value) ? value : 'user'
+}
+
+export function isStaffRole(role: string | undefined | null): boolean {
+  return role === 'admin' || role === 'owner'
+}
+
+export function canEditContent(role: string | undefined | null): boolean {
+  return role === 'editor' || isStaffRole(role)
+}
+
+export function isOwnerRole(role: string | undefined | null): boolean {
+  return role === 'owner'
+}
 
 /** Только для отдела «Тех. поддержка»: Поставщик / Заказчик */
 export type SupportParty = 'supplier' | 'customer'
@@ -49,8 +96,14 @@ export interface PublicUser {
   name: string
   email: string
   role: UserRole
-  /** Owner account — role cannot be changed */
+  departmentId: WorkDepartmentId
+  /** Owner account — only the owner can edit/delete this user */
   isOwner?: boolean
+}
+
+export interface WhitelistEntry {
+  email: string
+  departmentId: WorkDepartmentId
 }
 
 export type SyncStatusCode =
@@ -195,8 +248,33 @@ export const DEPARTMENTS: Department[] = [
   },
 ]
 
+export const WORK_DEPARTMENTS = DEPARTMENTS.filter(
+  (d): d is Department & { id: WorkDepartmentId } => d.id !== 'templates',
+)
+
+export const WORK_DEPARTMENT_IDS: WorkDepartmentId[] = [
+  'support',
+  'lawyers',
+  'managers',
+  'spp',
+]
+
+export function isWorkDepartmentId(value: unknown): value is WorkDepartmentId {
+  return (
+    value === 'support' ||
+    value === 'lawyers' ||
+    value === 'managers' ||
+    value === 'spp'
+  )
+}
+
+export function normalizeWorkDepartmentId(value: unknown): WorkDepartmentId {
+  return isWorkDepartmentId(value) ? value : 'support'
+}
+
 export const ROLE_LABELS: Record<UserRole, string> = {
   user: 'Читатель',
   editor: 'Редактор',
   admin: 'Админ',
+  owner: 'Владелец',
 }

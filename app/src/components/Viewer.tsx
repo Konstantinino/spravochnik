@@ -12,9 +12,11 @@ import {
   withImageScale,
 } from '../lib/imageDisplay'
 import {
+  formatFileMarkdownLink,
   formatTopicMarkdownLink,
   mediaSrcFromMarkdownUrl,
   isAllowedMarkdownImageSrc,
+  parseFileAttachmentHref,
   parseTopicLinkHref,
 } from '../lib/markdown'
 import {
@@ -61,6 +63,21 @@ type ScaleEditorState = {
   left: number
   top: number
   draftScale: number
+}
+
+function nodeText(node: ReactNode): string {
+  if (node == null || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(nodeText).join('')
+  if (typeof node === 'object' && node !== null && 'props' in node) {
+    return nodeText((node as { props?: { children?: ReactNode } }).props?.children)
+  }
+  return ''
+}
+
+function fileExtLabel(name: string): string {
+  const ext = name.includes('.') ? name.split('.').pop() : ''
+  return ext ? ext.toUpperCase() : 'ФАЙЛ'
 }
 
 export function Viewer({
@@ -139,10 +156,19 @@ export function Viewer({
 
     void (async () => {
       try {
-        await window.spravochnik.lockTopic({ departmentId, topicId: lockId })
+        const result = await window.spravochnik.lockTopic({ departmentId, topicId: lockId })
+        if (cancelled) return
+        if (!result.ok) {
+          setError(result.error || 'Тема редактируется другим пользователем')
+          setEditing(false)
+          return
+        }
+        setError(null)
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Тема занята другим редактором')
+          const raw = e instanceof Error ? e.message : ''
+          const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
+          setError(cleaned || 'Тема редактируется другим пользователем')
           setEditing(false)
         }
       }
@@ -277,7 +303,9 @@ export function Viewer({
       })
       setEditing(false)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка сохранения')
+      const raw = e instanceof Error ? e.message : ''
+      const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
+      setError(cleaned || 'Ошибка сохранения')
     } finally {
       setSaving(false)
     }
@@ -306,6 +334,20 @@ export function Viewer({
       focusCursor(textareaRef.current, cursor)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось добавить фото')
+    }
+  }
+
+  async function insertFile() {
+    setError(null)
+    try {
+      const result = await window.spravochnik.saveTopicFile({ topicId: current.id })
+      if (!result) return
+      const markdown = `\n\n${formatFileMarkdownLink(result.originalName, result.markdownPath)}\n\n`
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      setAnswer(next)
+      focusCursor(textareaRef.current, cursor)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось добавить файл')
     }
   }
 
@@ -354,7 +396,7 @@ export function Viewer({
   }
 
   function handleAnswerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    onAnswerKeyDown(e, answer)
+    onAnswerKeyDown(e)
   }
 
   function pickTopicForLink(item: GuideItem) {
@@ -424,16 +466,27 @@ export function Viewer({
     setImgMenu(null)
   }
 
-  async function downloadImage(resolvedSrc: string) {
+  async function downloadImage(resolvedSrc: string, suggestedName?: string) {
     setImgMenu(null)
     setError(null)
     try {
-      const result = await window.spravochnik.downloadMediaImage(resolvedSrc)
+      const result = await window.spravochnik.downloadMediaImage(resolvedSrc, suggestedName)
       if (result.error && !result.canceled) {
         setError(result.error)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось скачать изображение')
+      setError(e instanceof Error ? e.message : 'Не удалось скачать файл')
+    }
+  }
+
+  async function openAttachedFile(resolvedSrc: string, displayName: string) {
+    setError(null)
+    try {
+      const result = await window.spravochnik.openMediaFile(resolvedSrc)
+      if (result.ok) return
+      await downloadImage(resolvedSrc, displayName)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось открыть файл')
     }
   }
 
@@ -468,6 +521,9 @@ export function Viewer({
   }
 
   function renderTopicLink(href: string | undefined, linkChildren: ReactNode) {
+    if (parseFileAttachmentHref(href)) {
+      return renderTopicFile(href ?? '', nodeText(linkChildren))
+    }
     const topicId = parseTopicLinkHref(href)
     if (topicId != null && allItems.some((entry) => entry.id === topicId)) {
       return (
@@ -487,6 +543,50 @@ export function Viewer({
       <a href={href} target="_blank" rel="noreferrer">
         {linkChildren}
       </a>
+    )
+  }
+
+  function renderTopicFile(rawHref: string, displayName: string) {
+    const parsed = parseFileAttachmentHref(rawHref)
+    const name = displayName.trim() || parsed?.storedName || 'Файл'
+    const resolved = mediaSrcFromMarkdownUrl(rawHref, current.id)
+    const ext = fileExtLabel(name)
+    return (
+      <span className="topic-file">
+        <button
+          type="button"
+          className="topic-file__main"
+          title={`Открыть «${name}»`}
+          onClick={() => void openAttachedFile(resolved, name)}
+        >
+          <span className="topic-file__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22">
+              <path
+                fill="currentColor"
+                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 2.5 3.5 3.5H14zM8 13h8v1.5H8zm0 3h8v1.5H8zM8 10h4v1.5H8z"
+              />
+            </svg>
+          </span>
+          <span className="topic-file__meta">
+            <span className="topic-file__name">{name}</span>
+            <span className="topic-file__ext">{ext}</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          className="topic-file__download"
+          title="Скачать"
+          aria-label={`Скачать «${name}»`}
+          onClick={() => void downloadImage(resolved, name)}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 3v10.2l3.3-3.3 1.4 1.4L12 16.4 7.3 11.3l1.4-1.4 3.3 3.3V3zM5 19h14v2H5z"
+            />
+          </svg>
+        </button>
+      </span>
     )
   }
 
@@ -555,6 +655,7 @@ export function Viewer({
                   className="btn btn-secondary"
                   onClick={() => {
                     closeFind()
+                    setError(null)
                     setEditing(true)
                   }}
                 >
@@ -576,6 +677,8 @@ export function Viewer({
           </div>
         </div>
       )}
+
+      {error && !editing && <div className="form-error viewer__notice">{error}</div>}
 
       <div className="viewer__header">
         {editing ? (
@@ -716,7 +819,7 @@ export function Viewer({
             onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
             onPaste={(e) => void handleAnswerPaste(e)}
             rows={16}
-            placeholder="Текст ответа (Markdown). «+» — ссылка на тему. Фото — кнопка или Ctrl+V."
+            placeholder="Текст ответа (Markdown). «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
           />
           <TopicLinkPicker
             open={linkPicker}
@@ -727,9 +830,14 @@ export function Viewer({
             onQueryChange={setPickerQuery}
           />
           <div className="viewer__editor-toolbar">
-            <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
-              Вставить фото
-            </button>
+            <div className="viewer__editor-insert">
+              <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
+                Вставить фото
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => void insertFile()}>
+                Вставить файл
+              </button>
+            </div>
             <div className="viewer__editor-actions">
               <button
                 type="button"
@@ -767,6 +875,9 @@ export function Viewer({
               components={{
                 img: ({ src, alt }) => {
                   const raw = src ?? ''
+                  if (parseFileAttachmentHref(raw)) {
+                    return renderTopicFile(raw, alt || '')
+                  }
                   if (!isAllowedMarkdownImageSrc(raw)) {
                     return null
                   }
@@ -778,7 +889,7 @@ export function Viewer({
               {current.answer}
             </ReactMarkdown>
           ) : (
-            <p className="muted">Текст ответа пока пуст</p>
+            <p className="muted">Нет текста в теме</p>
           )}
 
           {localLegacy.length > 0 && (
@@ -788,8 +899,6 @@ export function Viewer({
               ))}
             </div>
           )}
-
-          {error && <div className="form-error">{error}</div>}
         </div>
       )}
 

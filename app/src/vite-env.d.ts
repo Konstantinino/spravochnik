@@ -8,6 +8,8 @@ import type {
 
   DepartmentId,
 
+  WorkDepartmentId,
+
   GuideFile,
 
   PublicUser,
@@ -21,6 +23,10 @@ import type {
   UserRole,
 
   ConflictResolution,
+
+  WhitelistEntry,
+
+  StorageStats,
 
 } from './types'
 
@@ -68,9 +74,33 @@ export interface SpravochnikApi {
 
   }) => Promise<{ markdownPath: string; url: string; relativeFsPath: string } | null>
 
+  saveTopicFile: (payload: {
+
+    topicId?: number
+
+    draftId?: string
+
+  }) => Promise<{
+
+    markdownPath: string
+
+    originalName: string
+
+    url: string
+
+    relativeFsPath: string
+
+  } | null>
+
   resolveMediaUrl: (relativePath: string, topicId?: number) => Promise<string>
 
-  downloadMediaImage: (resolvedSrc: string) => Promise<{
+  downloadMediaImage: (
+
+    resolvedSrc: string,
+
+    suggestedName?: string,
+
+  ) => Promise<{
 
     ok: boolean
 
@@ -81,6 +111,8 @@ export interface SpravochnikApi {
     path?: string
 
   }>
+
+  openMediaFile: (resolvedSrc: string) => Promise<{ ok: boolean; error?: string }>
 
   getDataPath: () => Promise<string>
 
@@ -120,21 +152,30 @@ export interface SpravochnikApi {
 
   setUserRole: (payload: { userId: string; role: UserRole }) => Promise<PublicUser[]>
 
+  transferOwnership: (payload: { userId: string }) => Promise<PublicUser[]>
+
   updateUser: (payload: {
     userId: string
     name: string
     password?: string
-  }) => Promise<PublicUser[]>
+    departmentId?: WorkDepartmentId
+  }) => Promise<{ users: PublicUser[]; whitelist: WhitelistEntry[] }>
 
-  deleteUser: (userId: string) => Promise<PublicUser[]>
+  deleteUser: (payload: string | { userId: string; successorId?: string }) => Promise<PublicUser[]>
 
-  getWhitelist: () => Promise<string[]>
+  getWhitelist: () => Promise<WhitelistEntry[]>
 
-  setWhitelist: (emails: string[]) => Promise<string[]>
+  setWhitelist: (emails: Array<string | WhitelistEntry>) => Promise<WhitelistEntry[]>
 
-  addWhitelist: (email: string) => Promise<string[]>
+  addWhitelist: (
+    payload: string | { email: string; departmentId?: WorkDepartmentId },
+  ) => Promise<WhitelistEntry[]>
 
-  removeWhitelist: (email: string) => Promise<string[]>
+  removeWhitelist: (email: string) => Promise<WhitelistEntry[]>
+
+  getRegistrationDepartment: (
+    email: string,
+  ) => Promise<{ departmentId: WorkDepartmentId; label: string } | null>
 
   getAdminSettings: () => Promise<{
 
@@ -149,6 +190,8 @@ export interface SpravochnikApi {
     ownerEmail: string
 
   }>
+
+  getStorageStats: () => Promise<StorageStats>
 
 
 
@@ -178,7 +221,10 @@ export interface SpravochnikApi {
 
   resolveSyncConflicts: (resolutions: ConflictResolution[]) => Promise<SyncStatus>
 
-  lockTopic: (payload: { departmentId: DepartmentId; topicId: number }) => Promise<{ ok: boolean }>
+  lockTopic: (payload: { departmentId: DepartmentId; topicId: number }) => Promise<{
+    ok: boolean
+    error?: string
+  }>
 
   unlockTopic: (payload: { departmentId: DepartmentId; topicId: number }) => Promise<{ ok: boolean }>
 

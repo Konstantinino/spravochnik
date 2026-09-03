@@ -8,6 +8,7 @@ export type OperationType =
   | 'delete_topic'
   | 'set_user_role'
   | 'delete_user'
+  | 'transfer_ownership'
   | 'update_user'
   | 'set_whitelist'
   | 'add_whitelist'

@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getPool, bumpGlobalVersion, withTransaction } from './db/pool.js'
 import { runMigrations } from './migrate.js'
-import { ensureBootstrapWhitelist } from './routes/auth.js'
+import { ensureBootstrapWhitelist, ensureOwnerRole } from './routes/auth.js'
+import { parseUserRole } from './lib/auth-utils.js'
 import { refreshHasChildren } from './lib/topics.js'
 
 const DEPARTMENT_FILES: Record<string, string> = {
@@ -35,8 +36,10 @@ interface AccountsData {
     salt: string
     role: string
     createdAt: string
+    departmentId?: string
+    department_id?: string
   }>
-  whitelist?: string[]
+  whitelist?: Array<string | { email: string; departmentId?: string; department_id?: string }>
   removedEmails?: string[]
 }
 
@@ -74,11 +77,25 @@ async function importFromDir(dataDir: string, mediaDir?: string): Promise<void> 
   const accountsPath = path.join(dataDir, 'accounts.json')
   if (fs.existsSync(accountsPath)) {
     const accounts = JSON.parse(fs.readFileSync(accountsPath, 'utf8')) as AccountsData
-    for (const email of accounts.whitelist ?? []) {
-      await pool.query(
-        'INSERT INTO whitelist (email) VALUES ($1) ON CONFLICT DO NOTHING',
-        [email.trim().toLowerCase()],
-      )
+    const workDepts = new Set(['support', 'lawyers', 'managers', 'spp'])
+    const normalizeDept = (v: unknown) =>
+      typeof v === 'string' && workDepts.has(v) ? v : 'support'
+
+    for (const item of accounts.whitelist ?? []) {
+      if (typeof item === 'string') {
+        await pool.query(
+          `INSERT INTO whitelist (email, department_id) VALUES ($1, 'support')
+           ON CONFLICT (email) DO NOTHING`,
+          [item.trim().toLowerCase()],
+        )
+      } else if (item && typeof item === 'object' && item.email) {
+        const dept = normalizeDept(item.departmentId ?? item.department_id)
+        await pool.query(
+          `INSERT INTO whitelist (email, department_id) VALUES ($1, $2)
+           ON CONFLICT (email) DO UPDATE SET department_id = EXCLUDED.department_id`,
+          [String(item.email).trim().toLowerCase(), dept],
+        )
+      }
     }
     for (const email of accounts.removedEmails ?? []) {
       await pool.query(
@@ -87,6 +104,13 @@ async function importFromDir(dataDir: string, mediaDir?: string): Promise<void> 
       )
     }
     let importedUsers = 0
+    let importedOwner = false
+    const bootstrapEmail = (
+      process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'kostya.alone18@yandex.ru'
+    ).trim().toLowerCase()
+    if ((accounts.users ?? []).length > 0) {
+      await pool.query(`UPDATE users SET role = 'admin' WHERE role = 'owner'`)
+    }
     for (const u of accounts.users ?? []) {
       if (!u.passwordHash || !u.salt) {
         console.warn(`Skip user without password hash: ${u.email}`)
@@ -96,15 +120,27 @@ async function importFromDir(dataDir: string, mediaDir?: string): Promise<void> 
         u.createdAt ??
         (u as { created_at?: string }).created_at ??
         new Date().toISOString()
+      const departmentId = normalizeDept(u.departmentId ?? u.department_id)
+      const email = u.email.toLowerCase()
+      let role = parseUserRole(u.role)
+      if (u.role === 'owner' || (email === bootstrapEmail && (u.role === 'admin' || u.role === 'owner'))) {
+        if (importedOwner) {
+          role = 'admin'
+        } else {
+          role = 'owner'
+          importedOwner = true
+        }
+      }
       await pool.query(
-        `INSERT INTO users (name, email, password_hash, salt, role, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO users (name, email, password_hash, salt, role, department_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (email) DO UPDATE SET
-           name = $1, password_hash = $3, salt = $4, role = $5`,
-        [u.name, u.email.toLowerCase(), u.passwordHash, u.salt, u.role, createdAt],
+           name = $1, password_hash = $3, salt = $4, role = $5, department_id = $6`,
+        [u.name, email, u.passwordHash, u.salt, role, departmentId, createdAt],
       )
       importedUsers += 1
     }
+    await ensureOwnerRole()
     console.log(`Imported accounts: ${importedUsers} users, ${accounts.whitelist?.length ?? 0} whitelist`)
   }
 

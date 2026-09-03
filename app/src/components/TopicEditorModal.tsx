@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DepartmentId, GuideItem, SupportParty } from '../types'
 import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import { filterItemsByParty, getItemParty } from '../lib/data'
+import { formatFileMarkdownLink } from '../lib/markdown'
 import {
   focusCursor,
   insertAtCursor,
@@ -111,7 +112,7 @@ export function TopicEditorModal({
   }
 
   function handleAnswerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    onAnswerKeyDown(e, answer)
+    onAnswerKeyDown(e)
   }
 
   function pickTopicForLink(item: GuideItem) {
@@ -140,6 +141,20 @@ export function TopicEditorModal({
       focusCursor(textareaRef.current, cursor)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось добавить фото')
+    }
+  }
+
+  async function insertFile() {
+    setError(null)
+    try {
+      const result = await window.spravochnik.saveTopicFile(imageOwnerPayload())
+      if (!result) return
+      const markdown = `\n\n${formatFileMarkdownLink(result.originalName, result.markdownPath)}\n\n`
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      setAnswer(next)
+      focusCursor(textareaRef.current, cursor)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось добавить файл')
     }
   }
 
@@ -302,7 +317,7 @@ export function TopicEditorModal({
               onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
               onPaste={(e) => void handleAnswerPaste(e)}
               rows={10}
-              placeholder="Текст ответа. «+» — ссылка на тему. Фото — кнопка или Ctrl+V."
+              placeholder="Текст ответа. «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
             />
           </label>
           <TopicLinkPicker
@@ -317,6 +332,9 @@ export function TopicEditorModal({
           <div className="modal__toolbar">
             <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
               Вставить фото
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => void insertFile()}>
+              Вставить файл
             </button>
           </div>
 

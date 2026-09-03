@@ -49,7 +49,7 @@ function sha256File(filePath: string): string {
 mediaRouter.post(
   '/upload',
   authMiddleware,
-  requireRole('editor', 'admin'),
+  requireRole('editor', 'admin', 'owner'),
   (req, res, next) => {
     ensureMediaDir()
     ensureUpdatesDir()
@@ -165,7 +165,7 @@ mediaRouter.get('/*', (req, res) => {
 mediaRouter.delete(
   '/*',
   authMiddleware,
-  requireRole('editor', 'admin'),
+  requireRole('editor', 'admin', 'owner'),
   async (req: AuthRequest, res) => {
     try {
       const rel = mediaRelParam(req)

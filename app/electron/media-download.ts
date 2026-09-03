@@ -16,7 +16,9 @@ function localPathFromSpravochnikUrl(resolvedSrc: string): string | null {
   }
 }
 
-function suggestedNameFromSrc(resolvedSrc: string): string {
+function suggestedNameFromSrc(resolvedSrc: string, suggestedName?: string): string {
+  const fromArg = suggestedName?.trim() ? path.basename(suggestedName.trim()) : ''
+  if (fromArg && !fromArg.includes('..')) return fromArg
   if (resolvedSrc.startsWith('spravochnik://')) {
     const local = localPathFromSpravochnikUrl(resolvedSrc)
     if (local) return path.basename(local)
@@ -28,32 +30,43 @@ function suggestedNameFromSrc(resolvedSrc: string): string {
   } catch {
     /* ignore */
   }
-  return 'image.jpg'
+  return 'file'
 }
 
-export async function downloadMediaImage(resolvedSrc: string): Promise<{
+export async function downloadMediaImage(
+  resolvedSrc: string,
+  suggestedName?: string,
+): Promise<{
   ok: boolean
   error?: string
   canceled?: boolean
   path?: string
 }> {
   if (!resolvedSrc.trim()) {
-    return { ok: false, error: 'Пустой адрес изображения' }
+    return { ok: false, error: 'Пустой адрес файла' }
   }
 
-  const suggestedName = suggestedNameFromSrc(resolvedSrc)
-  const ext = path.extname(suggestedName).slice(1).toLowerCase() || 'jpg'
-  const filters = [
-    {
-      name: 'Изображения',
-      extensions: Array.from(new Set([ext, ...IMAGE_EXTENSIONS])),
-    },
-  ]
+  const name = suggestedNameFromSrc(resolvedSrc, suggestedName)
+  const ext = path.extname(name).slice(1).toLowerCase()
+  const isImage = IMAGE_EXTENSIONS.includes(ext)
+  const filters = isImage
+    ? [
+        {
+          name: 'Изображения',
+          extensions: Array.from(new Set([ext, ...IMAGE_EXTENSIONS].filter(Boolean))),
+        },
+      ]
+    : ext
+      ? [
+          { name: 'Файл', extensions: [ext] },
+          { name: 'Все файлы', extensions: ['*'] },
+        ]
+      : [{ name: 'Все файлы', extensions: ['*'] }]
 
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
   const saveOptions = {
-    title: 'Куда сохранить изображение',
-    defaultPath: suggestedName,
+    title: isImage ? 'Куда сохранить изображение' : 'Куда сохранить файл',
+    defaultPath: name,
     filters,
   }
   const save = win
@@ -67,7 +80,7 @@ export async function downloadMediaImage(resolvedSrc: string): Promise<{
     if (resolvedSrc.startsWith('spravochnik://')) {
       const sourcePath = localPathFromSpravochnikUrl(resolvedSrc)
       if (!sourcePath || !fs.existsSync(sourcePath)) {
-        return { ok: false, error: 'Файл изображения не найден' }
+        return { ok: false, error: 'Файл не найден' }
       }
       fs.copyFileSync(sourcePath, save.filePath)
       return { ok: true, path: save.filePath }
@@ -76,14 +89,14 @@ export async function downloadMediaImage(resolvedSrc: string): Promise<{
     if (/^https?:\/\//i.test(resolvedSrc)) {
       const res = await net.fetch(resolvedSrc)
       if (!res.ok) {
-        return { ok: false, error: 'Не удалось скачать изображение' }
+        return { ok: false, error: 'Не удалось скачать файл' }
       }
       const buffer = Buffer.from(await res.arrayBuffer())
       fs.writeFileSync(save.filePath, buffer)
       return { ok: true, path: save.filePath }
     }
 
-    return { ok: false, error: 'Этот тип изображения нельзя скачать' }
+    return { ok: false, error: 'Этот файл нельзя скачать' }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

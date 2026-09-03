@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, Component, type ReactNode } from 'react'
 import { Header } from './components/Header'
 import { Search } from './components/Search'
 import { TopicList } from './components/TopicList'
@@ -31,12 +31,53 @@ import {
   DEPT_VIEW_FILTERS,
   SUPPORT_VIEW_FILTERS,
   isSupportParty,
+  normalizeWorkDepartmentId,
+  isStaffRole,
+  canEditContent,
 } from './types'
 
 const defaultSync: SyncStatus = {
   code: 'idle',
   label: 'Готово',
   hasPendingChanges: false,
+}
+
+class SettingsErrorBoundary extends Component<
+  { children: ReactNode; onBack: () => void },
+  { error: string | null }
+> {
+  state = { error: null as string | null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message || 'Ошибка экрана настроек' }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="settings-page">
+          <div className="settings-page__bar">
+            <button type="button" className="btn btn-secondary" onClick={this.props.onBack}>
+              ← Назад
+            </button>
+            <h1>Настройки</h1>
+          </div>
+          <div className="settings-page__content">
+            <div className="form-error">{this.state.error}</div>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+function resolveUserDepartment(u: PublicUser): DepartmentId {
+  if (isStaffRole(u.role)) {
+    const saved = loadSavedDepartment(u.id)
+    return saved ?? normalizeWorkDepartmentId(u.departmentId)
+  }
+  return normalizeWorkDepartmentId(u.departmentId)
 }
 
 function resolveListFilter(
@@ -79,10 +120,10 @@ export default function App() {
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
       if (u) {
-        const saved = loadSavedDepartment(u.id)
-        if (saved) setDepartmentId(saved)
-        const canEditUser = u.role === 'editor' || u.role === 'admin'
-        setListFilter(resolveListFilter(u.id, saved ?? 'support', canEditUser))
+        const dept = resolveUserDepartment(u)
+        setDepartmentId(dept)
+        const canEditUser = canEditContent(u.role)
+        setListFilter(resolveListFilter(u.id, dept, canEditUser))
       }
       setUser(u)
     })
@@ -97,15 +138,26 @@ export default function App() {
       if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
         setConflictOpen(true)
       }
+      if (status.code === 'up_to_date' || status.code === 'pending') {
+        void window.spravochnik.getCurrentUser().then((u) => {
+          if (!u) return
+          setUser(u)
+          if (!isStaffRole(u.role)) {
+            const dept = normalizeWorkDepartmentId(u.departmentId)
+            setDepartmentId(dept)
+          }
+        })
+      }
     })
   }, [])
 
   function handleDepartmentChange(id: DepartmentId) {
+    if (user && !isStaffRole(user.role)) return
     setDepartmentId(id)
     setNavHistory([])
     if (user) {
       saveDepartment(user.id, id)
-      const canEditUser = user.role === 'editor' || user.role === 'admin'
+      const canEditUser = canEditContent(user.role)
       setListFilter(resolveListFilter(user.id, id, canEditUser))
     } else {
       setListFilter('all')
@@ -113,11 +165,12 @@ export default function App() {
   }
 
   function handleAuthenticated(u: PublicUser) {
-    const saved = loadSavedDepartment(u.id)
-    const dept = saved ?? 'support'
-    if (saved) setDepartmentId(saved)
-    else setDepartmentId('support')
-    const canEditUser = u.role === 'editor' || u.role === 'admin'
+    const dept = resolveUserDepartment(u)
+    setDepartmentId(dept)
+    if (isStaffRole(u.role)) {
+      saveDepartment(u.id, dept)
+    }
+    const canEditUser = canEditContent(u.role)
     setListFilter(resolveListFilter(u.id, dept, canEditUser))
     setUser(u)
   }
@@ -241,8 +294,8 @@ export default function App() {
 
   const items: GuideItem[] = useMemo(() => (guide ? getItems(guide) : []), [guide])
 
-  const canEdit = user?.role === 'editor' || user?.role === 'admin'
-  const isAdmin = user?.role === 'admin'
+  const canEdit = canEditContent(user?.role)
+  const isAdmin = isStaffRole(user?.role)
 
   const visibleItems: GuideItem[] = useMemo(
     () => filterItemsByView(items, listFilter),
@@ -472,7 +525,21 @@ export default function App() {
   }
 
   if (view === 'settings') {
-    return <SettingsPage onBack={() => setView('main')} />
+    return (
+      <SettingsErrorBoundary onBack={() => setView('main')}>
+        <SettingsPage
+          onBack={() => setView('main')}
+          currentUser={user}
+          onCurrentUserChange={(next) => {
+            if (!next) {
+              void handleLogout()
+              return
+            }
+            handleAuthenticated(next)
+          }}
+        />
+      </SettingsErrorBoundary>
+    )
   }
 
   // Block UI only while uploading local changes — startup/background pull stays interactive
@@ -511,7 +578,7 @@ export default function App() {
             canAdd={!!canEdit}
             searchInBody={searchInBody}
             onSearchInBodyChange={setSearchInBody}
-            showListFilter
+            showListFilter={filterOptions.length > 1}
             listFilter={listFilter}
             filterOptions={filterOptions}
             onListFilterChange={handleListFilterChange}

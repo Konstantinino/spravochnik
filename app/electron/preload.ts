@@ -20,11 +20,17 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
     ipcRenderer.invoke('save-topic-image-clipboard', payload),
 
+  saveTopicFile: (payload: unknown) => ipcRenderer.invoke('save-topic-file', payload),
+
   resolveMediaUrl: (relativePath: string, topicId?: number) =>
 
     ipcRenderer.invoke('resolve-media-url', relativePath, topicId),
 
-  downloadMediaImage: (resolvedSrc: string) => ipcRenderer.invoke('media:download', resolvedSrc),
+  downloadMediaImage: (resolvedSrc: string, suggestedName?: string) =>
+
+    ipcRenderer.invoke('media:download', resolvedSrc, suggestedName),
+
+  openMediaFile: (resolvedSrc: string) => ipcRenderer.invoke('media:open', resolvedSrc),
 
   getDataPath: () => ipcRenderer.invoke('get-data-path'),
 
@@ -44,19 +50,28 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
   setUserRole: (payload: unknown) => ipcRenderer.invoke('admin:set-role', payload),
 
+  transferOwnership: (payload: unknown) => ipcRenderer.invoke('admin:transfer-ownership', payload),
+
   updateUser: (payload: unknown) => ipcRenderer.invoke('admin:update-user', payload),
 
-  deleteUser: (userId: string) => ipcRenderer.invoke('admin:delete-user', userId),
+  deleteUser: (payload: string | { userId: string; successorId?: string }) =>
+    ipcRenderer.invoke('admin:delete-user', payload),
 
   getWhitelist: () => ipcRenderer.invoke('admin:get-whitelist'),
 
   setWhitelist: (emails: string[]) => ipcRenderer.invoke('admin:set-whitelist', emails),
 
-  addWhitelist: (email: string) => ipcRenderer.invoke('admin:add-whitelist', email),
+  addWhitelist: (payload: string | { email: string; departmentId?: string }) =>
+    ipcRenderer.invoke('admin:add-whitelist', payload),
 
   removeWhitelist: (email: string) => ipcRenderer.invoke('admin:remove-whitelist', email),
 
+  getRegistrationDepartment: (email: string) =>
+    ipcRenderer.invoke('auth:registration-department', email),
+
   getAdminSettings: () => ipcRenderer.invoke('admin:get-settings'),
+
+  getStorageStats: () => ipcRenderer.invoke('admin:storage-stats'),
 
 
 

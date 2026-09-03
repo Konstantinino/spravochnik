@@ -39,7 +39,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 |---|---|
 | `DB_PASSWORD` | Пароль PostgreSQL |
 | `JWT_SECRET` | Секрет для JWT (длинная случайная строка) |
-| `BOOTSTRAP_ADMIN_EMAIL` | Email владельца (авто-admin + whitelist) |
+| `BOOTSTRAP_ADMIN_EMAIL` | Email первого владельца (роль `owner` + whitelist) |
 | `CORS_ORIGIN` | `*` или origin клиента |
 
 ## Первичный импорт данных

@@ -4,10 +4,16 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import {
   ACCOUNTS_FILE,
   BOOTSTRAP_ADMIN_EMAIL,
+  DEPARTMENTS,
   SESSION_FILE,
   SETTINGS_FILE,
   getUserDataRoot,
+  normalizeWorkDepartmentId,
+  parseUserRole,
+  isOwnerRole,
+  isStaffRole,
   type UserRole,
+  type WorkDepartmentId,
 } from './paths'
 
 export interface StoredUser {
@@ -17,12 +23,18 @@ export interface StoredUser {
   passwordHash: string
   salt: string
   role: UserRole
+  departmentId: WorkDepartmentId
   createdAt: string
+}
+
+export interface WhitelistEntry {
+  email: string
+  departmentId: WorkDepartmentId
 }
 
 export interface AccountsData {
   users: StoredUser[]
-  whitelist: string[]
+  whitelist: WhitelistEntry[]
   /** Emails removed by admin — survive merge so pull does not resurrect them. */
   removedEmails?: string[]
 }
@@ -42,6 +54,7 @@ export interface PublicUser {
   name: string
   email: string
   role: UserRole
+  departmentId: WorkDepartmentId
   isOwner?: boolean
 }
 
@@ -82,8 +95,51 @@ function verifyPassword(password: string, salt: string, expectedHash: string): b
 function defaultAccounts(): AccountsData {
   return {
     users: [],
-    whitelist: [BOOTSTRAP_ADMIN_EMAIL],
+    whitelist: [{ email: normalizeEmail(BOOTSTRAP_ADMIN_EMAIL), departmentId: 'support' }],
     removedEmails: [],
+  }
+}
+
+function normalizeWhitelistRaw(raw: unknown): WhitelistEntry[] {
+  const byEmail = new Map<string, WorkDepartmentId>()
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item === 'string') {
+        const email = normalizeEmail(item)
+        if (email.includes('@')) byEmail.set(email, 'support')
+        continue
+      }
+      if (item && typeof item === 'object' && 'email' in item) {
+        const email = normalizeEmail(String((item as { email: unknown }).email ?? ''))
+        if (!email.includes('@')) continue
+        const dept = normalizeWorkDepartmentId(
+          (item as { departmentId?: unknown; department_id?: unknown }).departmentId ??
+            (item as { department_id?: unknown }).department_id,
+        )
+        byEmail.set(email, dept)
+      }
+    }
+  }
+  return Array.from(byEmail.entries())
+    .map(([email, departmentId]) => ({ email, departmentId }))
+    .sort((a, b) => a.email.localeCompare(b.email))
+}
+
+/** Normalize a stored user row from accounts.json (local cache). */
+function normalizeStoredUser(raw: Partial<StoredUser> & Record<string, unknown>): StoredUser {
+  return {
+    id: String(raw.id ?? ''),
+    name: String(raw.name ?? ''),
+    email: normalizeEmail(String(raw.email ?? '')),
+    passwordHash: String(raw.passwordHash ?? ''),
+    salt: String(raw.salt ?? ''),
+    role: parseUserRole(raw.role),
+    departmentId: normalizeWorkDepartmentId(
+      raw.departmentId ?? (raw as { department_id?: unknown }).department_id,
+    ),
+    createdAt: String(
+      raw.createdAt ?? (raw as { created_at?: string }).created_at ?? new Date().toISOString(),
+    ),
   }
 }
 
@@ -102,8 +158,8 @@ export function ensureAuthFiles(): void {
   } else {
     const data = readAccounts()
     const email = normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
-    if (!data.whitelist.map(normalizeEmail).includes(email)) {
-      data.whitelist.push(BOOTSTRAP_ADMIN_EMAIL)
+    if (!data.whitelist.some((e) => normalizeEmail(e.email) === email)) {
+      data.whitelist.push({ email, departmentId: 'support' })
       writeAccounts(data)
     }
   }
@@ -114,17 +170,64 @@ export function ensureAuthFiles(): void {
 
 export function readAccounts(): AccountsData {
   try {
-    const raw = JSON.parse(fs.readFileSync(accountsPath(), 'utf8')) as AccountsData
-    return {
-      users: Array.isArray(raw.users) ? raw.users : [],
-      whitelist: Array.isArray(raw.whitelist) ? raw.whitelist : [BOOTSTRAP_ADMIN_EMAIL],
-      removedEmails: Array.isArray(raw.removedEmails)
-        ? raw.removedEmails.map(normalizeEmail).filter(Boolean)
-        : [],
+    const raw = JSON.parse(fs.readFileSync(accountsPath(), 'utf8')) as {
+      users?: unknown[]
+      whitelist?: unknown
+      removedEmails?: unknown
     }
+    return coerceAccountsData(raw)
   } catch {
     return defaultAccounts()
   }
+}
+
+function findOwner(users: StoredUser[]): StoredUser | undefined {
+  return users.find((u) => isOwnerRole(u.role))
+}
+
+function ensureLocalOwner(data: AccountsData): void {
+  const owners = data.users.filter((u) => isOwnerRole(u.role))
+  if (owners.length === 0) {
+    const bootstrap = data.users.find((u) => isOwnerEmail(u.email))
+    if (bootstrap) bootstrap.role = 'owner'
+  } else if (owners.length > 1) {
+    const keep = [...owners].sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
+    for (const extra of owners) {
+      if (extra.id !== keep.id) extra.role = 'admin'
+    }
+  }
+  const owner = findOwner(data.users)
+  const keepEmail = owner ? normalizeEmail(owner.email) : normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
+  if (!data.whitelist.some((e) => normalizeEmail(e.email) === keepEmail)) {
+    data.whitelist.push({
+      email: keepEmail,
+      departmentId: owner ? owner.departmentId : 'support',
+    })
+    data.whitelist.sort((a, b) => a.email.localeCompare(b.email))
+  }
+}
+
+export function getOwnerEmail(): string {
+  const owner = findOwner(readAccounts().users)
+  return owner ? owner.email : normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
+}
+
+export function coerceAccountsData(raw: {
+  users?: unknown[]
+  whitelist?: unknown
+  removedEmails?: unknown
+}): AccountsData {
+  const data: AccountsData = {
+    users: Array.isArray(raw.users)
+      ? raw.users.map((u) => normalizeStoredUser(u as Partial<StoredUser> & Record<string, unknown>))
+      : [],
+    whitelist: normalizeWhitelistRaw(raw.whitelist),
+    removedEmails: Array.isArray(raw.removedEmails)
+      ? raw.removedEmails.map((e) => normalizeEmail(String(e))).filter(Boolean)
+      : [],
+  }
+  ensureLocalOwner(data)
+  return data
 }
 
 export function writeAccounts(data: AccountsData): void {
@@ -158,13 +261,14 @@ export function setPendingChanges(value: boolean): void {
 }
 
 export function toPublicUser(user: StoredUser): PublicUser {
-  const isOwner = normalizeEmail(user.email) === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
+  const isOwner = isOwnerRole(user.role)
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
-    isOwner,
+    departmentId: normalizeWorkDepartmentId(user.departmentId),
+    ...(isOwner ? { isOwner: true } : {}),
   }
 }
 
@@ -172,7 +276,7 @@ export function isOwnerEmail(email: string): boolean {
   return normalizeEmail(email) === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)
 }
 
-const ROLE_RANK: Record<UserRole, number> = { user: 0, editor: 1, admin: 2 }
+const ROLE_RANK: Record<UserRole, number> = { user: 0, editor: 1, admin: 2, owner: 3 }
 
 /** Union users/whitelist from local + remote so registrations and role edits are not wiped by pull. */
 export function mergeAccountsData(
@@ -207,9 +311,7 @@ export function mergeAccountsData(
     }
 
     let role: UserRole
-    if (isOwnerEmail(key)) {
-      role = 'admin'
-    } else if (preferLocalRoles) {
+    if (preferLocalRoles) {
       role = u.role
     } else if (ROLE_RANK[u.role] !== ROLE_RANK[remoteUser.role]) {
       // Keep the higher privilege so an admin role push isn't lost to an older remote copy
@@ -227,36 +329,33 @@ export function mergeAccountsData(
       salt: u.salt || remoteUser.salt,
       passwordHash: u.passwordHash || remoteUser.passwordHash,
       role,
+      departmentId: normalizeWorkDepartmentId(
+        preferLocalRoles ? u.departmentId : remoteUser.departmentId || u.departmentId,
+      ),
       createdAt: u.createdAt || remoteUser.createdAt,
     })
   }
 
-  for (const [key, u] of byEmail) {
-    if (isOwnerEmail(key)) u.role = 'admin'
-    else if (u.role === 'admin') u.role = 'editor'
+  const wlByEmail = new Map<string, WorkDepartmentId>()
+  for (const entry of [...remote.whitelist, ...local.whitelist]) {
+    const email = normalizeEmail(entry.email)
+    if (!email) continue
+    wlByEmail.set(email, normalizeWorkDepartmentId(entry.departmentId))
   }
-
-  const whitelist = Array.from(
-    new Set(
-      [...local.whitelist, ...remote.whitelist]
-        .map(normalizeEmail)
-        .filter(Boolean),
-    ),
-  )
-  if (!whitelist.includes(normalizeEmail(BOOTSTRAP_ADMIN_EMAIL))) {
-    whitelist.push(normalizeEmail(BOOTSTRAP_ADMIN_EMAIL))
-  }
-
-  return {
+  const merged: AccountsData = {
     users: Array.from(byEmail.values()),
-    whitelist,
+    whitelist: Array.from(wlByEmail.entries())
+      .map(([email, departmentId]) => ({ email, departmentId }))
+      .sort((a, b) => a.email.localeCompare(b.email)),
     removedEmails,
   }
+  ensureLocalOwner(merged)
+  return merged
 }
 
 export function resolveRoleForEmail(email: string): UserRole {
-  if (isOwnerEmail(email)) {
-    return 'admin'
+  if (isOwnerEmail(email) && !findOwner(readAccounts().users)) {
+    return 'owner'
   }
   return 'user'
 }
@@ -275,8 +374,8 @@ export function registerUser(input: {
   if (password.length < 6) throw new Error('Пароль не короче 6 символов')
 
   const accounts = readAccounts()
-  const allowed = accounts.whitelist.map(normalizeEmail).includes(email)
-  if (!allowed) {
+  const wlEntry = accounts.whitelist.find((e) => normalizeEmail(e.email) === email)
+  if (!wlEntry) {
     throw new Error('Эта почта не в списке разрешённых для регистрации')
   }
   if (accounts.users.some((u) => normalizeEmail(u.email) === email)) {
@@ -291,12 +390,13 @@ export function registerUser(input: {
     salt,
     passwordHash: hashPassword(password, salt),
     role: resolveRoleForEmail(email),
+    departmentId: normalizeWorkDepartmentId(wlEntry.departmentId),
     createdAt: new Date().toISOString(),
   }
 
-  // Owner always stays admin
-  if (isOwnerEmail(email)) {
-    user.role = 'admin'
+  // Owner always stays owner when first registering the bootstrap email
+  if (isOwnerEmail(email) && !findOwner(accounts.users.filter((u) => u.id !== user.id))) {
+    user.role = 'owner'
   }
 
   accounts.removedEmails = (accounts.removedEmails ?? []).filter((e) => e !== email)
@@ -359,17 +459,33 @@ export function listUsersPublic(): PublicUser[] {
   return readAccounts().users.map(toPublicUser)
 }
 
-export function updateUserRole(userId: string, role: UserRole): PublicUser[] {
-  if (role === 'admin') {
-    throw new Error('Роль админа закреплена за владельцем и не назначается вручную')
+export function updateUserRole(
+  userId: string,
+  role: UserRole,
+  actor?: PublicUser | null,
+): PublicUser[] {
+  if (role === 'owner') {
+    throw new Error('Владение передаётся отдельным действием')
+  }
+  if (role !== 'user' && role !== 'editor' && role !== 'admin') {
+    throw new Error('Недопустимая роль')
   }
 
   const accounts = readAccounts()
   const user = accounts.users.find((u) => u.id === userId)
   if (!user) throw new Error('Пользователь не найден')
 
-  if (isOwnerEmail(user.email)) {
+  if (isOwnerRole(user.role)) {
     throw new Error('Нельзя менять роль владельца')
+  }
+  if (actor) {
+    if (!isStaffRole(actor.role)) throw new Error('Недостаточно прав')
+    if (role === 'admin' && !isOwnerRole(actor.role)) {
+      throw new Error('Назначить админа может только владелец')
+    }
+    if (user.role === 'admin' && role !== 'admin' && !isOwnerRole(actor.role)) {
+      throw new Error('Снять роль админа может только владелец')
+    }
   }
 
   user.role = role
@@ -379,11 +495,19 @@ export function updateUserRole(userId: string, role: UserRole): PublicUser[] {
 
 export function updateUserProfile(
   userId: string,
-  input: { name?: string; password?: string },
+  input: { name?: string; password?: string; departmentId?: WorkDepartmentId; email?: string },
+  actor?: PublicUser | null,
 ): PublicUser[] {
   const accounts = readAccounts()
-  const user = accounts.users.find((u) => u.id === userId)
+  const emailHint = input.email ? normalizeEmail(input.email) : ''
+  const user =
+    accounts.users.find((u) => u.id === userId) ??
+    (emailHint ? accounts.users.find((u) => normalizeEmail(u.email) === emailHint) : undefined)
   if (!user) throw new Error('Пользователь не найден')
+
+  if (actor && isOwnerRole(user.role) && actor.id !== user.id) {
+    throw new Error('Владельца может изменить только он сам')
+  }
 
   if (input.name !== undefined) {
     const name = input.name.trim()
@@ -398,16 +522,62 @@ export function updateUserProfile(
     user.passwordHash = hashPassword(input.password, salt)
   }
 
+  if (input.departmentId !== undefined) {
+    user.departmentId = normalizeWorkDepartmentId(input.departmentId)
+    const email = normalizeEmail(user.email)
+    const wlIdx = accounts.whitelist.findIndex((e) => normalizeEmail(e.email) === email)
+    if (wlIdx >= 0) {
+      accounts.whitelist[wlIdx] = { email, departmentId: user.departmentId }
+    } else {
+      accounts.whitelist.push({ email, departmentId: user.departmentId })
+    }
+  }
+
   writeAccounts(accounts)
   return listUsersPublic()
 }
 
-export function deleteUser(userId: string): PublicUser[] {
+export function transferOwnership(successorId: string, actor?: PublicUser | null): PublicUser[] {
+  if (actor && !isOwnerRole(actor.role)) {
+    throw new Error('Передать владение может только владелец')
+  }
+  const accounts = readAccounts()
+  const owner = findOwner(accounts.users)
+  if (!owner) throw new Error('Владелец не найден')
+  if (actor && actor.id !== owner.id) {
+    throw new Error('Передать владение может только владелец')
+  }
+  if (successorId === owner.id) {
+    throw new Error('Нельзя передать владение самому себе')
+  }
+  const successor = accounts.users.find((u) => u.id === successorId)
+  if (!successor) throw new Error('Пользователь для передачи владения не найден')
+
+  owner.role = 'admin'
+  successor.role = 'owner'
+  const email = normalizeEmail(successor.email)
+  const wlIdx = accounts.whitelist.findIndex((e) => normalizeEmail(e.email) === email)
+  if (wlIdx < 0) {
+    accounts.whitelist.push({ email, departmentId: successor.departmentId })
+  }
+  writeAccounts(accounts)
+  return listUsersPublic()
+}
+
+export function deleteUser(userId: string, successorId?: string, actor?: PublicUser | null): PublicUser[] {
   const accounts = readAccounts()
   const user = accounts.users.find((u) => u.id === userId)
   if (!user) throw new Error('Пользователь не найден')
-  if (isOwnerEmail(user.email)) {
-    throw new Error('Нельзя удалить владельца')
+
+  if (isOwnerRole(user.role)) {
+    if (actor && actor.id !== user.id) {
+      throw new Error('Удалить владельца может только он сам')
+    }
+    if (!successorId) {
+      throw new Error('Сначала назначьте другого пользователя владельцем')
+    }
+    transferOwnership(successorId, actor ?? toPublicUser(user))
+    return deleteUser(userId, undefined, actor)
   }
 
   const email = normalizeEmail(user.email)
@@ -431,48 +601,59 @@ export function deleteUser(userId: string): PublicUser[] {
   return listUsersPublic()
 }
 
-export function getWhitelist(): string[] {
+export function getWhitelist(): WhitelistEntry[] {
   return readAccounts().whitelist
 }
 
-export function setWhitelist(emails: string[]): string[] {
+export function setWhitelist(
+  entries: Array<string | WhitelistEntry>,
+): WhitelistEntry[] {
   const accounts = readAccounts()
-  const cleaned = Array.from(
-    new Set(
-      emails
-        .map((e) => e.trim())
-        .filter(Boolean)
-        .map((e) => e.toLowerCase()),
-    ),
-  )
-  if (!cleaned.includes(normalizeEmail(BOOTSTRAP_ADMIN_EMAIL))) {
-    cleaned.push(normalizeEmail(BOOTSTRAP_ADMIN_EMAIL))
-  }
-  accounts.whitelist = cleaned
+  accounts.whitelist = normalizeWhitelistRaw(entries)
+  ensureLocalOwner(accounts)
   writeAccounts(accounts)
   return accounts.whitelist
 }
 
-export function addWhitelistEmail(email: string): string[] {
+export function addWhitelistEmail(
+  email: string,
+  departmentId?: WorkDepartmentId,
+): WhitelistEntry[] {
   const normalized = normalizeEmail(email)
   if (!normalized.includes('@')) throw new Error('Некорректная почта')
+  const dept = normalizeWorkDepartmentId(departmentId)
   const accounts = readAccounts()
-  if (!accounts.whitelist.map(normalizeEmail).includes(normalized)) {
-    accounts.whitelist.push(normalized)
-    writeAccounts(accounts)
+  const idx = accounts.whitelist.findIndex((e) => normalizeEmail(e.email) === normalized)
+  if (idx >= 0) {
+    accounts.whitelist[idx] = { email: normalized, departmentId: dept }
+  } else {
+    accounts.whitelist.push({ email: normalized, departmentId: dept })
   }
+  writeAccounts(accounts)
   return accounts.whitelist
 }
 
-export function removeWhitelistEmail(email: string): string[] {
+export function removeWhitelistEmail(email: string): WhitelistEntry[] {
   const normalized = normalizeEmail(email)
-  if (normalized === normalizeEmail(BOOTSTRAP_ADMIN_EMAIL)) {
-    throw new Error('Нельзя удалить почту основного админа из whitelist')
+  if (normalized === normalizeEmail(getOwnerEmail())) {
+    throw new Error('Нельзя удалить почту владельца из whitelist')
   }
   const accounts = readAccounts()
-  accounts.whitelist = accounts.whitelist.filter((e) => normalizeEmail(e) !== normalized)
+  accounts.whitelist = accounts.whitelist.filter((e) => normalizeEmail(e.email) !== normalized)
   writeAccounts(accounts)
   return accounts.whitelist
+}
+
+export function getRegistrationDepartment(
+  email: string,
+): { departmentId: WorkDepartmentId; label: string } | null {
+  const normalized = normalizeEmail(email)
+  if (!normalized.includes('@')) return null
+  const entry = readAccounts().whitelist.find((e) => normalizeEmail(e.email) === normalized)
+  if (!entry) return null
+  const label =
+    DEPARTMENTS.find((d) => d.id === entry.departmentId)?.label ?? entry.departmentId
+  return { departmentId: entry.departmentId, label }
 }
 
 export function setYandexToken(token: string): SettingsData {

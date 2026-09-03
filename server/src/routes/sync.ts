@@ -37,14 +37,32 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
       }
 
       let users: unknown[] = []
-      let whitelist: string[] = []
+      let whitelist: { email: string; departmentId: string }[] = []
       if (req.user) {
-        const usersRes = await query(
-          'SELECT id, name, email, role, created_at FROM users ORDER BY created_at',
+        const usersRes = await query<{
+          id: string
+          name: string
+          email: string
+          role: string
+          department_id: string
+          created_at: string
+        }>('SELECT id, name, email, role, department_id, created_at FROM users ORDER BY created_at')
+        users = usersRes.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          role: row.role,
+          departmentId: row.department_id ?? 'support',
+          createdAt: row.created_at,
+          created_at: row.created_at,
+        }))
+        const wlRes = await query<{ email: string; department_id: string }>(
+          'SELECT email, department_id FROM whitelist ORDER BY email',
         )
-        users = usersRes.rows
-        const wlRes = await query<{ email: string }>('SELECT email FROM whitelist ORDER BY email')
-        whitelist = wlRes.rows.map((r) => r.email)
+        whitelist = wlRes.rows.map((r) => ({
+          email: r.email,
+          departmentId: r.department_id ?? 'support',
+        }))
       }
 
       res.json({
@@ -104,17 +122,40 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
     }
 
     let users: unknown[] = []
-    let whitelist: string[] = []
+    let whitelist: { email: string; departmentId: string }[] = []
     if (req.user) {
-      const usersRes = await query(
-        'SELECT id, name, email, role, created_at FROM users WHERE created_at > $1',
+      const usersRes = await query<{
+        id: string
+        name: string
+        email: string
+        role: string
+        department_id: string
+        created_at: string
+      }>(
+        'SELECT id, name, email, role, department_id, created_at FROM users WHERE created_at > $1',
         [sinceDate.toISOString()],
       )
-      users = usersRes.rows
+      users = usersRes.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        role: row.role,
+        departmentId: row.department_id ?? 'support',
+        createdAt: row.created_at,
+        created_at: row.created_at,
+      }))
       // Whitelist changes are rare — return full list for authenticated admin sync
-      if ((req as AuthRequest).user?.role === 'admin') {
-        const wlRes = await query<{ email: string }>('SELECT email FROM whitelist ORDER BY email')
-        whitelist = wlRes.rows.map((r) => r.email)
+      if (
+        (req as AuthRequest).user?.role === 'admin' ||
+        (req as AuthRequest).user?.role === 'owner'
+      ) {
+        const wlRes = await query<{ email: string; department_id: string }>(
+          'SELECT email, department_id FROM whitelist ORDER BY email',
+        )
+        whitelist = wlRes.rows.map((r) => ({
+          email: r.email,
+          departmentId: r.department_id ?? 'support',
+        }))
       }
     }
 

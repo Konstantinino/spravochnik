@@ -4,6 +4,7 @@ import {
   DEPARTMENTS,
   departmentById,
   getUserDataRoot,
+  normalizeWorkDepartmentId,
   type DepartmentId,
 } from './paths'
 import {
@@ -12,6 +13,7 @@ import {
   writeSettings,
   writeAccounts,
   readAccounts,
+  setWhitelist,
   type AccountsData,
 } from './auth-store'
 import { clearPendingMedia, readPendingMedia } from './pending-media'
@@ -185,7 +187,7 @@ interface SyncChangesResponse {
   deletedTopics: Array<{ department_id: string; id: number; deleted_at: string }>
   media: Array<{ relative_path: string; deleted_at?: string | null }>
   users?: unknown[]
-  whitelist?: string[]
+  whitelist?: Array<string | { email: string; departmentId?: string; department_id?: string }>
 }
 
 export async function pullFromServer(options?: { force?: boolean }): Promise<SyncStatus> {
@@ -243,7 +245,7 @@ export async function pullFromServer(options?: { force?: boolean }): Promise<Syn
     if (changes.users?.length || changes.whitelist?.length) {
       const accounts = readAccounts()
       if (changes.users?.length) {
-        for (const remote of changes.users as AccountsData['users']) {
+        for (const remote of changes.users as Array<Record<string, unknown>>) {
           const email = String(remote.email).toLowerCase()
           const idx = accounts.users.findIndex((u) => u.email.toLowerCase() === email)
           const merged = {
@@ -253,10 +255,16 @@ export async function pullFromServer(options?: { force?: boolean }): Promise<Syn
             passwordHash: idx >= 0 ? accounts.users[idx].passwordHash : '',
             salt: idx >= 0 ? accounts.users[idx].salt : '',
             role: remote.role as AccountsData['users'][0]['role'],
-            createdAt:
+            departmentId: normalizeWorkDepartmentId(
+              remote.departmentId ??
+                remote.department_id ??
+                (idx >= 0 ? accounts.users[idx].departmentId : 'support'),
+            ),
+            createdAt: String(
               remote.createdAt ??
-              (remote as { created_at?: string }).created_at ??
-              new Date().toISOString(),
+                remote.created_at ??
+                (idx >= 0 ? accounts.users[idx].createdAt : new Date().toISOString()),
+            ),
           }
           if (idx >= 0) {
             accounts.users[idx] = merged
@@ -266,7 +274,8 @@ export async function pullFromServer(options?: { force?: boolean }): Promise<Syn
         }
       }
       if (changes.whitelist?.length) {
-        accounts.whitelist = changes.whitelist
+        const wl = setWhitelist(changes.whitelist)
+        accounts.whitelist = wl
       }
       writeAccounts(accounts)
     }
@@ -321,8 +330,19 @@ async function replayOperation(op: PendingOperation): Promise<void> {
         body: JSON.stringify({ role: op.payload.role }),
       })
       break
+    case 'transfer_ownership':
+      await serverFetch('/admin/transfer-ownership', {
+        method: 'POST',
+        body: JSON.stringify({ userId: op.payload.userId }),
+      })
+      break
     case 'delete_user':
-      await serverFetch(`/admin/users/${op.payload.userId}`, { method: 'DELETE' })
+      await serverFetch(`/admin/users/${op.payload.userId}`, {
+        method: 'DELETE',
+        body: JSON.stringify(
+          op.payload.successorId ? { successorId: op.payload.successorId } : {},
+        ),
+      })
       break
     case 'update_user':
       await serverFetch(`/admin/users/${op.payload.userId}`, {
@@ -330,19 +350,23 @@ async function replayOperation(op: PendingOperation): Promise<void> {
         body: JSON.stringify({
           name: op.payload.name,
           ...(op.payload.password ? { password: op.payload.password } : {}),
+          ...(op.payload.departmentId ? { departmentId: op.payload.departmentId } : {}),
         }),
       })
       break
     case 'set_whitelist':
       await serverFetch('/admin/whitelist', {
         method: 'PUT',
-        body: JSON.stringify({ emails: op.payload.emails }),
+        body: JSON.stringify({ emails: op.payload.emails ?? op.payload.whitelist }),
       })
       break
     case 'add_whitelist':
       await serverFetch('/admin/whitelist', {
         method: 'POST',
-        body: JSON.stringify({ email: op.payload.email }),
+        body: JSON.stringify({
+          email: op.payload.email,
+          departmentId: op.payload.departmentId ?? 'support',
+        }),
       })
       break
     case 'remove_whitelist':
@@ -552,6 +576,11 @@ export async function tryPushTopicOnline(
     }
     if (e instanceof ServerApiError && (e.status === 0 || e.status >= 500)) {
       return { ok: false, offline: true }
+    }
+    if (e instanceof ServerApiError && e.status === 404 && type === 'update') {
+      throw new Error(
+        'На сервере нет этой темы. Локальный сервер (127.0.0.1) — тестовая база, а в клиенте, скорее всего, кэш с другого сервера. Верните production URL или импортируйте REST-INFO-export в локальный сервер.',
+      )
     }
     throw e
   }

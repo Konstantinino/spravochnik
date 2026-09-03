@@ -20,13 +20,21 @@ import {
   getMediaDir,
   getSeedDataDir,
   getUserDataRoot,
-  BOOTSTRAP_ADMIN_EMAIL,
+  isWorkDepartmentId,
+  normalizeWorkDepartmentId,
+  parseUserRole,
+  STAFF_ROLES,
+  CONTENT_EDITOR_ROLES,
   type DepartmentId,
   type UserRole,
+  type WorkDepartmentId,
 } from './paths'
 import {
+  cleanupTopicFileOrphans,
   cleanupTopicImageOrphans,
+  migrateDraftFilesToTopic,
   migrateDraftImagesToTopic,
+  saveFileForOwner,
   saveImageFileForOwner,
   saveNativeImageForOwner,
   type ImageOwner,
@@ -36,6 +44,7 @@ import {
   clearSession,
   ensureAuthFiles,
   getCurrentUser,
+  getRegistrationDepartment,
   getWhitelist,
   listUsersPublic,
   loginUser,
@@ -52,9 +61,12 @@ import {
   updateUserRole,
   updateUserProfile,
   deleteUser,
+  transferOwnership,
+  getOwnerEmail,
   writeSession,
   clearEphemeralSessionOnStartup,
   type PublicUser,
+  type WhitelistEntry,
 } from './auth-store'
 import {
   discardLocalChanges,
@@ -78,6 +90,7 @@ import {
   serverFetch,
   serverLogin,
   serverRegister,
+  ServerApiError,
 } from './server-api'
 import {
   checkForUpdates,
@@ -127,9 +140,20 @@ function ensureDataReady(): void {
   ensureLocalUpdateManifest()
 }
 
+function roleFromServerUser(user: Record<string, unknown>): UserRole {
+  if (user.isOwner || user.role === 'owner') return 'owner'
+  return parseUserRole(user.role)
+}
+
 function cacheServerUser(user: Record<string, unknown>): void {
   const accounts = readAccounts()
   const email = String(user.email ?? '').toLowerCase()
+  const incomingDept = user.departmentId ?? user.department_id
+  const departmentId = isWorkDepartmentId(incomingDept)
+    ? incomingDept
+    : incomingDept != null && String(incomingDept).trim()
+      ? normalizeWorkDepartmentId(incomingDept)
+      : undefined
   const existing = accounts.users.find((u) => u.email.toLowerCase() === email)
   if (!existing) {
     accounts.users.push({
@@ -138,19 +162,41 @@ function cacheServerUser(user: Record<string, unknown>): void {
       email,
       passwordHash: '',
       salt: '',
-      role: (user.role as 'user' | 'editor' | 'admin') ?? 'user',
+      role: roleFromServerUser(user),
+      departmentId: departmentId ?? 'support',
       createdAt: new Date().toISOString(),
     })
     writeAccounts(accounts)
   } else {
-    existing.id = String(user.id ?? existing.id)
+    const previousId = existing.id
+    const nextId = String(user.id ?? existing.id)
+    existing.id = nextId
     existing.name = String(user.name ?? existing.name)
-    existing.role = (user.role as 'user' | 'editor' | 'admin') ?? existing.role
+    existing.role = roleFromServerUser(user)
+    if (departmentId) existing.departmentId = departmentId
     writeAccounts(accounts)
+    // Keep session valid when server UUID replaces a local id
+    if (previousId && nextId && previousId !== nextId) {
+      try {
+        const sessionFile = path.join(getUserDataRoot(), 'session.json')
+        if (fs.existsSync(sessionFile)) {
+          const session = JSON.parse(fs.readFileSync(sessionFile, 'utf8')) as {
+            userId?: string
+            persist?: boolean
+          }
+          if (session.userId === previousId) {
+            writeSession(nextId, session.persist !== false)
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
 function publicUsersFromServer(users: Record<string, unknown>[]): PublicUser[] {
+  if (!Array.isArray(users)) return []
   for (const user of users) {
     cacheServerUser(user)
   }
@@ -158,8 +204,9 @@ function publicUsersFromServer(users: Record<string, unknown>[]): PublicUser[] {
     id: String(user.id),
     name: String(user.name),
     email: String(user.email),
-    role: user.role as UserRole,
-    ...(user.isOwner ? { isOwner: true } : {}),
+    role: roleFromServerUser(user),
+    departmentId: normalizeWorkDepartmentId(user.departmentId ?? user.department_id),
+    ...(user.isOwner || user.role === 'owner' ? { isOwner: true } : {}),
   }))
 }
 
@@ -258,8 +305,9 @@ function registerIpc(): void {
           id: String(user.id),
           name: String(user.name),
           email: String(user.email),
-          role: user.role as UserRole,
-          isOwner: Boolean(user.isOwner),
+          role: parseUserRole(user.role),
+          departmentId: normalizeWorkDepartmentId(user.departmentId ?? user.department_id),
+          isOwner: Boolean(user.isOwner) || user.role === 'owner',
         }
       }
       const user = loginUser(payload)
@@ -296,8 +344,9 @@ function registerIpc(): void {
           id: String(user.id),
           name: String(user.name),
           email: String(user.email),
-          role: user.role as UserRole,
-          isOwner: Boolean(user.isOwner),
+          role: parseUserRole(user.role),
+          departmentId: normalizeWorkDepartmentId(user.departmentId ?? user.department_id),
+          isOwner: Boolean(user.isOwner) || user.role === 'owner',
         }
       }
       const user = registerUser(payload)
@@ -332,7 +381,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('admin:list-users', async () => {
-    requireRole(getCurrentUser(), ['admin'])
+    requireRole(getCurrentUser(), STAFF_ROLES)
     try {
       const fromServer = await fetchAdminUsersFromServer()
       if (fromServer) return fromServer
@@ -342,12 +391,75 @@ function registerIpc(): void {
     return listUsersPublic()
   })
   ipcMain.handle('admin:set-role', async (_e, payload: { userId: string; role: UserRole }) => {
-    requireRole(getCurrentUser(), ['admin'])
-    const users = updateUserRole(payload.userId, payload.role)
+    const actor = getCurrentUser()
+    requireRole(actor, STAFF_ROLES)
+    const settings = readSettings()
+    const role = parseUserRole(payload.role)
+
+    if (settings.serverUrl.trim() && settings.authToken.trim()) {
+      const online = await isServerReachable()
+      if (online) {
+        const data = await serverFetch<{ users: Record<string, unknown>[] }>(
+          `/admin/users/${payload.userId}/role`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({ role }),
+          },
+        )
+        return publicUsersFromServer(data.users)
+      }
+      const users = updateUserRole(payload.userId, role, actor)
+      queueOperation({
+        type: 'set_user_role',
+        payload: { userId: payload.userId, role },
+      })
+      markOfflinePending()
+      return users
+    }
+
+    const users = updateUserRole(payload.userId, role, actor)
     markLocalChange()
     await pushAccountsFile()
     return users
   })
+  ipcMain.handle(
+    'admin:transfer-ownership',
+    async (_e, payload: { userId: string }) => {
+      const actor = getCurrentUser()
+      requireRole(actor, STAFF_ROLES)
+      const settings = readSettings()
+      const successorId = String(payload.userId ?? '').trim()
+
+      if (settings.serverUrl.trim() && settings.authToken.trim()) {
+        const online = await isServerReachable()
+        if (online) {
+          const data = await serverFetch<{ users: Record<string, unknown>[] }>(
+            '/admin/transfer-ownership',
+            {
+              method: 'POST',
+              body: JSON.stringify({ userId: successorId }),
+            },
+          )
+          const users = publicUsersFromServer(data.users)
+          const me = users.find((u) => u.id === actor?.id)
+          if (me) cacheServerUser(me as unknown as Record<string, unknown>)
+          return users
+        }
+        const users = transferOwnership(successorId, actor)
+        queueOperation({
+          type: 'transfer_ownership',
+          payload: { userId: successorId },
+        })
+        markOfflinePending()
+        return users
+      }
+
+      const users = transferOwnership(successorId, actor)
+      markLocalChange()
+      await pushAccountsFile()
+      return users
+    },
+  )
   ipcMain.handle(
     'admin:update-user',
     async (
@@ -356,95 +468,282 @@ function registerIpc(): void {
         userId: string
         name: string
         password?: string
+        departmentId?: WorkDepartmentId
       },
     ) => {
-      requireRole(getCurrentUser(), ['admin'])
+      const actor = getCurrentUser()
+      requireRole(actor, STAFF_ROLES)
       const settings = readSettings()
       const trimmedName = payload.name.trim()
       const password = payload.password?.trim() ?? ''
+      const departmentId =
+        payload.departmentId !== undefined
+          ? normalizeWorkDepartmentId(payload.departmentId)
+          : undefined
+
+      const localBefore = readAccounts().users.find((u) => u.id === payload.userId)
+      const emailHint = localBefore?.email
+
+      async function putUser(userId: string) {
+        const body: { name: string; password?: string; departmentId?: WorkDepartmentId } = {
+          name: trimmedName,
+        }
+        if (password) body.password = password
+        if (departmentId !== undefined) body.departmentId = departmentId
+        return serverFetch<{ users: Record<string, unknown>[]; whitelist?: WhitelistEntry[] }>(
+          `/admin/users/${userId}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(body),
+          },
+        )
+      }
 
       if (settings.serverUrl.trim() && settings.authToken.trim()) {
         const online = await isServerReachable()
         if (online) {
-          const body: { name: string; password?: string } = { name: trimmedName }
-          if (password) body.password = password
-          const data = await serverFetch<{ users: Record<string, unknown>[] }>(
-            `/admin/users/${payload.userId}`,
-            {
-              method: 'PUT',
-              body: JSON.stringify(body),
-            },
-          )
-          return publicUsersFromServer(data.users)
+          let data: { users: Record<string, unknown>[]; whitelist?: WhitelistEntry[] }
+          try {
+            data = await putUser(payload.userId)
+          } catch (err) {
+            // Local short ids may not match server UUIDs — resolve by email and retry
+            if (
+              err instanceof ServerApiError &&
+              err.status === 404 &&
+              emailHint
+            ) {
+              const fromServer = await fetchAdminUsersFromServer()
+              const match = fromServer?.find(
+                (u) => u.email.toLowerCase() === emailHint.toLowerCase(),
+              )
+              if (!match) throw err
+              data = await putUser(match.id)
+            } else {
+              throw err
+            }
+          }
+
+          const usersFromServer = publicUsersFromServer(data.users)
+          const resolved =
+            usersFromServer.find((u) => u.id === payload.userId) ??
+            usersFromServer.find(
+              (u) => emailHint && u.email.toLowerCase() === emailHint.toLowerCase(),
+            )
+          try {
+            updateUserProfile(resolved?.id ?? payload.userId, {
+              name: trimmedName,
+              ...(password ? { password } : {}),
+              ...(departmentId !== undefined ? { departmentId } : {}),
+              ...(emailHint ? { email: emailHint } : {}),
+            })
+          } catch {
+            if (emailHint && departmentId !== undefined) {
+              addWhitelistEmail(emailHint, departmentId)
+            }
+          }
+          if (Array.isArray(data.whitelist)) {
+            setWhitelist(data.whitelist)
+          } else if (departmentId !== undefined) {
+            const email = resolved?.email ?? emailHint
+            if (email) addWhitelistEmail(email, departmentId)
+          }
+          return { users: listUsersPublic(), whitelist: getWhitelist() }
         }
 
-        updateUserProfile(payload.userId, {
+        const users = updateUserProfile(payload.userId, {
           name: trimmedName,
           ...(password ? { password } : {}),
-        })
+          ...(departmentId !== undefined ? { departmentId } : {}),
+        }, actor)
         queueOperation({
           type: 'update_user',
           payload: {
             userId: payload.userId,
             name: trimmedName,
             ...(password ? { password } : {}),
+            ...(departmentId !== undefined ? { departmentId } : {}),
           },
         })
         markOfflinePending()
-        return listUsersPublic()
+        return { users, whitelist: getWhitelist() }
       }
 
       const users = updateUserProfile(payload.userId, {
         name: trimmedName,
         ...(password ? { password } : {}),
-      })
+        ...(departmentId !== undefined ? { departmentId } : {}),
+      }, actor)
+      markLocalChange()
+      await pushAccountsFile()
+      return { users, whitelist: getWhitelist() }
+    },
+  )
+  ipcMain.handle(
+    'admin:delete-user',
+    async (_e, payload: string | { userId: string; successorId?: string }) => {
+      const actor = getCurrentUser()
+      requireRole(actor, STAFF_ROLES)
+      const userId = typeof payload === 'string' ? payload : payload.userId
+      const successorId = typeof payload === 'string' ? undefined : payload.successorId
+      const settings = readSettings()
+
+      if (settings.serverUrl.trim() && settings.authToken.trim()) {
+        const online = await isServerReachable()
+        if (online) {
+          const data = await serverFetch<{ users: Record<string, unknown>[] }>(
+            `/admin/users/${userId}`,
+            {
+              method: 'DELETE',
+              body: JSON.stringify(successorId ? { successorId } : {}),
+            },
+          )
+          const users = publicUsersFromServer(data.users)
+          if (actor?.id === userId) {
+            clearSession()
+          }
+          return users
+        }
+        const users = deleteUser(userId, successorId, actor)
+        queueOperation({
+          type: 'delete_user',
+          payload: { userId, ...(successorId ? { successorId } : {}) },
+        })
+        markOfflinePending()
+        return users
+      }
+
+      const users = deleteUser(userId, successorId, actor)
       markLocalChange()
       await pushAccountsFile()
       return users
     },
   )
-  ipcMain.handle('admin:delete-user', async (_e, userId: string) => {
-    requireRole(getCurrentUser(), ['admin'])
-    const users = deleteUser(userId)
-    markLocalChange()
-    await pushAccountsFile()
-    return users
-  })
-  ipcMain.handle('admin:get-whitelist', () => {
-    requireRole(getCurrentUser(), ['admin'])
+  ipcMain.handle('admin:get-whitelist', async () => {
+    requireRole(getCurrentUser(), STAFF_ROLES)
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim()) {
+      try {
+        const online = await isServerReachable()
+        if (online) {
+          const data = await serverFetch<{ whitelist?: WhitelistEntry[] }>('/admin/whitelist')
+          const list = Array.isArray(data.whitelist) ? data.whitelist : []
+          setWhitelist(list)
+          return getWhitelist()
+        }
+      } catch {
+        /* fallback local */
+      }
+    }
     return getWhitelist()
   })
-  ipcMain.handle('admin:set-whitelist', async (_e, emails: string[]) => {
-    requireRole(getCurrentUser(), ['admin'])
+  ipcMain.handle('admin:set-whitelist', async (_e, emails: Array<string | WhitelistEntry>) => {
+    requireRole(getCurrentUser(), STAFF_ROLES)
     const list = setWhitelist(emails)
     markLocalChange()
     await pushAccountsFile()
     return list
   })
-  ipcMain.handle('admin:add-whitelist', async (_e, email: string) => {
-    requireRole(getCurrentUser(), ['admin'])
-    const list = addWhitelistEmail(email)
-    markLocalChange()
-    await pushAccountsFile()
-    return list
-  })
+  ipcMain.handle(
+    'admin:add-whitelist',
+    async (_e, payload: string | { email: string; departmentId?: WorkDepartmentId }) => {
+      requireRole(getCurrentUser(), STAFF_ROLES)
+      const email = typeof payload === 'string' ? payload : payload.email
+      const departmentId = normalizeWorkDepartmentId(
+        typeof payload === 'string' ? 'support' : payload.departmentId,
+      )
+      const settings = readSettings()
+      if (settings.serverUrl.trim() && settings.authToken.trim()) {
+        const online = await isServerReachable()
+        if (online) {
+          const data = await serverFetch<{ whitelist: WhitelistEntry[] }>('/admin/whitelist', {
+            method: 'POST',
+            body: JSON.stringify({ email, departmentId }),
+          })
+          setWhitelist(data.whitelist)
+          return data.whitelist
+        }
+        const list = addWhitelistEmail(email, departmentId)
+        queueOperation({
+          type: 'add_whitelist',
+          payload: { email, departmentId },
+        })
+        markOfflinePending()
+        return list
+      }
+      const list = addWhitelistEmail(email, departmentId)
+      markLocalChange()
+      await pushAccountsFile()
+      return list
+    },
+  )
   ipcMain.handle('admin:remove-whitelist', async (_e, email: string) => {
-    requireRole(getCurrentUser(), ['admin'])
+    requireRole(getCurrentUser(), STAFF_ROLES)
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim()) {
+      const online = await isServerReachable()
+      if (online) {
+        const data = await serverFetch<{ whitelist: WhitelistEntry[] }>(
+          `/admin/whitelist/${encodeURIComponent(email)}`,
+          { method: 'DELETE' },
+        )
+        setWhitelist(data.whitelist)
+        return data.whitelist
+      }
+      const list = removeWhitelistEmail(email)
+      queueOperation({
+        type: 'remove_whitelist',
+        payload: { email },
+      })
+      markOfflinePending()
+      return list
+    }
     const list = removeWhitelistEmail(email)
     markLocalChange()
     await pushAccountsFile()
     return list
   })
+  ipcMain.handle('auth:registration-department', async (_e, email: string) => {
+    const settings = readSettings()
+    if (settings.serverUrl.trim()) {
+      try {
+        const online = await isServerReachable()
+        if (online) {
+          const data = await serverFetch<{ departmentId: WorkDepartmentId; label: string }>(
+            `/auth/registration-department?email=${encodeURIComponent(email)}`,
+            { skipAuth: true },
+          )
+          return data
+        }
+      } catch (err) {
+        if (err instanceof ServerApiError && err.status === 404) return null
+        /* fallback local */
+      }
+    }
+    return getRegistrationDepartment(email)
+  })
   ipcMain.handle('admin:get-settings', () => {
-    requireRole(getCurrentUser(), ['admin'])
+    requireRole(getCurrentUser(), STAFF_ROLES)
     const s = readSettings()
     return {
       hasPendingChanges: s.hasPendingChanges,
       hasToken: Boolean(s.authToken?.trim() || s.yandexToken?.trim()),
       hasServer: Boolean(s.serverUrl.trim()),
       serverUrl: s.serverUrl,
-      ownerEmail: BOOTSTRAP_ADMIN_EMAIL,
+      ownerEmail: getOwnerEmail(),
     }
+  })
+
+  ipcMain.handle('admin:storage-stats', async () => {
+    requireRole(getCurrentUser(), ['owner'])
+    const settings = readSettings()
+    if (!settings.serverUrl.trim()) {
+      throw new Error('URL сервера не указан')
+    }
+    const online = await isServerReachable()
+    if (!online) {
+      throw new Error('Нет связи с сервером')
+    }
+    return serverFetch('/admin/storage-stats')
   })
 
   // Token is set before login so whitelist/accounts can sync from Disk first
@@ -466,17 +765,17 @@ function registerIpc(): void {
   ipcMain.handle('sync:pull', async () => pullFromYandex())
   ipcMain.handle('sync:discard', async () => {
     const user = getCurrentUser()
-    requireRole(user, ['editor', 'admin'])
+    requireRole(user, CONTENT_EDITOR_ROLES)
     return discardLocalChanges()
   })
   ipcMain.handle('sync:push', async () => {
     const user = getCurrentUser()
-    requireRole(user, ['editor', 'admin'])
+    requireRole(user, CONTENT_EDITOR_ROLES)
     return pushToYandex()
   })
   ipcMain.handle('sync:resolve-conflicts', async (_event, resolutions: unknown) => {
     const user = getCurrentUser()
-    requireRole(user, ['editor', 'admin'])
+    requireRole(user, CONTENT_EDITOR_ROLES)
     return resolveSyncConflicts(
       Array.isArray(resolutions)
         ? (resolutions as { fileName: string; id: number; choice: 'local' | 'remote' }[])
@@ -487,15 +786,22 @@ function registerIpc(): void {
   ipcMain.handle(
     'sync:lock-topic',
     async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
-      requireRole(getCurrentUser(), ['editor', 'admin'])
-      await lockTopic(payload.departmentId, payload.topicId)
-      return { ok: true }
+      try {
+        requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+        await lockTopic(payload.departmentId, payload.topicId)
+        return { ok: true as const }
+      } catch (e) {
+        return {
+          ok: false as const,
+          error: e instanceof Error ? e.message : 'Тема редактируется другим пользователем',
+        }
+      }
     },
   )
   ipcMain.handle(
     'sync:unlock-topic',
     async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
-      requireRole(getCurrentUser(), ['editor', 'admin'])
+      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       await unlockTopic(payload.departmentId, payload.topicId)
       return { ok: true }
     },
@@ -503,7 +809,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'sync:renew-lock',
     async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
-      requireRole(getCurrentUser(), ['editor', 'admin'])
+      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       await renewTopicLock(payload.departmentId, payload.topicId)
       return { ok: true }
     },
@@ -534,7 +840,7 @@ function registerIpc(): void {
         }
       },
     ) => {
-      requireRole(getCurrentUser(), ['editor', 'admin'])
+      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       const dept = departmentById(payload.departmentId)
       const data = readGuideFile(dept.fileName) as Record<string, unknown>
       const listKey = dept.listKey
@@ -548,6 +854,7 @@ function registerIpc(): void {
       const newId = payload.item.id ?? maxId + 1
       if (payload.draftId) {
         migrateDraftImagesToTopic(payload.draftId, newId)
+        migrateDraftFilesToTopic(payload.draftId, newId)
       }
 
       const newItem: Record<string, unknown> = {
@@ -580,7 +887,12 @@ function registerIpc(): void {
         if (parent) parent.has_children = true
       }
 
-      cleanupTopicImageOrphans(newId, String(newItem.answer ?? ''))
+      try {
+        cleanupTopicImageOrphans(newId, String(newItem.answer ?? ''))
+        cleanupTopicFileOrphans(newId, String(newItem.answer ?? ''))
+      } catch (err) {
+        console.error('media orphan cleanup failed', err)
+      }
 
       data[listKey] = list
       writeGuideFile(dept.fileName, data)
@@ -628,7 +940,7 @@ function registerIpc(): void {
         }
       },
     ) => {
-      requireRole(getCurrentUser(), ['editor', 'admin'])
+      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       const dept = departmentById(payload.departmentId)
       const data = readGuideFile(dept.fileName) as Record<string, unknown>
       const listKey = dept.listKey
@@ -750,7 +1062,12 @@ function registerIpc(): void {
         row.has_children = list.some((child) => child.parent_id === id)
       }
 
-      cleanupTopicImageOrphans(payload.item.id, String(payload.item.answer ?? ''))
+      try {
+        cleanupTopicImageOrphans(payload.item.id, String(payload.item.answer ?? ''))
+        cleanupTopicFileOrphans(payload.item.id, String(payload.item.answer ?? ''))
+      } catch (err) {
+        console.error('media orphan cleanup failed', err)
+      }
 
       data[listKey] = list
       writeGuideFile(dept.fileName, data)
@@ -791,7 +1108,7 @@ function registerIpc(): void {
         id: number
       },
     ) => {
-      requireRole(getCurrentUser(), ['admin'])
+      requireRole(getCurrentUser(), STAFF_ROLES)
       const dept = departmentById(payload.departmentId)
       const data = readGuideFile(dept.fileName) as Record<string, unknown>
       const listKey = dept.listKey
@@ -865,7 +1182,7 @@ function registerIpc(): void {
       event,
       payload: { topicId?: number; draftId?: string },
     ) => {
-      requireRole(getCurrentUser(), ['editor', 'admin'])
+      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       const owner = resolveImageOwner(payload ?? {})
       const win = BrowserWindow.fromWebContents(event.sender)
       const options = {
@@ -890,16 +1207,49 @@ function registerIpc(): void {
   ipcMain.handle(
     'save-topic-image-clipboard',
     (_event, payload: { topicId?: number; draftId?: string }) => {
-      requireRole(getCurrentUser(), ['editor', 'admin'])
+      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       const owner = resolveImageOwner(payload ?? {})
       const image = clipboard.readImage()
       return saveNativeImageForOwner(owner, image)
     },
   )
 
+  ipcMain.handle(
+    'save-topic-file',
+    async (
+      event,
+      payload: { topicId?: number; draftId?: string },
+    ) => {
+      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+      const owner = resolveImageOwner(payload ?? {})
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const options = {
+        title: 'Выберите файл (до 10 МБ)',
+        properties: ['openFile' as const],
+        filters: [
+          {
+            name: 'Документы',
+            extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'csv', 'odt', 'ods'],
+          },
+          { name: 'Архивы', extensions: ['zip', 'rar', '7z'] },
+          { name: 'Все файлы', extensions: ['*'] },
+        ],
+      }
+      const result = win
+        ? await dialog.showOpenDialog(win, options)
+        : await dialog.showOpenDialog(options)
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return null
+      }
+
+      return saveFileForOwner(owner, result.filePaths[0])
+    },
+  )
+
   // Legacy flat media pick — keep for compatibility; prefer save-topic-image
   ipcMain.handle('pick-and-save-image', async (event) => {
-    requireRole(getCurrentUser(), ['editor', 'admin'])
+    requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
     const win = BrowserWindow.fromWebContents(event.sender)
     const options = {
       title: 'Выберите фото',
@@ -931,7 +1281,10 @@ function registerIpc(): void {
 
   ipcMain.handle('resolve-media-url', (_event, relativePath: string, topicId?: number) => {
     const cleaned = relativePath.replace(/^\/+/, '').replace(/\\/g, '/')
-    if (cleaned.startsWith('images/') && typeof topicId === 'number') {
+    if (
+      (cleaned.startsWith('images/') || cleaned.startsWith('files/')) &&
+      typeof topicId === 'number'
+    ) {
       return `spravochnik://media/${topicId}/${cleaned}`
     }
     if (cleaned.startsWith('media/')) {
@@ -940,7 +1293,31 @@ function registerIpc(): void {
     return ''
   })
 
-  ipcMain.handle('media:download', (_event, resolvedSrc: string) => downloadMediaImage(resolvedSrc))
+  ipcMain.handle('media:download', (_event, resolvedSrc: string, suggestedName?: string) =>
+    downloadMediaImage(resolvedSrc, suggestedName),
+  )
+
+  ipcMain.handle('media:open', async (_event, resolvedSrc: string) => {
+    if (!resolvedSrc || typeof resolvedSrc !== 'string') {
+      return { ok: false, error: 'Пустой адрес файла' }
+    }
+    try {
+      const url = new URL(resolvedSrc)
+      const relative = path.posix.join(url.hostname, url.pathname.replace(/^\/+/, ''))
+      if (!relative.startsWith('media/')) {
+        return { ok: false, error: 'Недопустимый путь' }
+      }
+      const filePath = path.join(getUserDataRoot(), ...relative.split('/'))
+      if (!fs.existsSync(filePath)) {
+        return { ok: false, error: 'Файл не найден' }
+      }
+      const err = await shell.openPath(filePath)
+      if (err) return { ok: false, error: err }
+      return { ok: true }
+    } catch {
+      return { ok: false, error: 'Не удалось открыть файл' }
+    }
+  })
 
   ipcMain.handle('updates:status', () => getUpdateStatus())
   ipcMain.handle('updates:check', () => checkForUpdates())

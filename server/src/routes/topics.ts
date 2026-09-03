@@ -44,7 +44,7 @@ topicsRouter.get('/:dept/topics', async (req, res) => {
 topicsRouter.post(
   '/:dept/topics/lock/:topicId',
   authMiddleware,
-  requireRole('editor', 'admin'),
+  requireRole('editor', 'admin', 'owner'),
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
@@ -74,7 +74,7 @@ topicsRouter.post(
 topicsRouter.post(
   '/:dept/topics/unlock/:topicId',
   authMiddleware,
-  requireRole('editor', 'admin'),
+  requireRole('editor', 'admin', 'owner'),
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
@@ -91,7 +91,7 @@ topicsRouter.post(
 topicsRouter.post(
   '/:dept/topics/renew-lock/:topicId',
   authMiddleware,
-  requireRole('editor', 'admin'),
+  requireRole('editor', 'admin', 'owner'),
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
@@ -108,7 +108,7 @@ topicsRouter.post(
 topicsRouter.post(
   '/:dept/topics',
   authMiddleware,
-  requireRole('editor', 'admin'),
+  requireRole('editor', 'admin', 'owner'),
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
@@ -174,7 +174,7 @@ topicsRouter.post(
 topicsRouter.put(
   '/:dept/topics/:topicId',
   authMiddleware,
-  requireRole('editor', 'admin'),
+  requireRole('editor', 'admin', 'owner'),
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
@@ -289,7 +289,7 @@ topicsRouter.put(
 topicsRouter.delete(
   '/:dept/topics/:topicId',
   authMiddleware,
-  requireRole('admin'),
+  requireRole('admin', 'owner'),
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)

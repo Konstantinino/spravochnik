@@ -52,3 +52,20 @@ export function parseTopicLinkHref(href: string | undefined): number | null {
   }
   return null
 }
+
+function escapeMdLinkLabel(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/\]/g, '\\]')
+}
+
+/** Markdown snippet to paste into a topic body: `[Title](#123)`. */
+export function formatTopicMarkdownLink(id: number, title: string): string {
+  const label = escapeMdLinkLabel(title.trim() || 'Тема')
+  return `[${label}](#${id})`
+}
+
+/** Topic id from a copied markdown link or a bare `#123` / `topic:123`. */
+export function parseCopiedTopicLink(text: string): number | null {
+  const trimmed = text.trim()
+  const mdMatch = trimmed.match(/^\[(?:\\.|[^\]])*\]\(([^)]+)\)$/)
+  return parseTopicLinkHref(mdMatch ? mdMatch[1] : trimmed)
+}

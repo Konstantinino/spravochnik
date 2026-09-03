@@ -7,7 +7,7 @@ import { TopicEditorModal } from './components/TopicEditorModal'
 import { AuthScreen } from './components/AuthScreen'
 import { SettingsPage } from './components/SettingsPage'
 import { SyncConflictModal } from './components/SyncConflictModal'
-import { getItems, filterItemsByView, getItemParty } from './lib/data'
+import { getItems, filterItemsByView, getItemParty, isArchived } from './lib/data'
 import { buildTopicSearchFilter } from './lib/search'
 import {
   loadSavedDepartment,
@@ -267,8 +267,18 @@ export default function App() {
   }
 
   function navigateToTopic(id: number) {
-    if (id === selectedId) return
+    const topic = items.find((i) => i.id === id)
+    if (!topic || id === selectedId) return
     setNavHistory((history) => (selectedId != null ? [...history, selectedId] : history))
+    if (!visibleItems.some((i) => i.id === id)) {
+      if (isArchived(topic)) {
+        if (canEdit) setListFilter('archive')
+      } else if (listFilter === 'archive') {
+        setListFilter('all')
+      } else if (departmentId === 'support' && isSupportParty(listFilter)) {
+        setListFilter('all')
+      }
+    }
     setSelectedId(id)
   }
 
@@ -277,6 +287,16 @@ export default function App() {
       if (history.length === 0) return history
       const next = [...history]
       const prevId = next.pop()!
+      const prev = items.find((i) => i.id === prevId)
+      if (prev && !visibleItems.some((i) => i.id === prevId)) {
+        if (isArchived(prev)) {
+          if (canEdit) setListFilter('archive')
+        } else if (listFilter === 'archive') {
+          setListFilter('all')
+        } else if (departmentId === 'support' && isSupportParty(listFilter)) {
+          setListFilter('all')
+        }
+      }
       setSelectedId(prevId)
       return next
     })
@@ -284,10 +304,10 @@ export default function App() {
 
   useEffect(() => {
     if (selectedId == null) return
-    if (!visibleItems.some((i) => i.id === selectedId)) {
+    if (!items.some((i) => i.id === selectedId)) {
       setSelectedId(null)
     }
-  }, [visibleItems, selectedId])
+  }, [items, selectedId])
 
   const searchFilter = useMemo(
     () => buildTopicSearchFilter(visibleItems, query, { searchInBody }),

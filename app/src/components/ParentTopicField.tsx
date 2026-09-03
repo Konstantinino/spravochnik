@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { GuideItem } from '../types'
-import { getDescendantIds, isValidParent, topicLabelWithPath } from '../lib/data'
+import { compareTopicsByTitle, getDescendantIds, isValidParent, topicLabelWithPath } from '../lib/data'
 
 interface ParentTopicFieldProps {
   items: GuideItem[]
@@ -43,7 +43,7 @@ export function ParentTopicField({
         const label = topicLabelWithPath(items, item).toLowerCase()
         return label.includes(q) || item.question.toLowerCase().includes(q)
       })
-      .sort((a, b) => a.question.localeCompare(b.question, 'ru'))
+      .sort(compareTopicsByTitle)
       .slice(0, 80)
   }, [items, excluded, excludeId, query])
 

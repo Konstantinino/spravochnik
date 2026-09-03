@@ -482,9 +482,18 @@ export function setYandexToken(token: string): SettingsData {
   return settings
 }
 
+export function normalizeServerUrl(url: string): string {
+  let normalized = url.trim().replace(/\/+$/, '')
+  if (!normalized) return ''
+  if (!/^https?:\/\//i.test(normalized)) {
+    normalized = `https://${normalized}`
+  }
+  return normalized
+}
+
 export function setServerUrl(url: string): SettingsData {
   const settings = readSettings()
-  settings.serverUrl = url.trim().replace(/\/+$/, '')
+  settings.serverUrl = normalizeServerUrl(url)
   writeSettings(settings)
   return settings
 }

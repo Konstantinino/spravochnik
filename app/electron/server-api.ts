@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { readSettings } from './auth-store'
+import { readSettings, normalizeServerUrl } from './auth-store'
 
 export class ServerApiError extends Error {
   status: number
@@ -14,7 +14,7 @@ export class ServerApiError extends Error {
 }
 
 function baseUrl(): string {
-  const url = readSettings().serverUrl.trim().replace(/\/+$/, '')
+  const url = normalizeServerUrl(readSettings().serverUrl)
   if (!url) throw new ServerApiError('URL сервера не указан', 0)
   return url
 }

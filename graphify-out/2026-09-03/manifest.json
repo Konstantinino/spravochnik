@@ -1,8 +1,8 @@
 {
   "app/electron/auth-store.ts": {
-    "mtime": 1788351400.3372993,
-    "seen": 1788413126.9690447,
-    "ast_hash": "8bbb2d25185a641b4ab3922cf5207622",
+    "mtime": 1788350137.701242,
+    "seen": 1788350417.5088634,
+    "ast_hash": "b42a2609803d1096b724d12f4a654480",
     "semantic_hash": ""
   },
   "app/electron/guide-merge.ts": {
@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "app/src/App.tsx": {
-    "mtime": 1788411646.994196,
-    "seen": 1788413126.970856,
-    "ast_hash": "d12201cd6b26556ffa3e043136383551",
+    "mtime": 1788336193.4724422,
+    "seen": 1788340173.4269595,
+    "ast_hash": "360372041d1ba276f724249cfae4c356",
     "semantic_hash": ""
   },
   "app/src/components/AuthScreen.tsx": {
@@ -138,10 +138,10 @@
     "semantic_hash": "d8ed90810772a0fff2fd594325f369c5"
   },
   "app/src/components/ParentTopicField.tsx": {
-    "mtime": 1788410927.611062,
-    "seen": 1788413126.9710743,
-    "ast_hash": "9802bc14cfdc3429c9a701fec67ecc3b",
-    "semantic_hash": ""
+    "mtime": 1788334064.5812094,
+    "seen": 1788334605.0110507,
+    "ast_hash": "4d69dd93058226b6adf9a06f1967e3c9",
+    "semantic_hash": "4d69dd93058226b6adf9a06f1967e3c9"
   },
   "app/src/components/Search.tsx": {
     "mtime": 1788336158.773137,
@@ -162,27 +162,27 @@
     "semantic_hash": ""
   },
   "app/src/components/TopicEditorModal.tsx": {
-    "mtime": 1788411650.352121,
-    "seen": 1788413126.9712627,
-    "ast_hash": "017ca55ad7a71fefc59a659b4c117c3c",
-    "semantic_hash": ""
+    "mtime": 1788334064.5822096,
+    "seen": 1788334605.0110543,
+    "ast_hash": "e7f6c6b7bcde23d15c71c3f7d41ba08a",
+    "semantic_hash": "e7f6c6b7bcde23d15c71c3f7d41ba08a"
   },
   "app/src/components/TopicList.tsx": {
-    "mtime": 1788410926.224424,
-    "seen": 1788413126.971264,
-    "ast_hash": "163ffb1e18a5147c00dcb3b768236972",
-    "semantic_hash": ""
+    "mtime": 1788334064.5822096,
+    "seen": 1788334605.011055,
+    "ast_hash": "9a07bc22c5349e6ecea6def8ecb449a7",
+    "semantic_hash": "9a07bc22c5349e6ecea6def8ecb449a7"
   },
   "app/src/components/Viewer.tsx": {
-    "mtime": 1788411811.478595,
-    "seen": 1788413126.9712656,
-    "ast_hash": "267c2d4b1c4ee0ca7bb5078c0457452b",
+    "mtime": 1788341252.9169831,
+    "seen": 1788348268.5889444,
+    "ast_hash": "6ec87198450cc2121dddff08b930363e",
     "semantic_hash": ""
   },
   "app/src/lib/data.ts": {
-    "mtime": 1788410923.7355955,
-    "seen": 1788413126.9712667,
-    "ast_hash": "f4f82f79451b4a7382e5a8a14ae40a80",
+    "mtime": 1788336152.8593817,
+    "seen": 1788340173.426974,
+    "ast_hash": "c29686530a70211f4a4c89401fc78be3",
     "semantic_hash": ""
   },
   "app/src/lib/findHighlight.ts": {
@@ -198,9 +198,9 @@
     "semantic_hash": "aabc81ee2a9056aa5fc9420f89616c5b"
   },
   "app/src/lib/markdown.ts": {
-    "mtime": 1788411586.5947359,
-    "seen": 1788413126.9713902,
-    "ast_hash": "9a9de4517d9ec3939a3bbe398b182aef",
+    "mtime": 1788335984.429143,
+    "seen": 1788340173.4269779,
+    "ast_hash": "98c6c54bbaae19230c37dcd962a0a8b1",
     "semantic_hash": ""
   },
   "app/src/lib/prefs.ts": {
@@ -216,10 +216,10 @@
     "semantic_hash": "e49407587c24719df40c18ab01af2168"
   },
   "app/src/lib/textInsert.ts": {
-    "mtime": 1788411586.5947359,
-    "seen": 1788413126.9715126,
-    "ast_hash": "a2eeffec3d3ab29fb3dc6b7af06a105b",
-    "semantic_hash": ""
+    "mtime": 1788334064.5832095,
+    "seen": 1788334605.011062,
+    "ast_hash": "3245c96018ec208779e3d76173919d00",
+    "semantic_hash": "3245c96018ec208779e3d76173919d00"
   },
   "app/src/main.tsx": {
     "mtime": 1788334064.5832095,
@@ -342,9 +342,9 @@
     "semantic_hash": ""
   },
   "app/electron/server-api.ts": {
-    "mtime": 1788351400.8938909,
-    "seen": 1788413126.9697258,
-    "ast_hash": "9f0296451a0713666cfdeeb861aaaa45",
+    "mtime": 1788341178.9465592,
+    "seen": 1788348268.5879757,
+    "ast_hash": "147b08f29503def66c69f4b682057c88",
     "semantic_hash": ""
   },
   "app/electron/server-sync.ts": {
@@ -554,7 +554,7 @@
   "server/migrations/001_initial.sql": {
     "mtime": 1788341272.4382584,
     "seen": 1788350417.5089386,
-    "ast_hash": "",
+    "ast_hash": "cfa3c8f846f1b2cf6307242869ac0c33",
     "semantic_hash": ""
   }
 }

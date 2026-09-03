@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DepartmentId, GuideItem, SupportParty } from '../types'
 import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import { filterItemsByParty, getItemParty } from '../lib/data'
-import { focusCursor, insertAtCursor } from '../lib/textInsert'
+import { focusCursor, insertAtCursor, wrapSelectionWithTopicLink } from '../lib/textInsert'
 import { ParentTopicField } from './ParentTopicField'
 
 interface TopicEditorModalProps {
@@ -115,6 +115,14 @@ export function TopicEditorModal({
   }
 
   async function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const pastedText = e.clipboardData?.getData('text/plain') ?? ''
+    const wrapped = wrapSelectionWithTopicLink(answer, pastedText, textareaRef.current)
+    if (wrapped) {
+      e.preventDefault()
+      setAnswer(wrapped.next)
+      focusCursor(textareaRef.current, wrapped.cursor)
+      return
+    }
     const items = e.clipboardData?.items
     if (!items) return
     let hasImage = false

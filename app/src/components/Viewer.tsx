@@ -11,8 +11,13 @@ import {
   normalizeImageDisplayKey,
   withImageScale,
 } from '../lib/imageDisplay'
-import { mediaSrcFromMarkdownUrl, isAllowedMarkdownImageSrc, parseTopicLinkHref } from '../lib/markdown'
-import { focusCursor, insertAtCursor } from '../lib/textInsert'
+import {
+  formatTopicMarkdownLink,
+  mediaSrcFromMarkdownUrl,
+  isAllowedMarkdownImageSrc,
+  parseTopicLinkHref,
+} from '../lib/markdown'
+import { focusCursor, insertAtCursor, wrapSelectionWithTopicLink } from '../lib/textInsert'
 import { ImageScaleDialog } from './ImageScaleDialog'
 import { ParentTopicField } from './ParentTopicField'
 
@@ -87,6 +92,7 @@ export function Viewer({
   const bodyRef = useRef<HTMLDivElement>(null)
 
   const [imgMenu, setImgMenu] = useState<ImgMenuState | null>(null)
+  const [topicMenu, setTopicMenu] = useState<{ x: number; y: number } | null>(null)
   const [scaleEditor, setScaleEditor] = useState<ScaleEditorState | null>(null)
   const [localDisplay, setLocalDisplay] = useState<ImageDisplayMap | undefined>(undefined)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
@@ -101,6 +107,7 @@ export function Viewer({
       }
       if (e.key === 'Escape') {
         setImgMenu(null)
+        setTopicMenu(null)
         setLightboxSrc(null)
       }
     }
@@ -144,6 +151,7 @@ export function Viewer({
     setFindIndex(0)
     setFindCount(0)
     setImgMenu(null)
+    setTopicMenu(null)
     setScaleEditor(null)
     setLightboxSrc(null)
     displayDirtyRef.current = false
@@ -160,18 +168,23 @@ export function Viewer({
   }, [item?.id])
 
   useEffect(() => {
+    if (!editing) setTopicMenu(null)
+  }, [editing])
+
+  useEffect(() => {
     if (!item || displayDirtyRef.current || scaleEditor) return
     setLocalDisplay(item.image_display)
   }, [item?.image_display, item, scaleEditor])
 
   useEffect(() => {
-    if (!imgMenu) return
+    if (!imgMenu && !topicMenu) return
     function close() {
       setImgMenu(null)
+      setTopicMenu(null)
     }
     window.addEventListener('mousedown', close)
     return () => window.removeEventListener('mousedown', close)
-  }, [imgMenu])
+  }, [imgMenu, topicMenu])
 
   const showParty = departmentId === 'support'
 
@@ -278,6 +291,14 @@ export function Viewer({
 
   async function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const pasteItems = e.clipboardData?.items
+    const pastedText = e.clipboardData?.getData('text/plain') ?? ''
+    const wrapped = wrapSelectionWithTopicLink(answer, pastedText, textareaRef.current)
+    if (wrapped) {
+      e.preventDefault()
+      setAnswer(wrapped.next)
+      focusCursor(textareaRef.current, wrapped.cursor)
+      return
+    }
     if (!pasteItems) return
     let hasImage = false
     for (const pasteItem of Array.from(pasteItems)) {
@@ -326,12 +347,42 @@ export function Viewer({
   function openImageMenu(e: React.MouseEvent, markdownKey: string, resolvedSrc: string) {
     e.preventDefault()
     e.stopPropagation()
+    setTopicMenu(null)
     setImgMenu({
       x: e.clientX,
       y: e.clientY,
       markdownKey: normalizeImageDisplayKey(markdownKey),
       resolvedSrc,
     })
+  }
+
+  function openTopicMenu(e: React.MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    setImgMenu(null)
+    setTopicMenu((prev) =>
+      prev
+        ? null
+        : {
+            x: Math.min(rect.left, window.innerWidth - 230),
+            y: rect.bottom + 4,
+          },
+    )
+  }
+
+  async function copyTopicLink() {
+    setTopicMenu(null)
+    const snippet = formatTopicMarkdownLink(current.id, current.question)
+    try {
+      await navigator.clipboard.writeText(snippet)
+    } catch {
+      const el = document.createElement('textarea')
+      el.value = snippet
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      el.remove()
+    }
   }
 
   function openLightbox(resolvedSrc: string) {
@@ -502,6 +553,24 @@ export function Viewer({
           />
         ) : (
           <h1 className="viewer__title">{current.question}</h1>
+        )}
+        {editing && (
+          <button
+            type="button"
+            className="icon-btn--light viewer__topic-menu-btn"
+            title="Действия с темой"
+            aria-label="Действия с темой"
+            aria-haspopup="menu"
+            aria-expanded={topicMenu != null}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={openTopicMenu}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <circle cx="12" cy="5" r="2" fill="currentColor" />
+              <circle cx="12" cy="12" r="2" fill="currentColor" />
+              <circle cx="12" cy="19" r="2" fill="currentColor" />
+            </svg>
+          </button>
         )}
       </div>
 
@@ -676,6 +745,24 @@ export function Viewer({
           )}
 
           {error && <div className="form-error">{error}</div>}
+        </div>
+      )}
+
+      {topicMenu && (
+        <div
+          className="image-ctx-menu"
+          style={{ left: topicMenu.x, top: topicMenu.y }}
+          role="menu"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="image-ctx-menu__item"
+            role="menuitem"
+            onClick={() => void copyTopicLink()}
+          >
+            Скопировать ссылку
+          </button>
         </div>
       )}
 

@@ -33,16 +33,20 @@ export function filterItemsByParty(items: GuideItem[], party: TopicViewFilter): 
   return filterItemsByView(items, party)
 }
 
+export function compareTopicsByTitle(a: GuideItem, b: GuideItem): number {
+  return (a.question || '').localeCompare(b.question || '', 'ru', { sensitivity: 'base' })
+}
+
 export function buildTree(items: GuideItem[]): GuideItem[] {
   return items
     .filter((item) => item.parent_id == null)
-    .sort((a, b) => a.id - b.id)
+    .sort(compareTopicsByTitle)
 }
 
 export function getChildren(items: GuideItem[], parentId: number): GuideItem[] {
   return items
     .filter((item) => item.parent_id === parentId)
-    .sort((a, b) => a.id - b.id)
+    .sort(compareTopicsByTitle)
 }
 
 export function getItemPath(items: GuideItem[], itemId: number): string[] {
@@ -60,7 +64,7 @@ export function getItemPath(items: GuideItem[], itemId: number): string[] {
 export function getFolders(items: GuideItem[]): GuideItem[] {
   return items
     .filter((item) => item.has_children)
-    .sort((a, b) => a.question.localeCompare(b.question, 'ru'))
+    .sort(compareTopicsByTitle)
 }
 
 /** All descendant ids of rootId (not including rootId itself). */

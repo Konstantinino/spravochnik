@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import type { GuideItem } from '../types'
-import { getChildren } from '../lib/data'
+import { buildTree, getChildren } from '../lib/data'
 import type { TopicSearchFilter } from '../lib/search'
 
 /** Matches default `.topic-item` horizontal margin */
@@ -167,10 +167,9 @@ function TreeNode({
 }
 
 export function TopicList({ items, selectedId, onSelect, searchFilter }: TopicListProps) {
-  const roots = items
-    .filter((item) => item.parent_id == null)
-    .filter((item) => !searchFilter || searchFilter.visibleIds.has(item.id))
-    .sort((a, b) => a.id - b.id)
+  const roots = buildTree(items).filter(
+    (item) => !searchFilter || searchFilter.visibleIds.has(item.id),
+  )
 
   if (searchFilter && roots.length === 0) {
     return <div className="empty-hint">Ничего не найдено</div>

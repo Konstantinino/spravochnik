@@ -21,6 +21,8 @@
 
 **Синхронизация:** клиент читает локальный кэш (`%AppData%\rest-info\REST-INFO\`), пишет на сервер онлайн, оффлайн — очередь `pending-operations.json`.
 
+**Локальные настройки** (`settings.json` в том же каталоге): `serverUrl`, `authToken`, флаги sync. При установке новой версии Setup **не сбрасываются**.
+
 **Legacy:** Яндекс.Диск — только `STORAGE_BACKEND=yandex` или разовые скрипты в `scripts/`. **Sync и updates в v2 — только сервер.**
 
 ## Обновления приложения (v2)
@@ -73,13 +75,18 @@ graphify update .
 | `dev-local.ts` | embedded PostgreSQL без Docker (Windows dev) |
 | `reset-password.ts` | сброс пароля (recovery) |
 
-### UI (`app/src/components/`)
+### UI (`app/src/components/` + `lib/`)
 
 | Файл | Назначение |
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
 | `SettingsPage.tsx` | admin: пользователи, whitelist, скачать Setup |
-| `Viewer.tsx`, `Header.tsx` | основной UI |
+| `Viewer.tsx`, `Header.tsx` | просмотр/правка темы; ⋮ → копия ссылки; ← Назад |
+| `TopicList.tsx` | дерево тем (корни через `buildTree`) |
+| `lib/data.ts` | фильтры, `compareTopicsByTitle`, children |
+| `lib/markdown.ts` | media src, `parseTopicLinkHref`, формат ссылки темы |
+| `lib/textInsert.ts` | вставка / обёртка выделения ссылкой темы |
+| `styles.css` | UI; markdown blockquote/pre — `--header-blue-soft` |
 
 ## Документация
 
@@ -155,6 +162,7 @@ npm run dist:ascii
 - Работать только в `spravochnik-repo/`
 - Не коммитить `.env`, токены, `REST-INFO-export/`
 - После правок кода: `graphify update .`
+- Фраза **«обнови ключевые файлы»** = `graphify update .` + актуализировать `docs/PROJECT-STATUS.md`, `AGENTS.md`, при необходимости `README.md` и `docs/testing-checklist.md` под свежие изменения сессии (без лишних рефакторингов)
 
 ## Версии
 

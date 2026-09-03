@@ -3989,7 +3989,7 @@
       "file_type": "code",
       "norm_label": "handledownloadlatest()",
       "source_file": "app/src/components/SettingsPage.tsx",
-      "source_location": "L315"
+      "source_location": "L316"
     },
     {
       "id": "app_src_components_settingspage_settingspage_opendeleteuser",
@@ -4973,7 +4973,7 @@
       "file_type": "code",
       "norm_label": "collectdescendants()",
       "source_file": "app/electron/main.ts",
-      "source_location": "L978"
+      "source_location": "L997"
     },
     {
       "id": "app_electron_main_registeripc_resolveimageowner",
@@ -4985,7 +4985,7 @@
       "file_type": "code",
       "norm_label": "resolveimageowner()",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1120"
+      "source_location": "L1139"
     },
     {
       "id": "app_electron_main_rolefromserveruser",
@@ -13926,7 +13926,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1157",
+      "source_location": "L1176",
       "weight": 1.0
     },
     {
@@ -13938,7 +13938,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1167",
+      "source_location": "L1186",
       "weight": 1.0
     },
     {
@@ -13950,7 +13950,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1193",
+      "source_location": "L1212",
       "weight": 1.0
     },
     {
@@ -13962,7 +13962,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1214",
+      "source_location": "L1233",
       "weight": 1.0
     },
     {
@@ -13974,7 +13974,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1216",
+      "source_location": "L1235",
       "weight": 1.0
     },
     {
@@ -13986,7 +13986,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1217",
+      "source_location": "L1236",
       "weight": 1.0
     },
     {
@@ -13998,7 +13998,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1218",
+      "source_location": "L1237",
       "weight": 1.0
     },
     {
@@ -14010,7 +14010,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1219",
+      "source_location": "L1238",
       "weight": 1.0
     },
     {
@@ -14022,7 +14022,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1220",
+      "source_location": "L1239",
       "weight": 1.0
     },
     {
@@ -14034,7 +14034,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1223",
+      "source_location": "L1242",
       "weight": 1.0
     },
     {
@@ -14046,7 +14046,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1229",
+      "source_location": "L1248",
       "weight": 1.0
     },
     {
@@ -14466,7 +14466,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L678",
+      "source_location": "L689",
       "weight": 1.0
     },
     {
@@ -14478,7 +14478,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L700",
+      "source_location": "L719",
       "weight": 1.0
     },
     {
@@ -14490,7 +14490,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L710",
+      "source_location": "L729",
       "weight": 1.0
     },
     {
@@ -14502,7 +14502,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L716",
+      "source_location": "L735",
       "weight": 1.0
     },
     {
@@ -14514,7 +14514,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L729",
+      "source_location": "L748",
       "weight": 1.0
     },
     {
@@ -14526,7 +14526,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L734",
+      "source_location": "L753",
       "weight": 1.0
     },
     {
@@ -14538,7 +14538,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L739",
+      "source_location": "L758",
       "weight": 1.0
     },
     {
@@ -14550,7 +14550,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L744",
+      "source_location": "L763",
       "weight": 1.0
     },
     {
@@ -14562,7 +14562,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L756",
+      "source_location": "L775",
       "weight": 1.0
     },
     {
@@ -14574,7 +14574,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L770",
+      "source_location": "L789",
       "weight": 1.0
     },
     {
@@ -14586,7 +14586,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L778",
+      "source_location": "L797",
       "weight": 1.0
     },
     {
@@ -14598,7 +14598,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L784",
+      "source_location": "L803",
       "weight": 1.0
     },
     {
@@ -14610,7 +14610,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L785",
+      "source_location": "L804",
       "weight": 1.0
     },
     {
@@ -14622,7 +14622,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L821",
+      "source_location": "L840",
       "weight": 1.0
     },
     {
@@ -14634,7 +14634,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L854",
+      "source_location": "L873",
       "weight": 1.0
     },
     {
@@ -14646,7 +14646,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L857",
+      "source_location": "L876",
       "weight": 1.0
     },
     {
@@ -14658,7 +14658,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L861",
+      "source_location": "L880",
       "weight": 1.0
     },
     {
@@ -18834,7 +18834,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/src/components/SettingsPage.tsx",
-      "source_location": "L407",
+      "source_location": "L408",
       "weight": 1.0
     },
     {
@@ -18846,7 +18846,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/src/components/SettingsPage.tsx",
-      "source_location": "L414",
+      "source_location": "L415",
       "weight": 1.0
     },
     {
@@ -20886,7 +20886,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L1120",
+      "source_location": "L1139",
       "weight": 1.0
     },
     {
@@ -20910,7 +20910,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/electron/main.ts",
-      "source_location": "L978",
+      "source_location": "L997",
       "weight": 1.0
     },
     {
@@ -21162,7 +21162,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/src/components/SettingsPage.tsx",
-      "source_location": "L315",
+      "source_location": "L316",
       "weight": 1.0
     },
     {

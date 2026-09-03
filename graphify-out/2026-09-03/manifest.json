@@ -12,9 +12,9 @@
     "semantic_hash": "48f62e0638397bef54e632b24f954c7d"
   },
   "app/electron/main.ts": {
-    "mtime": 1788430533.2686899,
-    "seen": 1788431000.0583718,
-    "ast_hash": "06faaffdbc5a55b3446dd7572e09c5e1",
+    "mtime": 1788431295.2704947,
+    "seen": 1788431305.9125066,
+    "ast_hash": "20ddcadd2f8f89189b7cede26bbdd092",
     "semantic_hash": ""
   },
   "app/electron/paths.ts": {
@@ -150,9 +150,9 @@
     "semantic_hash": ""
   },
   "app/src/components/SettingsPage.tsx": {
-    "mtime": 1788430990.0691574,
-    "seen": 1788431000.0601285,
-    "ast_hash": "a12bdbe10fa7f82330ac1682902a83b2",
+    "mtime": 1788431418.2896094,
+    "seen": 1788431426.679855,
+    "ast_hash": "b3058a2a17e1993131bd2117489d8ca5",
     "semantic_hash": ""
   },
   "app/src/components/SyncConflictModal.tsx": {

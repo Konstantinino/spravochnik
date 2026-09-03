@@ -17,9 +17,15 @@ import {
   isAllowedMarkdownImageSrc,
   parseTopicLinkHref,
 } from '../lib/markdown'
-import { focusCursor, insertAtCursor, wrapSelectionWithTopicLink } from '../lib/textInsert'
+import {
+  focusCursor,
+  insertAtCursor,
+  wrapSelectionWithTopicLink,
+} from '../lib/textInsert'
+import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ImageScaleDialog } from './ImageScaleDialog'
 import { ParentTopicField } from './ParentTopicField'
+import { TopicLinkPicker } from './TopicLinkPicker'
 
 interface ViewerProps {
   item: GuideItem | null
@@ -83,6 +89,16 @@ export function Viewer({
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const {
+    linkPicker,
+    clearPicker,
+    closePicker,
+    syncLinkPickerFromTextarea,
+    handleAnswerChange: onAnswerChange,
+    handleAnswerKeyDown: onAnswerKeyDown,
+    pickTopicForLink: onPickTopicLink,
+    setPickerQuery,
+  } = useTopicLinkPicker(textareaRef)
 
   const [findOpen, setFindOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
@@ -152,6 +168,7 @@ export function Viewer({
     setFindCount(0)
     setImgMenu(null)
     setTopicMenu(null)
+    clearPicker()
     setScaleEditor(null)
     setLightboxSrc(null)
     displayDirtyRef.current = false
@@ -168,8 +185,11 @@ export function Viewer({
   }, [item?.id])
 
   useEffect(() => {
-    if (!editing) setTopicMenu(null)
-  }, [editing])
+    if (!editing) {
+      setTopicMenu(null)
+      clearPicker()
+    }
+  }, [editing, clearPicker])
 
   useEffect(() => {
     if (!item || displayDirtyRef.current || scaleEditor) return
@@ -296,6 +316,7 @@ export function Viewer({
     if (wrapped) {
       e.preventDefault()
       setAnswer(wrapped.next)
+      clearPicker()
       focusCursor(textareaRef.current, wrapped.cursor)
       return
     }
@@ -321,10 +342,23 @@ export function Viewer({
       const markdown = `\n\n![](${result.markdownPath})\n\n`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
+      clearPicker()
       focusCursor(textareaRef.current, cursor)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось вставить фото из буфера')
     }
+  }
+
+  function handleAnswerChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    onAnswerChange(e, setAnswer)
+  }
+
+  function handleAnswerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    onAnswerKeyDown(e, answer)
+  }
+
+  function pickTopicForLink(item: GuideItem) {
+    onPickTopicLink(item, answer, setAnswer)
   }
 
   function openFind() {
@@ -676,10 +710,21 @@ export function Viewer({
             ref={textareaRef}
             className="viewer__textarea"
             value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            onChange={handleAnswerChange}
+            onKeyDown={handleAnswerKeyDown}
+            onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+            onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
             onPaste={(e) => void handleAnswerPaste(e)}
             rows={16}
-            placeholder="Текст ответа (Markdown). Можно вставлять фото кнопкой или Ctrl+V."
+            placeholder="Текст ответа (Markdown). «+» — ссылка на тему. Фото — кнопка или Ctrl+V."
+          />
+          <TopicLinkPicker
+            open={linkPicker}
+            items={items}
+            excludeId={current.id}
+            onPick={pickTopicForLink}
+            onClose={closePicker}
+            onQueryChange={setPickerQuery}
           />
           <div className="viewer__editor-toolbar">
             <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>

@@ -32,6 +32,36 @@ export function wrapSelectionWithTopicLink(
   return { next, cursor: start + snippet.length }
 }
 
+/**
+ * Active `+query` before the caret (after start/whitespace/punctuation).
+ * Used to open the topic-link picker while editing.
+ */
+export function getActivePlusQuery(
+  value: string,
+  cursor: number,
+): { start: number; end: number; query: string } | null {
+  if (cursor < 1) return null
+  const before = value.slice(0, cursor)
+  const match = before.match(/(^|[\s([{«"'])\+([^\n+]*)$/)
+  if (!match) return null
+  const query = match[2]
+  const start = before.length - query.length - 1
+  return { start, end: cursor, query }
+}
+
+/** Replace [start, end) with a topic markdown link. */
+export function replaceRangeWithTopicLink(
+  value: string,
+  start: number,
+  end: number,
+  topicId: number,
+  title: string,
+): { next: string; cursor: number } {
+  const snippet = formatTopicMarkdownLink(topicId, title)
+  const next = value.slice(0, start) + snippet + value.slice(end)
+  return { next, cursor: start + snippet.length }
+}
+
 export function focusCursor(el: HTMLTextAreaElement | null, cursor: number): void {
   if (!el) return
   requestAnimationFrame(() => {

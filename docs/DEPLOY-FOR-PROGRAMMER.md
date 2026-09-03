@@ -120,7 +120,9 @@ npm install
 npm run dist:ascii
 ```
 
-Появится `app/release/REST-INFO-Setup-1.2.0.exe`.
+Появится `app/release/REST-INFO-Setup-1.2.1.exe` (~80+ МБ).
+
+Перед `upload-release.js` на production nginx нужен `client_max_body_size` ≥ 120M (см. `nginx/nginx.conf`). Иначе будет **413**. Обход: скопировать Setup в `/data/updates/` на сервере и вызвать `POST /admin/releases` (см. `docs/server-deploy.md`).
 
 Загрузка на сервер (от имени admin, с JWT-токеном):
 
@@ -128,7 +130,7 @@ npm run dist:ascii
 cd app
 RESTINFO_SERVER_URL=https://ваш-домен.ru \
 RESTINFO_ADMIN_TOKEN=<jwt> \
-  node scripts/upload-release.js release/REST-INFO-Setup-1.2.0.exe
+  node scripts/upload-release.js release/REST-INFO-Setup-1.2.1.exe
 ```
 
 ---

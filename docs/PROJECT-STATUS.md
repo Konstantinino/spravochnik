@@ -8,7 +8,7 @@
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows: UI-правки 3 сент. (сортировка тем, ссылки между темами, стили markdown) — в `spravochnik-repo/`, graphify обновлён.
+Локально на Windows: UI-правки 3 сент. (сортировка, ссылки/`+`-пикер, markdown, Setup **1.2.1**) — в `spravochnik-repo/`, graphify обновлён. Production: nginx `client_max_body_size` должен быть ≥120M для upload Setup (~81 МБ), иначе **413**.
 
 ---
 
@@ -19,12 +19,12 @@
 - [x] Express REST API + PostgreSQL миграции (`migrations/001_initial.sql`)
 - [x] Auth: JWT, register/login, whitelist, bootstrap admin
 - [x] Topics CRUD + optimistic locking + topic locks
-- [x] Media upload/download
+- [x] Media upload/download (лимит **120 МБ**; пути `updates/*` → `UPDATES_DIR`)
 - [x] Sync: `GET /sync/changes` (full + incremental)
 - [x] App updates: `GET /app/update`, download Setup.exe
 - [x] Admin: users, roles, whitelist, releases, **PUT /admin/users/:id** (имя/пароль)
 - [x] `import-from-json.ts` — импорт из REST-INFO-export
-- [x] Docker Compose + nginx prod overlay
+- [x] Docker Compose + nginx prod overlay (`client_max_body_size 120M`)
 - [x] `dev-local.ts` — embedded Postgres для Windows без Docker
 - [x] `reset-password.ts` — recovery CLI
 
@@ -42,8 +42,9 @@
 - [x] SettingsPage: роль + Изменить + Удалить в одну строку, модал подтверждения удаления
 - [x] Список тем и подтем — **алфавит** (`compareTopicsByTitle` в `data.ts`)
 - [x] Markdown: фон цитат `>` и блоков кода в цвет шапки (`--header-blue-soft`)
-- [x] Ссылки между темами: в режиме правки **⋮** → «Скопировать ссылку» (`[Название](#id)`); вставка в текст или на выделение; переход + **← Назад**
+- [x] Ссылки между темами: в режиме правки **⋮** → «Скопировать ссылку»; в тексте **`+`** → плавающий список тем у курсора (пробел после `+` отменяет до нового `+`); выделение + `+` — ссылка на выделенное; переход + **← Назад**
 - [x] `serverUrl` / сессия в `%AppData%\rest-info\REST-INFO\settings.json` — **переживают** установку новой версии Setup
+- [x] Клиент **1.2.1** собран (`REST-INFO-Setup-1.2.1.exe`); публикация на production может упираться в nginx 413 до деплоя лимита 120M
 
 ### Скрипты и восстановление
 
@@ -74,6 +75,7 @@
 - [x] `updates.ts` — убран Яндекс.Диск, проверка сети перед update check
 - [x] Подсказка синхронизации: «на сервер»
 - [x] Инпут заголовка темы при правке — на всю ширину колонки
+- [x] Поле текста в модалке создания темы — меньше по высоте (`rows={10}`)
 
 ---
 
@@ -84,7 +86,7 @@
 | Production deploy (Docker + HTTPS) | **Высокий** | Серверный программист |
 | Передать ZIP `REST-INFO-export/` программисту | **Высокий** | Администратор |
 | Импорт на production: `import-from-json.js` | **Высокий** | Программист |
-| Собрать и загрузить Setup.exe на production | Средний | Админ / программист |
+| Задеплоить nginx 120M + media `updates/` fix; залить Setup 1.2.1 | **Высокий** | Админ / программист |
 | Указать production URL в клиентах | Средний | Админ |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire admin IPC напрямую на server API (не queue) | Низкий | Dev |
@@ -113,7 +115,7 @@
 
 ```
 spravochnik-repo/
-├── app/                    # Electron клиент (v1.2.0)
+├── app/                    # Electron клиент (v1.2.1)
 ├── server/                 # REST API (v1.0.0)
 ├── docker-compose.yml
 ├── docker-compose.prod.yml

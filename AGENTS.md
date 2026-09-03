@@ -70,10 +70,13 @@ graphify update .
 | `routes/admin.ts` | users, whitelist, releases, PUT users (имя/пароль) |
 | `routes/topics.ts` | CRUD тем, блокировки |
 | `routes/sync.ts` | GET /sync/changes |
+| `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
 | `routes/updates.ts` | GET /app/update, download |
 | `import-from-json.ts` | импорт из REST-INFO-export |
 | `dev-local.ts` | embedded PostgreSQL без Docker (Windows dev) |
 | `reset-password.ts` | сброс пароля (recovery) |
+
+Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 
 ### UI (`app/src/components/` + `lib/`)
 
@@ -82,10 +85,13 @@ graphify update .
 | `AuthScreen.tsx` | вход, URL сервера |
 | `SettingsPage.tsx` | admin: пользователи, whitelist, скачать Setup |
 | `Viewer.tsx`, `Header.tsx` | просмотр/правка темы; ⋮ → копия ссылки; ← Назад |
+| `TopicLinkPicker.tsx` | плавающий выбор темы по `+` у курсора |
+| `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
 | `TopicList.tsx` | дерево тем (корни через `buildTree`) |
 | `lib/data.ts` | фильтры, `compareTopicsByTitle`, children |
 | `lib/markdown.ts` | media src, `parseTopicLinkHref`, формат ссылки темы |
-| `lib/textInsert.ts` | вставка / обёртка выделения ссылкой темы |
+| `lib/textInsert.ts` | вставка / `+query` / обёртка выделения ссылкой |
+| `lib/textareaCaret.ts` | координаты каретки для пикера |
 | `styles.css` | UI; markdown blockquote/pre — `--header-blue-soft` |
 
 ## Документация
@@ -139,7 +145,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.2.0.exe
+# → app/release/REST-INFO-Setup-1.2.1.exe
 ```
 
 ## Владелец / bootstrap
@@ -166,6 +172,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.2.0** (`app/package.json`)
+- Клиент: **1.2.1** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

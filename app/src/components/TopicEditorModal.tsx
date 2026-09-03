@@ -2,8 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DepartmentId, GuideItem, SupportParty } from '../types'
 import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import { filterItemsByParty, getItemParty } from '../lib/data'
-import { focusCursor, insertAtCursor, wrapSelectionWithTopicLink } from '../lib/textInsert'
+import {
+  focusCursor,
+  insertAtCursor,
+  wrapSelectionWithTopicLink,
+} from '../lib/textInsert'
+import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ParentTopicField } from './ParentTopicField'
+import { TopicLinkPicker } from './TopicLinkPicker'
 
 interface TopicEditorModalProps {
   open: boolean
@@ -55,6 +61,16 @@ export function TopicEditorModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const {
+    linkPicker,
+    clearPicker,
+    closePicker,
+    syncLinkPickerFromTextarea,
+    handleAnswerChange: onAnswerChange,
+    handleAnswerKeyDown: onAnswerKeyDown,
+    pickTopicForLink: onPickTopicLink,
+    setPickerQuery,
+  } = useTopicLinkPicker(textareaRef)
 
   const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
 
@@ -79,14 +95,27 @@ export function TopicEditorModal({
     )
     if (mode === 'add') setDraftId(newDraftId())
     setError(null)
+    clearPicker()
     setSaving(false)
-  }, [open, initial, departmentId, parentId, mode, defaultParty])
+  }, [open, initial, departmentId, parentId, mode, defaultParty, clearPicker])
 
   if (!open) return null
 
   function imageOwnerPayload(): { topicId?: number; draftId?: string } {
     if (mode === 'edit' && initial?.id != null) return { topicId: initial.id }
     return { draftId }
+  }
+
+  function handleAnswerChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    onAnswerChange(e, setAnswer)
+  }
+
+  function handleAnswerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    onAnswerKeyDown(e, answer)
+  }
+
+  function pickTopicForLink(item: GuideItem) {
+    onPickTopicLink(item, answer, setAnswer)
   }
 
   function handlePartyChange(next: SupportParty) {
@@ -120,13 +149,14 @@ export function TopicEditorModal({
     if (wrapped) {
       e.preventDefault()
       setAnswer(wrapped.next)
+      clearPicker()
       focusCursor(textareaRef.current, wrapped.cursor)
       return
     }
-    const items = e.clipboardData?.items
-    if (!items) return
+    const pasteItems = e.clipboardData?.items
+    if (!pasteItems) return
     let hasImage = false
-    for (const item of Array.from(items)) {
+    for (const item of Array.from(pasteItems)) {
       if (item.type.startsWith('image/')) {
         hasImage = true
         break
@@ -144,6 +174,7 @@ export function TopicEditorModal({
       const markdown = `\n\n![](${result.markdownPath})\n\n`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
+      clearPicker()
       focusCursor(textareaRef.current, cursor)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось вставить фото из буфера')
@@ -265,12 +296,23 @@ export function TopicEditorModal({
             <textarea
               ref={textareaRef}
               value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
+              onChange={handleAnswerChange}
+              onKeyDown={handleAnswerKeyDown}
+              onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+              onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
               onPaste={(e) => void handleAnswerPaste(e)}
-              rows={12}
-              placeholder="Текст ответа. Можно вставлять фото кнопкой или Ctrl+V."
+              rows={10}
+              placeholder="Текст ответа. «+» — ссылка на тему. Фото — кнопка или Ctrl+V."
             />
           </label>
+          <TopicLinkPicker
+            open={linkPicker}
+            items={parentChoices}
+            excludeId={mode === 'edit' ? initial?.id ?? null : null}
+            onPick={pickTopicForLink}
+            onClose={closePicker}
+            onQueryChange={setPickerQuery}
+          />
 
           <div className="modal__toolbar">
             <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>

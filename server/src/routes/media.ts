@@ -7,6 +7,8 @@ import { query, bumpGlobalVersion } from '../db/pool.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
 
 const MEDIA_DIR = process.env.MEDIA_DIR ?? path.join(process.cwd(), 'data', 'media')
+const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 'updates')
+const UPLOAD_MAX_BYTES = 120 * 1024 * 1024
 
 export const mediaRouter = Router()
 
@@ -19,7 +21,7 @@ const upload = multer({
       cb(null, file.originalname)
     },
   }),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: UPLOAD_MAX_BYTES },
 })
 
 function mediaRelParam(req: { params: Record<string, unknown>; path: string }): string {
@@ -35,6 +37,10 @@ function ensureMediaDir(): void {
   fs.mkdirSync(MEDIA_DIR, { recursive: true })
 }
 
+function ensureUpdatesDir(): void {
+  fs.mkdirSync(UPDATES_DIR, { recursive: true })
+}
+
 function sha256File(filePath: string): string {
   const data = fs.readFileSync(filePath)
   return crypto.createHash('sha256').update(data).digest('hex')
@@ -46,6 +52,7 @@ mediaRouter.post(
   requireRole('editor', 'admin'),
   (req, res, next) => {
     ensureMediaDir()
+    ensureUpdatesDir()
     upload.single('file')(req, res, (err) => {
       if (err) {
         res.status(400).json({ error: err.message })
@@ -64,6 +71,29 @@ mediaRouter.post(
       }
 
       const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '')
+      if (normalized.includes('..')) {
+        res.status(400).json({ error: 'Недопустимый путь' })
+        return
+      }
+
+      // App installers go to UPDATES_DIR (served by GET /app/download/…), not media volume.
+      if (normalized.startsWith('updates/')) {
+        const filename = path.basename(normalized)
+        const destPath = path.join(UPDATES_DIR, filename)
+        if (file.path !== destPath) {
+          fs.renameSync(file.path, destPath)
+        }
+        const sha256 = sha256File(destPath)
+        const stat = fs.statSync(destPath)
+        res.json({
+          ok: true,
+          relativePath: `updates/${filename}`,
+          sha256,
+          sizeBytes: stat.size,
+        })
+        return
+      }
+
       const destPath = path.join(MEDIA_DIR, normalized)
       fs.mkdirSync(path.dirname(destPath), { recursive: true })
 

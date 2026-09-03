@@ -67,12 +67,28 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ## Публикация обновления приложения
 
 1. Соберите Setup.exe на Windows: `cd app && npm run dist:ascii`
-2. Загрузите на сервер:
+2. На сервере nginx должен допускать тело запроса ≥ размера Setup (`client_max_body_size 120M` в `nginx/nginx.conf`). После правки: `docker compose … up -d` / reload nginx.
+3. Загрузите на сервер:
 
 ```bash
 cd app
 RESTINFO_SERVER_URL=https://your-server RESTINFO_ADMIN_TOKEN=<jwt> \
-  node scripts/upload-release.js release/REST-INFO-Setup-1.2.0.exe
+  node scripts/upload-release.js release/REST-INFO-Setup-1.2.1.exe
+```
+
+**Обход 413 без правки nginx:** скопируйте `.exe` в volume `/data/updates/` на сервере и зарегистрируйте релиз:
+
+```bash
+# пример: файл уже на хосте рядом с compose
+docker compose cp ./REST-INFO-Setup-1.2.1.exe api:/data/updates/
+```
+
+```powershell
+# затем с ПК (JWT admin):
+$body = '{"version":"1.2.1","setupFilename":"REST-INFO-Setup-1.2.1.exe","notes":""}'
+Invoke-RestMethod -Uri "https://info.r-est.ru/admin/releases" -Method POST `
+  -Headers @{ Authorization = "Bearer $env:RESTINFO_ADMIN_TOKEN" } `
+  -ContentType "application/json" -Body $body
 ```
 
 Или вручную: положите `.exe` в volume `/data/updates/` и вызовите `POST /admin/releases`.

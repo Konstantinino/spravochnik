@@ -8,6 +8,7 @@ import { authMiddleware, requireRole, type AuthRequest } from '../middleware/aut
 import {
   canonicalizeMediaRelativePath,
   mediaRelativePathCandidates,
+  moveFileSafe,
   parseMediaRelativePath,
   resolveExistingMediaFile,
 } from '../lib/media-layout.js'
@@ -20,7 +21,15 @@ export const mediaRouter = Router()
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => {
+    destination: (req, _file, cb) => {
+      const relativePath = String(req.body?.relativePath ?? '')
+      const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '')
+      if (normalized.startsWith('updates/')) {
+        ensureUpdatesDir()
+        cb(null, UPDATES_DIR)
+        return
+      }
+      ensureMediaDir()
       cb(null, MEDIA_DIR)
     },
     filename: (_req, file, cb) => {
@@ -87,7 +96,7 @@ mediaRouter.post(
         const filename = path.basename(normalized)
         const destPath = path.join(UPDATES_DIR, filename)
         if (file.path !== destPath) {
-          fs.renameSync(file.path, destPath)
+          moveFileSafe(file.path, destPath)
         }
         const sha256 = sha256File(destPath)
         const stat = fs.statSync(destPath)
@@ -108,7 +117,7 @@ mediaRouter.post(
       fs.mkdirSync(path.dirname(destPath), { recursive: true })
 
       if (file.path !== destPath) {
-        fs.renameSync(file.path, destPath)
+        moveFileSafe(file.path, destPath)
       }
 
       const sha256 = sha256File(destPath)

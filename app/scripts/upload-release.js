@@ -29,8 +29,8 @@ const version = versionMatch ? versionMatch[1] : process.env.RESTINFO_VERSION ||
 async function main() {
   const buffer = fs.readFileSync(setupPath)
   const form = new FormData()
-  form.append('file', new Blob([buffer]), fileName)
   form.append('relativePath', `updates/${fileName}`)
+  form.append('file', new Blob([buffer]), fileName)
 
   const uploadRes = await fetch(`${serverUrl}/media/upload`, {
     method: 'POST',

@@ -111,7 +111,19 @@ export function resolveExistingMediaFile(mediaDir: string, relativePath: string)
 function moveFile(from: string, to: string): void {
   if (!fs.existsSync(from) || path.resolve(from) === path.resolve(to)) return
   fs.mkdirSync(path.dirname(to), { recursive: true })
-  if (!fs.existsSync(to)) fs.renameSync(from, to)
+  if (fs.existsSync(to)) return
+  try {
+    fs.renameSync(from, to)
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? (err as NodeJS.ErrnoException).code : ''
+    if (code !== 'EXDEV') throw err
+    fs.copyFileSync(from, to)
+    fs.unlinkSync(from)
+  }
+}
+
+export function moveFileSafe(from: string, to: string): void {
+  moveFile(from, to)
 }
 
 function moveTree(fromDir: string, toDir: string): void {

@@ -214,7 +214,7 @@ export default function App() {
     ) {
       void window.spravochnik.loadGuide(departmentId).then(setGuide).catch(() => undefined)
     }
-  }, [syncStatus.code, departmentId, user])
+  }, [syncStatus.code, syncStatus.lastPulledAt, departmentId, user])
 
   async function runPush() {
     if (pushInFlight.current) return

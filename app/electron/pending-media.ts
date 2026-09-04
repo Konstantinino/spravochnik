@@ -41,6 +41,11 @@ export function clearPendingMedia(): void {
   writePendingMedia({ upload: [], deleteRemote: [] })
 }
 
+export function hasPendingMedia(): boolean {
+  const pending = readPendingMedia()
+  return pending.upload.length > 0 || pending.deleteRemote.length > 0
+}
+
 export function queueMediaUpload(relativePath: string): void {
   const pending = readPendingMedia()
   const rel = normalizeRel(relativePath)

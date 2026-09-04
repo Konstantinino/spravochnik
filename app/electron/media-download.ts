@@ -1,7 +1,7 @@
 import { BrowserWindow, dialog, net } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { getUserDataRoot } from './paths'
+import { resolveExistingMediaAbsolutePath } from './media-layout'
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
 
@@ -10,7 +10,7 @@ function localPathFromSpravochnikUrl(resolvedSrc: string): string | null {
     const url = new URL(resolvedSrc)
     const relative = path.posix.join(url.hostname, url.pathname.replace(/^\/+/, ''))
     if (!relative.startsWith('media/')) return null
-    return path.join(getUserDataRoot(), ...relative.split('/'))
+    return resolveExistingMediaAbsolutePath(relative)
   } catch {
     return null
   }

@@ -5,6 +5,7 @@ import { runMigrations } from './migrate.js'
 import { ensureBootstrapWhitelist, ensureOwnerRole } from './routes/auth.js'
 import { parseUserRole } from './lib/auth-utils.js'
 import { refreshHasChildren } from './lib/topics.js'
+import { migrateLegacyServerMedia } from './lib/media-layout.js'
 
 const DEPARTMENT_FILES: Record<string, string> = {
   support: 'guide.json',
@@ -195,6 +196,7 @@ async function importFromDir(dataDir: string, mediaDir?: string): Promise<void> 
 
   if (fs.existsSync(targetMedia)) {
     await copyMediaTree(targetMedia, serverMedia, pool)
+    await migrateLegacyServerMedia(serverMedia)
     console.log('Media copied')
   }
 

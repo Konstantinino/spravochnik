@@ -19,7 +19,7 @@
 | Docker | `docker-compose.yml` | postgres:16 + api |
 | Данные для деплоя | `REST-INFO-export/` | JSON + media (в `.gitignore`) |
 
-**Синхронизация:** клиент читает локальный кэш (`%AppData%\rest-info\REST-INFO\`), пишет на сервер онлайн, оффлайн — очередь `pending-operations.json`.
+**Синхронизация:** клиент читает локальный кэш (`%AppData%\rest-info\REST-INFO\`), пишет на сервер онлайн, оффлайн — очередь `pending-operations.json` + `pending-media.json`. При сохранении темы фото/файлы уходят на сервер сразу (если есть сеть). Чужие правки подтягиваются автоматически: после API-запросов проверяется `GET /sync/status` (`globalVersion`), при изменении — incremental pull без перезапуска (также каждые 30 с и при фокусе окна).
 
 **Локальные настройки** (`settings.json` в том же каталоге): `serverUrl`, `authToken`, флаги sync. При установке новой версии Setup **не сбрасываются**.
 
@@ -55,10 +55,11 @@ graphify update .
 |---|---|
 | `main.ts` | IPC, auth, CRUD, admin, storage-stats |
 | `server-api.ts` | HTTP-клиент к REST API |
-| `server-sync.ts` | pull/push, конфликты, очередь |
+| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа при save, peek remote changes |
+| `media-layout.ts` | пути `media/{отдел}/{id}/images|files`, миграция legacy → `support/` |
 | `sync-backend.ts` | server vs yandex по `STORAGE_BACKEND` |
 | `auth-store.ts` | accounts.json, settings, сессия |
-| `topic-media.ts` | фото темы + вложения файлов (до 10 МБ) |
+| `topic-media.ts` | фото темы + вложения файлов (до 10 МБ); диск: `media/{отдел}/{id темы}/images|files/` |
 | `updates.ts` | проверка/скачивание обновлений с сервера |
 | `export-for-server.ts` | упаковка данных (CLI, не UI) |
 
@@ -70,7 +71,8 @@ graphify update .
 | `routes/auth.ts` | login, register, JWT |
 | `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner) |
 | `routes/topics.ts` | CRUD тем, блокировки |
-| `routes/sync.ts` | GET /sync/changes |
+| `routes/sync.ts` | GET /sync/changes, GET /sync/status |
+| `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
 | `routes/updates.ts` | GET /app/update, download |
 | `import-from-json.ts` | импорт из REST-INFO-export |
@@ -146,7 +148,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.2.1.exe
+# → app/release/REST-INFO-Setup-1.3.0.exe
 ```
 
 ## Владелец / bootstrap
@@ -164,6 +166,7 @@ npm run dist:ascii
 4. **`REST-INFO-export/`** в `.gitignore` — не коммитить (пароли в accounts.json). Не коммитить `REST-INFO-export.rar` / `.zip`.
 5. **Incremental sync:** исправлен баг обнуления users; merge вместо replace.
 6. **Оффлайн-удаление темы** (admin/owner): в очередь `delete_topic`; «Синхронизировать» удаляет на сервере вместе с подтемами.
+7. **Автоподгрузка с сервера** не перезаписывает локальные правки темы, пока в очереди `pending-operations` или `hasPendingChanges` (кроме force sync).
 
 ## Правила для агента
 
@@ -176,6 +179,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.2.1** (`app/package.json`)
+- Клиент: **1.3.0** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

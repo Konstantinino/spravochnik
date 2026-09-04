@@ -1,3 +1,5 @@
+import type { DepartmentId } from '../types'
+
 /** Telegram file_id typically looks like AgACAg... or BQACAg... (long alphanumeric). */
 export function isTelegramFileId(value: string): boolean {
   if (!value) return false
@@ -15,15 +17,20 @@ export function isTelegramFileId(value: string): boolean {
 /**
  * Resolve markdown image/file src for display.
  * - spravochnik://… / media/… / http(s) — as-is (media → protocol)
- * - images/… or files/… — needs topicId → spravochnik://media/{topicId}/…
+ * - images/… or files/… — needs topicId + department → spravochnik://media/{dept}/{topicId}/…
  */
-export function mediaSrcFromMarkdownUrl(url: string, topicId?: number | null): string {
+export function mediaSrcFromMarkdownUrl(
+  url: string,
+  topicId?: number | null,
+  departmentId?: DepartmentId | null,
+): string {
   if (!url) return url
   if (url.startsWith('spravochnik://')) return url
   if (/^https?:\/\//i.test(url)) return url
   if (url.startsWith('media/')) return `spravochnik://${url}`
   if ((url.startsWith('images/') || url.startsWith('files/')) && topicId != null) {
-    return `spravochnik://media/${topicId}/${url}`
+    const dept = departmentId || 'support'
+    return `spravochnik://media/${dept}/${topicId}/${url}`
   }
   return url
 }
@@ -41,7 +48,9 @@ export function isAllowedMarkdownImageSrc(url: string): boolean {
 export function parseFileAttachmentHref(href: string | undefined): { storedName: string } | null {
   if (!href) return null
   const cleaned = href.replace(/\\/g, '/').replace(/^\/+/, '').trim()
-  const match = cleaned.match(/^(?:spravochnik:\/\/)?(?:media\/(?:_draft\/[^/]+|\d+)\/)?files\/([^/?#\s]+)$/i)
+  const match = cleaned.match(
+    /^(?:spravochnik:\/\/)?(?:media\/(?:_draft\/[^/]+|(?:(?:support|lawyers|managers|spp|templates)\/)?\d+)\/)?files\/([^/?#\s]+)$/i,
+  )
   if (!match) return null
   const storedName = match[1]
   if (!storedName || storedName.includes('..') || storedName.includes('/')) return null

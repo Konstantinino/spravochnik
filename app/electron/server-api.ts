@@ -28,7 +28,7 @@ function authHeaders(): Record<string, string> {
 
 export async function serverFetch<T = unknown>(
   path: string,
-  init?: RequestInit & { skipAuth?: boolean },
+  init?: RequestInit & { skipAuth?: boolean; skipRemotePull?: boolean },
 ): Promise<T> {
   const url = `${baseUrl()}${path.startsWith('/') ? path : `/${path}`}`
   const headers = init?.skipAuth ? { 'Content-Type': 'application/json' } : authHeaders()
@@ -64,7 +64,26 @@ export async function serverFetch<T = unknown>(
     throw new ServerApiError(msg, res.status, body)
   }
 
+  if (shouldPeekAfterRequest(path, init)) {
+    afterServerRequest?.(path)
+  }
+
   return body as T
+}
+
+let afterServerRequest: ((path: string) => void) | null = null
+
+export function setAfterServerRequest(fn: ((path: string) => void) | null): void {
+  afterServerRequest = fn
+}
+
+function shouldPeekAfterRequest(requestPath: string, init?: RequestInit & { skipAuth?: boolean; skipRemotePull?: boolean }): boolean {
+  if (init?.skipAuth || init?.skipRemotePull) return false
+  const p = requestPath.split('?')[0] ?? requestPath
+  if (p === '/health' || p === '/sync/status' || p.startsWith('/sync/changes')) return false
+  if (p.startsWith('/app/')) return false
+  if (p.startsWith('/auth/login') || p.startsWith('/auth/register')) return false
+  return true
 }
 
 export async function isServerReachable(): Promise<boolean> {
@@ -125,6 +144,7 @@ export async function uploadMediaFile(
     const text = await res.text()
     throw new ServerApiError(text || `HTTP ${res.status}`, res.status)
   }
+  afterServerRequest?.('/media/upload')
 }
 
 export async function downloadMediaFile(relativePath: string, destPath: string): Promise<void> {

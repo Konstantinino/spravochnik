@@ -74,6 +74,7 @@ import {
   markLocalChange,
   markOfflinePending,
   onSyncStatus,
+  peekAndPullRemoteChanges,
   pullFromYandex,
   pushAccountsFile,
   pushToYandex,
@@ -102,6 +103,12 @@ import {
   onUpdateStatus,
 } from './updates'
 import { downloadMediaImage } from './media-download'
+import {
+  migrateLegacyLocalMedia,
+  normalizeMediaDepartmentId,
+  resolveExistingMediaAbsolutePath,
+} from './media-layout'
+import { queueMediaUpload } from './pending-media'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -138,6 +145,7 @@ function ensureDataReady(): void {
   }
   ensureAuthFiles()
   ensureLocalUpdateManifest()
+  migrateLegacyLocalMedia()
 }
 
 function roleFromServerUser(user: Record<string, unknown>): UserRole {
@@ -853,8 +861,8 @@ function registerIpc(): void {
 
       const newId = payload.item.id ?? maxId + 1
       if (payload.draftId) {
-        migrateDraftImagesToTopic(payload.draftId, newId)
-        migrateDraftFilesToTopic(payload.draftId, newId)
+        migrateDraftImagesToTopic(payload.draftId, newId, payload.departmentId)
+        migrateDraftFilesToTopic(payload.draftId, newId, payload.departmentId)
       }
 
       const newItem: Record<string, unknown> = {
@@ -888,8 +896,8 @@ function registerIpc(): void {
       }
 
       try {
-        cleanupTopicImageOrphans(newId, String(newItem.answer ?? ''))
-        cleanupTopicFileOrphans(newId, String(newItem.answer ?? ''))
+        cleanupTopicImageOrphans(payload.departmentId, newId, String(newItem.answer ?? ''))
+        cleanupTopicFileOrphans(payload.departmentId, newId, String(newItem.answer ?? ''))
       } catch (err) {
         console.error('media orphan cleanup failed', err)
       }
@@ -1063,8 +1071,16 @@ function registerIpc(): void {
       }
 
       try {
-        cleanupTopicImageOrphans(payload.item.id, String(payload.item.answer ?? ''))
-        cleanupTopicFileOrphans(payload.item.id, String(payload.item.answer ?? ''))
+        cleanupTopicImageOrphans(
+          payload.departmentId,
+          payload.item.id,
+          String(payload.item.answer ?? ''),
+        )
+        cleanupTopicFileOrphans(
+          payload.departmentId,
+          payload.item.id,
+          String(payload.item.answer ?? ''),
+        )
       } catch (err) {
         console.error('media orphan cleanup failed', err)
       }
@@ -1166,12 +1182,14 @@ function registerIpc(): void {
   function resolveImageOwner(payload: {
     topicId?: number
     draftId?: string
+    departmentId?: DepartmentId
   }): ImageOwner {
+    const departmentId = normalizeMediaDepartmentId(payload.departmentId)
     if (typeof payload.topicId === 'number' && Number.isFinite(payload.topicId)) {
-      return { kind: 'topic', topicId: payload.topicId }
+      return { kind: 'topic', topicId: payload.topicId, departmentId }
     }
     if (payload.draftId && String(payload.draftId).trim()) {
-      return { kind: 'draft', draftId: String(payload.draftId).trim() }
+      return { kind: 'draft', draftId: String(payload.draftId).trim(), departmentId }
     }
     throw new Error('Укажите topicId или draftId')
   }
@@ -1180,7 +1198,7 @@ function registerIpc(): void {
     'save-topic-image',
     async (
       event,
-      payload: { topicId?: number; draftId?: string },
+      payload: { topicId?: number; draftId?: string; departmentId?: DepartmentId },
     ) => {
       requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       const owner = resolveImageOwner(payload ?? {})
@@ -1206,7 +1224,7 @@ function registerIpc(): void {
 
   ipcMain.handle(
     'save-topic-image-clipboard',
-    (_event, payload: { topicId?: number; draftId?: string }) => {
+    (_event, payload: { topicId?: number; draftId?: string; departmentId?: DepartmentId }) => {
       requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       const owner = resolveImageOwner(payload ?? {})
       const image = clipboard.readImage()
@@ -1218,7 +1236,7 @@ function registerIpc(): void {
     'save-topic-file',
     async (
       event,
-      payload: { topicId?: number; draftId?: string },
+      payload: { topicId?: number; draftId?: string; departmentId?: DepartmentId },
     ) => {
       requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
       const owner = resolveImageOwner(payload ?? {})
@@ -1269,29 +1287,35 @@ function registerIpc(): void {
     const sourcePath = result.filePaths[0]
     const ext = path.extname(sourcePath).toLowerCase() || '.jpg'
     const fileName = `${randomUUID()}${ext}`
-    const destPath = path.join(getMediaDir(), fileName)
+    const destDir = path.join(getMediaDir(), 'support')
+    fs.mkdirSync(destDir, { recursive: true })
+    const destPath = path.join(destDir, fileName)
     fs.copyFileSync(sourcePath, destPath)
-
-    const markdownPath = `media/${fileName}`
+    const markdownPath = `media/support/${fileName}`
+    queueMediaUpload(markdownPath)
     return {
       markdownPath,
-      url: `spravochnik://media/${fileName}`,
+      url: `spravochnik://${markdownPath}`,
     }
   })
 
-  ipcMain.handle('resolve-media-url', (_event, relativePath: string, topicId?: number) => {
+  ipcMain.handle(
+    'resolve-media-url',
+    (_event, relativePath: string, topicId?: number, departmentId?: DepartmentId) => {
     const cleaned = relativePath.replace(/^\/+/, '').replace(/\\/g, '/')
+    const dept = normalizeMediaDepartmentId(departmentId)
     if (
       (cleaned.startsWith('images/') || cleaned.startsWith('files/')) &&
       typeof topicId === 'number'
     ) {
-      return `spravochnik://media/${topicId}/${cleaned}`
+      return `spravochnik://media/${dept}/${topicId}/${cleaned}`
     }
     if (cleaned.startsWith('media/')) {
       return `spravochnik://${cleaned}`
     }
     return ''
-  })
+  },
+  )
 
   ipcMain.handle('media:download', (_event, resolvedSrc: string, suggestedName?: string) =>
     downloadMediaImage(resolvedSrc, suggestedName),
@@ -1307,8 +1331,8 @@ function registerIpc(): void {
       if (!relative.startsWith('media/')) {
         return { ok: false, error: 'Недопустимый путь' }
       }
-      const filePath = path.join(getUserDataRoot(), ...relative.split('/'))
-      if (!fs.existsSync(filePath)) {
+      const filePath = resolveExistingMediaAbsolutePath(relative)
+      if (!filePath) {
         return { ok: false, error: 'Файл не найден' }
       }
       const err = await shell.openPath(filePath)
@@ -1351,8 +1375,8 @@ app.whenReady().then(() => {
       if (!relative.startsWith('media/')) {
         return new Response('Not found', { status: 404 })
       }
-      const filePath = path.join(getUserDataRoot(), ...relative.split('/'))
-      if (!fs.existsSync(filePath)) {
+      const filePath = resolveExistingMediaAbsolutePath(relative)
+      if (!filePath) {
         return new Response('Not found', { status: 404 })
       }
       return net.fetch(pathToFileURL(filePath).toString())
@@ -1368,6 +1392,14 @@ app.whenReady().then(() => {
   setTimeout(() => {
     void pullFromYandex()
   }, 800)
+
+  setInterval(() => {
+    void peekAndPullRemoteChanges()
+  }, 30_000)
+
+  app.on('browser-window-focus', () => {
+    void peekAndPullRemoteChanges()
+  })
 
   // Check GitHub Releases for a newer Setup (packaged builds only)
   setTimeout(() => {

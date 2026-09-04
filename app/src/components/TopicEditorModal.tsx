@@ -102,9 +102,10 @@ export function TopicEditorModal({
 
   if (!open) return null
 
-  function imageOwnerPayload(): { topicId?: number; draftId?: string } {
-    if (mode === 'edit' && initial?.id != null) return { topicId: initial.id }
-    return { draftId }
+  function imageOwnerPayload(): { topicId?: number; draftId?: string; departmentId: DepartmentId } {
+    const dept = mode === 'edit' ? departmentId : targetDept
+    if (mode === 'edit' && initial?.id != null) return { topicId: initial.id, departmentId: dept }
+    return { draftId, departmentId: targetDept }
   }
 
   function handleAnswerChange(e: React.ChangeEvent<HTMLTextAreaElement>) {

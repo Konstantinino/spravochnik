@@ -64,6 +64,8 @@ export interface SpravochnikApi {
 
     draftId?: string
 
+    departmentId?: DepartmentId
+
   }) => Promise<{ markdownPath: string; url: string; relativeFsPath: string } | null>
 
   saveTopicImageFromClipboard: (payload: {
@@ -72,6 +74,8 @@ export interface SpravochnikApi {
 
     draftId?: string
 
+    departmentId?: DepartmentId
+
   }) => Promise<{ markdownPath: string; url: string; relativeFsPath: string } | null>
 
   saveTopicFile: (payload: {
@@ -79,6 +83,8 @@ export interface SpravochnikApi {
     topicId?: number
 
     draftId?: string
+
+    departmentId?: DepartmentId
 
   }) => Promise<{
 
@@ -92,7 +98,7 @@ export interface SpravochnikApi {
 
   } | null>
 
-  resolveMediaUrl: (relativePath: string, topicId?: number) => Promise<string>
+  resolveMediaUrl: (relativePath: string, topicId?: number, departmentId?: DepartmentId) => Promise<string>
 
   downloadMediaImage: (
 

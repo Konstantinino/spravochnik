@@ -3,6 +3,7 @@ import cors from 'cors'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runMigrations } from './migrate.js'
+import { migrateLegacyServerMedia } from './lib/media-layout.js'
 import { ensureBootstrapWhitelist, ensureOwnerRole, authRouter } from './routes/auth.js'
 import { adminRouter } from './routes/admin.js'
 import { topicsRouter } from './routes/topics.js'
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
   fs.mkdirSync(UPDATES_DIR, { recursive: true })
 
   await runMigrations()
+  await migrateLegacyServerMedia(MEDIA_DIR)
   await ensureBootstrapWhitelist()
   await ensureOwnerRole()
 

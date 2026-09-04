@@ -326,7 +326,10 @@ export function Viewer({
   async function insertPhoto() {
     setError(null)
     try {
-      const result = await window.spravochnik.saveTopicImage({ topicId: current.id })
+      const result = await window.spravochnik.saveTopicImage({
+        topicId: current.id,
+        departmentId,
+      })
       if (!result) return
       const markdown = `\n\n![](${result.markdownPath})\n\n`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
@@ -340,7 +343,10 @@ export function Viewer({
   async function insertFile() {
     setError(null)
     try {
-      const result = await window.spravochnik.saveTopicFile({ topicId: current.id })
+      const result = await window.spravochnik.saveTopicFile({
+        topicId: current.id,
+        departmentId,
+      })
       if (!result) return
       const markdown = `\n\n${formatFileMarkdownLink(result.originalName, result.markdownPath)}\n\n`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
@@ -376,6 +382,7 @@ export function Viewer({
     try {
       const result = await window.spravochnik.saveTopicImageFromClipboard({
         topicId: current.id,
+        departmentId,
       })
       if (!result) {
         setError('В буфере нет изображения')
@@ -549,7 +556,7 @@ export function Viewer({
   function renderTopicFile(rawHref: string, displayName: string) {
     const parsed = parseFileAttachmentHref(rawHref)
     const name = displayName.trim() || parsed?.storedName || 'Файл'
-    const resolved = mediaSrcFromMarkdownUrl(rawHref, current.id)
+    const resolved = mediaSrcFromMarkdownUrl(rawHref, current.id, departmentId)
     const ext = fileExtLabel(name)
     return (
       <span className="topic-file">
@@ -592,7 +599,7 @@ export function Viewer({
 
   function renderTopicImage(rawSrc: string, alt: string) {
     const key = normalizeImageDisplayKey(rawSrc)
-    const resolved = mediaSrcFromMarkdownUrl(rawSrc, current.id)
+    const resolved = mediaSrcFromMarkdownUrl(rawSrc, current.id, departmentId)
     const scale = getImageScale(localDisplay, key)
     const scaled = scale !== IMAGE_SCALE_DEFAULT
     return (

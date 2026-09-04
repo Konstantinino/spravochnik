@@ -105,9 +105,12 @@ export function getMediaDir(): string {
   return path.join(getUserDataRoot(), 'media')
 }
 
-/** Topic images: media/{topicId}/images */
-export function getTopicImagesDir(topicId: number | string): string {
-  return path.join(getMediaDir(), String(topicId), 'images')
+/** Topic images: media/{departmentId}/{topicId}/images */
+export function getTopicImagesDir(
+  departmentId: DepartmentId,
+  topicId: number | string,
+): string {
+  return path.join(getMediaDir(), departmentId, String(topicId), 'images')
 }
 
 /** Draft images before topic has an id: media/_draft/{draftId}/images */
@@ -116,9 +119,12 @@ export function getDraftImagesDir(draftId: string): string {
   return path.join(getMediaDir(), '_draft', safe, 'images')
 }
 
-/** Topic attachments: media/{topicId}/files */
-export function getTopicFilesDir(topicId: number | string): string {
-  return path.join(getMediaDir(), String(topicId), 'files')
+/** Topic attachments: media/{departmentId}/{topicId}/files */
+export function getTopicFilesDir(
+  departmentId: DepartmentId,
+  topicId: number | string,
+): string {
+  return path.join(getMediaDir(), departmentId, String(topicId), 'files')
 }
 
 /** Draft attachments before topic has an id: media/_draft/{draftId}/files */
@@ -127,9 +133,13 @@ export function getDraftFilesDir(draftId: string): string {
   return path.join(getMediaDir(), '_draft', safe, 'files')
 }
 
-/** Relative POSIX path under userData root, e.g. media/12/images/a.jpg */
-export function topicImageRelativePath(topicId: number | string, fileName: string): string {
-  return `media/${topicId}/images/${fileName}`
+/** Relative POSIX path under userData root, e.g. media/support/12/images/a.jpg */
+export function topicImageRelativePath(
+  departmentId: DepartmentId,
+  topicId: number | string,
+  fileName: string,
+): string {
+  return `media/${departmentId}/${topicId}/images/${fileName}`
 }
 
 export function draftImageRelativePath(draftId: string, fileName: string): string {
@@ -137,8 +147,12 @@ export function draftImageRelativePath(draftId: string, fileName: string): strin
   return `media/_draft/${safe}/images/${fileName}`
 }
 
-export function topicFileRelativePath(topicId: number | string, fileName: string): string {
-  return `media/${topicId}/files/${fileName}`
+export function topicFileRelativePath(
+  departmentId: DepartmentId,
+  topicId: number | string,
+  fileName: string,
+): string {
+  return `media/${departmentId}/${topicId}/files/${fileName}`
 }
 
 export function draftFileRelativePath(draftId: string, fileName: string): string {

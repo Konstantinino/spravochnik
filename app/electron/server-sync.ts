@@ -8,6 +8,10 @@ import {
   type DepartmentId,
 } from './paths'
 import {
+  departmentIdFromMediaPath,
+  resolveExistingMediaAbsolutePath,
+} from './media-layout'
+import {
   readSettings,
   setPendingChanges,
   writeSettings,
@@ -16,7 +20,7 @@ import {
   setWhitelist,
   type AccountsData,
 } from './auth-store'
-import { clearPendingMedia, readPendingMedia } from './pending-media'
+import { hasPendingMedia, readPendingMedia, writePendingMedia } from './pending-media'
 import {
   clearPendingOperations,
   hasPendingOperations,
@@ -29,6 +33,7 @@ import {
   downloadMediaFile,
   isServerReachable,
   serverFetch,
+  setAfterServerRequest,
   uploadMediaFile,
 } from './server-api'
 import { checkForUpdates } from './updates'
@@ -66,6 +71,7 @@ export interface SyncStatus {
   retryAfterSec?: number
   lockBy?: string
   conflicts?: SyncConflictInfo[]
+  lastPulledAt?: string
 }
 
 export interface ConflictResolution {
@@ -85,15 +91,19 @@ let currentStatus: SyncStatus = {
 
 let pendingConflicts: SyncConflictInfo[] = []
 
-function emit(partial: Partial<SyncStatus> & Pick<SyncStatus, 'code' | 'label'>): SyncStatus {
+function hasUnsyncedLocalWork(): boolean {
   const settings = readSettings()
+  return settings.hasPendingChanges || hasPendingOperations() || hasPendingMedia()
+}
+
+function emit(partial: Partial<SyncStatus> & Pick<SyncStatus, 'code' | 'label'>): SyncStatus {
   currentStatus = {
     ...currentStatus,
     retryAfterSec: undefined,
     lockBy: undefined,
     conflicts: undefined,
     ...partial,
-    hasPendingChanges: settings.hasPendingChanges || hasPendingOperations(),
+    hasPendingChanges: hasUnsyncedLocalWork(),
   }
   for (const listener of listeners) listener(currentStatus)
   return currentStatus
@@ -106,10 +116,9 @@ export function onSyncStatus(listener: StatusListener): () => void {
 }
 
 export function getSyncStatus(): SyncStatus {
-  const settings = readSettings()
   return {
     ...currentStatus,
-    hasPendingChanges: settings.hasPendingChanges || hasPendingOperations(),
+    hasPendingChanges: hasUnsyncedLocalWork(),
   }
 }
 
@@ -164,7 +173,7 @@ async function downloadMissingMedia(
   for (const m of toDownload) {
     const rel = m.relative_path
     const localPath = path.join(root, rel)
-    if (fs.existsSync(localPath)) {
+    if (fs.existsSync(localPath) || resolveExistingMediaAbsolutePath(rel)) {
       done++
       onProgress?.(done, toDownload.length)
       continue
@@ -190,7 +199,15 @@ interface SyncChangesResponse {
   whitelist?: Array<string | { email: string; departmentId?: string; department_id?: string }>
 }
 
-export async function pullFromServer(options?: { force?: boolean }): Promise<SyncStatus> {
+function shouldSkipRemotePull(): boolean {
+  const settings = readSettings()
+  return settings.hasPendingChanges || hasPendingOperations()
+}
+
+export async function pullFromServer(options?: {
+  force?: boolean
+  silent?: boolean
+}): Promise<SyncStatus> {
   const settings = readSettings()
   if (!settings.serverUrl.trim()) {
     return emit({
@@ -207,23 +224,33 @@ export async function pullFromServer(options?: { force?: boolean }): Promise<Syn
     })
   }
 
-  const hasPending = settings.hasPendingChanges || hasPendingOperations()
+  const hasPending = hasUnsyncedLocalWork()
   if (hasPending && !options?.force) {
-    return emit({
-      code: 'pending',
-      label: 'Есть локальные изменения',
-      detail: 'Сначала синхронизируйте локальные изменения',
-    })
+    if (options?.silent) {
+      if (shouldSkipRemotePull()) return getSyncStatus()
+    } else {
+      return emit({
+        code: 'pending',
+        label: 'Есть локальные изменения',
+        detail: 'Сначала синхронизируйте локальные изменения',
+      })
+    }
   }
 
   try {
-    emit({ code: 'connecting', label: 'Подключение к серверу…' })
+    if (!options?.silent) {
+      emit({ code: 'connecting', label: 'Подключение к серверу…' })
+    }
 
     const since = settings.lastSyncAt
     const query = since && !options?.force ? `?since=${encodeURIComponent(since)}` : '?full=true'
-    const changes = await serverFetch<SyncChangesResponse>(`/sync/changes${query}`)
+    const changes = await serverFetch<SyncChangesResponse>(`/sync/changes${query}`, {
+      skipRemotePull: true,
+    })
 
-    emit({ code: 'syncing', label: 'Загрузка данных…' })
+    if (!options?.silent) {
+      emit({ code: 'syncing', label: 'Загрузка данных…' })
+    }
 
     if (changes.full) {
       for (const dept of DEPARTMENTS) {
@@ -280,13 +307,35 @@ export async function pullFromServer(options?: { force?: boolean }): Promise<Syn
       writeAccounts(accounts)
     }
 
-    emit({ code: 'syncing', label: 'Загрузка медиа…' })
+    const hasContent =
+      changes.full ||
+      DEPARTMENTS.some((dept) => (changes.topicsByDept[dept.id] ?? []).length > 0) ||
+      (changes.deletedTopics?.length ?? 0) > 0 ||
+      (changes.media ?? []).some((m) => !m.deleted_at)
+
+    if (!options?.silent) {
+      emit({ code: 'syncing', label: 'Загрузка медиа…' })
+    }
     await downloadMissingMedia(changes.media ?? [])
 
-    writeSettings({ ...settings, lastSyncAt: changes.syncedAt })
-    void checkForUpdates()
-    return emit({ code: 'up_to_date', label: 'Актуально' })
+    const latest = readSettings()
+    writeSettings({
+      ...latest,
+      lastSyncAt: changes.syncedAt,
+      lastGlobalVersion: changes.globalVersion,
+    })
+    if (!options?.silent) {
+      void checkForUpdates()
+    }
+    return emit({
+      code: 'up_to_date',
+      label: 'Актуально',
+      ...(hasContent ? { lastPulledAt: changes.syncedAt } : {}),
+    })
   } catch (e) {
+    if (options?.silent) {
+      return getSyncStatus()
+    }
     const detail = e instanceof Error ? e.message : String(e)
     return emit({
       code: 'error',
@@ -441,19 +490,7 @@ export async function pushToServer(): Promise<SyncStatus> {
       })
     }
 
-    const pending = readPendingMedia()
-    const root = getUserDataRoot()
-    for (const rel of pending.upload) {
-      const localPath = path.join(root, rel)
-      if (fs.existsSync(localPath)) {
-        await uploadMediaFile(rel, localPath)
-      }
-    }
-    for (const rel of pending.deleteRemote) {
-      const normalized = rel.replace(/\\/g, '/')
-      await serverFetch(`/media/${normalized}`, { method: 'DELETE' })
-    }
-    clearPendingMedia()
+    await flushPendingMedia()
 
     setPendingChanges(false)
     clearPendingOperations()
@@ -522,6 +559,44 @@ export function markOfflinePending(): SyncStatus {
   })
 }
 
+async function flushPendingMedia(): Promise<void> {
+  const pending = readPendingMedia()
+  if (pending.upload.length === 0 && pending.deleteRemote.length === 0) return
+
+  const root = getUserDataRoot()
+  const remainingUpload: string[] = []
+  const remainingDelete: string[] = []
+  let lastError: string | undefined
+
+  for (const rel of pending.upload) {
+    const localPath =
+      resolveExistingMediaAbsolutePath(rel) ??
+      path.join(root, ...rel.replace(/\\/g, '/').split('/'))
+    if (!fs.existsSync(localPath)) continue
+    try {
+      await uploadMediaFile(rel, localPath, departmentIdFromMediaPath(rel))
+    } catch (e) {
+      remainingUpload.push(rel)
+      lastError = e instanceof Error ? e.message : String(e)
+    }
+  }
+
+  for (const rel of pending.deleteRemote) {
+    try {
+      await serverFetch(`/media/${rel.replace(/\\/g, '/')}`, { method: 'DELETE' })
+    } catch (e) {
+      remainingDelete.push(rel)
+      lastError = e instanceof Error ? e.message : String(e)
+    }
+  }
+
+  writePendingMedia({ upload: remainingUpload, deleteRemote: remainingDelete })
+  if (remainingUpload.length > 0 || remainingDelete.length > 0) {
+    setPendingChanges(true)
+    throw new Error(lastError || 'Не удалось отправить фото на сервер')
+  }
+}
+
 export async function tryPushTopicOnline(
   type: 'create' | 'update' | 'delete',
   departmentId: DepartmentId,
@@ -534,6 +609,7 @@ export async function tryPushTopicOnline(
   }
 
   try {
+    await flushPendingMedia()
     if (type === 'create') {
       const result = await serverFetch<{ topic: Record<string, unknown> }>(
         `/departments/${departmentId}/topics`,
@@ -605,7 +681,7 @@ export function refreshStatusFromSettings(): SyncStatus {
   if (currentStatus.code === 'conflict' && (currentStatus.conflicts?.length ?? 0) > 0) {
     return getSyncStatus()
   }
-  if (settings.hasPendingChanges || hasPendingOperations()) {
+  if (hasUnsyncedLocalWork()) {
     return emit({ code: 'pending', label: 'Есть локальные изменения' })
   }
   return emit({
@@ -613,6 +689,46 @@ export function refreshStatusFromSettings(): SyncStatus {
     label: currentStatus.code === 'error' ? currentStatus.label : 'Актуально',
   })
 }
+
+let peekInFlight = false
+let peekTimer: ReturnType<typeof setTimeout> | null = null
+
+export function scheduleRemoteChangePeek(): void {
+  if (peekTimer) return
+  peekTimer = setTimeout(() => {
+    peekTimer = null
+    void peekAndPullRemoteChanges()
+  }, 400)
+}
+
+export async function peekAndPullRemoteChanges(): Promise<void> {
+  if (peekInFlight) {
+    scheduleRemoteChangePeek()
+    return
+  }
+  peekInFlight = true
+  try {
+    const settings = readSettings()
+    if (!settings.serverUrl.trim() || !settings.authToken.trim()) return
+    if (shouldSkipRemotePull()) return
+
+    const remote = await serverFetch<{ globalVersion: number }>('/sync/status', {
+      skipRemotePull: true,
+    })
+    const known = settings.lastGlobalVersion
+    if (known != null && remote.globalVersion <= known) return
+
+    await pullFromServer({ silent: true })
+  } catch {
+    /* background peek */
+  } finally {
+    peekInFlight = false
+  }
+}
+
+setAfterServerRequest(() => {
+  scheduleRemoteChangePeek()
+})
 
 // Aliases for compatibility with main.ts imports
 export const pullFromYandex = pullFromServer

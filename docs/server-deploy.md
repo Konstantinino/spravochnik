@@ -73,19 +73,19 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```bash
 cd app
 RESTINFO_SERVER_URL=https://your-server RESTINFO_ADMIN_TOKEN=<jwt> \
-  node scripts/upload-release.js release/REST-INFO-Setup-1.2.1.exe
+  node scripts/upload-release.js release/REST-INFO-Setup-1.3.0.exe
 ```
 
 **Обход 413 без правки nginx:** скопируйте `.exe` в volume `/data/updates/` на сервере и зарегистрируйте релиз:
 
 ```bash
 # пример: файл уже на хосте рядом с compose
-docker compose cp ./REST-INFO-Setup-1.2.1.exe api:/data/updates/
+docker compose cp ./REST-INFO-Setup-1.3.0.exe api:/data/updates/
 ```
 
 ```powershell
 # затем с ПК (JWT admin):
-$body = '{"version":"1.2.1","setupFilename":"REST-INFO-Setup-1.2.1.exe","notes":""}'
+$body = '{"version":"1.3.0","setupFilename":"REST-INFO-Setup-1.3.0.exe","notes":""}'
 Invoke-RestMethod -Uri "https://info.r-est.ru/admin/releases" -Method POST `
   -Headers @{ Authorization = "Bearer $env:RESTINFO_ADMIN_TOKEN" } `
   -ContentType "application/json" -Body $body

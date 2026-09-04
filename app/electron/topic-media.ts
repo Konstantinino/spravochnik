@@ -4,12 +4,14 @@ import { randomUUID } from 'node:crypto'
 import {
   getDraftFilesDir,
   getDraftImagesDir,
+  getMediaDir,
   getTopicFilesDir,
   getTopicImagesDir,
   topicFileRelativePath,
   topicImageRelativePath,
   draftFileRelativePath,
   draftImageRelativePath,
+  type DepartmentId,
 } from './paths'
 import { queueMediaRemoteDelete, queueMediaUpload, rewritePendingMediaPaths } from './pending-media'
 
@@ -41,25 +43,37 @@ export function sanitizeDraftId(draftId: string): string {
   return draftId.replace(/[^a-zA-Z0-9_-]/g, '') || 'draft'
 }
 
-export function cleanupTopicImageOrphans(topicId: number, answerMarkdown: string): void {
-  const dir = getTopicImagesDir(topicId)
-  if (!fs.existsSync(dir)) return
+function topicImageDirs(departmentId: DepartmentId, topicId: number): string[] {
+  return [
+    getTopicImagesDir(departmentId, topicId),
+    path.join(getMediaDir(), String(topicId), 'images'),
+  ]
+}
 
+export function cleanupTopicImageOrphans(
+  departmentId: DepartmentId,
+  topicId: number,
+  answerMarkdown: string,
+): void {
   const referenced = new Set(
     extractImageRefsFromMarkdown(answerMarkdown)
       .map(imagesBasename)
       .filter((n): n is string => Boolean(n)),
   )
 
-  for (const name of fs.readdirSync(dir)) {
-    const full = path.join(dir, name)
-    if (!fs.statSync(full).isFile()) continue
-    if (referenced.has(name)) continue
-    try {
-      fs.unlinkSync(full)
-      queueMediaRemoteDelete(topicImageRelativePath(topicId, name))
-    } catch {
-      /* ignore */
+  for (const dir of topicImageDirs(departmentId, topicId)) {
+    if (!fs.existsSync(dir)) continue
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name)
+      if (!fs.statSync(full).isFile()) continue
+      if (referenced.has(name)) continue
+      try {
+        fs.unlinkSync(full)
+        queueMediaRemoteDelete(topicImageRelativePath(departmentId, topicId, name))
+        queueMediaRemoteDelete(`media/${topicId}/images/${name}`)
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
@@ -93,21 +107,23 @@ export interface SavedTopicImage {
 }
 
 export type ImageOwner =
-  | { kind: 'topic'; topicId: number }
-  | { kind: 'draft'; draftId: string }
+  | { kind: 'topic'; topicId: number; departmentId: DepartmentId }
+  | { kind: 'draft'; draftId: string; departmentId: DepartmentId }
 
 function saveBufferToOwner(owner: ImageOwner, buffer: Buffer, ext: string): SavedTopicImage {
   const fileName = `${randomUUID()}${safeExt(ext)}`
   const draftSafe = owner.kind === 'draft' ? sanitizeDraftId(owner.draftId) : ''
   const dir =
-    owner.kind === 'topic' ? getTopicImagesDir(owner.topicId) : getDraftImagesDir(draftSafe)
+    owner.kind === 'topic'
+      ? getTopicImagesDir(owner.departmentId, owner.topicId)
+      : getDraftImagesDir(draftSafe)
   ensureDir(dir)
   const destPath = path.join(dir, fileName)
   fs.writeFileSync(destPath, buffer)
 
   const relativeFsPath =
     owner.kind === 'topic'
-      ? topicImageRelativePath(owner.topicId, fileName)
+      ? topicImageRelativePath(owner.departmentId, owner.topicId, fileName)
       : draftImageRelativePath(draftSafe, fileName)
 
   queueMediaUpload(relativeFsPath)
@@ -137,12 +153,16 @@ export function saveNativeImageForOwner(
 }
 
 /** Move draft images to topic folder; markdown paths stay as images/…. */
-export function migrateDraftImagesToTopic(draftId: string, topicId: number): void {
+export function migrateDraftImagesToTopic(
+  draftId: string,
+  topicId: number,
+  departmentId: DepartmentId,
+): void {
   const safe = sanitizeDraftId(draftId)
   const fromDir = getDraftImagesDir(safe)
-  const toDir = getTopicImagesDir(topicId)
+  const toDir = getTopicImagesDir(departmentId, topicId)
   const fromPrefix = `media/_draft/${safe}/images/`
-  const toPrefix = `media/${topicId}/images/`
+  const toPrefix = `media/${departmentId}/${topicId}/images/`
 
   if (fs.existsSync(fromDir)) {
     ensureDir(toDir)
@@ -151,7 +171,7 @@ export function migrateDraftImagesToTopic(draftId: string, topicId: number): voi
       if (!fs.statSync(from).isFile()) continue
       const to = path.join(toDir, name)
       fs.renameSync(from, to)
-      queueMediaUpload(topicImageRelativePath(topicId, name))
+      queueMediaUpload(topicImageRelativePath(departmentId, topicId, name))
     }
     try {
       fs.rmSync(fromDir, { recursive: true, force: true })
@@ -220,26 +240,38 @@ export function filesBasename(ref: string): string | null {
   return null
 }
 
-export function cleanupTopicFileOrphans(topicId: number, answerMarkdown: string): void {
-  try {
-    const dir = getTopicFilesDir(topicId)
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return
+function topicFileDirs(departmentId: DepartmentId, topicId: number): string[] {
+  return [
+    getTopicFilesDir(departmentId, topicId),
+    path.join(getMediaDir(), String(topicId), 'files'),
+  ]
+}
 
+export function cleanupTopicFileOrphans(
+  departmentId: DepartmentId,
+  topicId: number,
+  answerMarkdown: string,
+): void {
+  try {
     const referenced = new Set(
       extractFileRefsFromMarkdown(answerMarkdown)
         .map(filesBasename)
         .filter((n): n is string => Boolean(n)),
     )
 
-    for (const name of fs.readdirSync(dir)) {
-      const full = path.join(dir, name)
-      if (!fs.statSync(full).isFile()) continue
-      if (referenced.has(name)) continue
-      try {
-        fs.unlinkSync(full)
-        queueMediaRemoteDelete(topicFileRelativePath(topicId, name))
-      } catch {
-        /* ignore */
+    for (const dir of topicFileDirs(departmentId, topicId)) {
+      if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue
+      for (const name of fs.readdirSync(dir)) {
+        const full = path.join(dir, name)
+        if (!fs.statSync(full).isFile()) continue
+        if (referenced.has(name)) continue
+        try {
+          fs.unlinkSync(full)
+          queueMediaRemoteDelete(topicFileRelativePath(departmentId, topicId, name))
+          queueMediaRemoteDelete(`media/${topicId}/files/${name}`)
+        } catch {
+          /* ignore */
+        }
       }
     }
   } catch (err) {
@@ -283,14 +315,17 @@ export function saveFileForOwner(owner: ImageOwner, sourcePath: string): SavedTo
   const originalName = sanitizeOriginalName(path.basename(sourcePath))
   const fileName = `${randomUUID()}${safeExt(ext, '.bin')}`
   const draftSafe = owner.kind === 'draft' ? sanitizeDraftId(owner.draftId) : ''
-  const dir = owner.kind === 'topic' ? getTopicFilesDir(owner.topicId) : getDraftFilesDir(draftSafe)
+  const dir =
+    owner.kind === 'topic'
+      ? getTopicFilesDir(owner.departmentId, owner.topicId)
+      : getDraftFilesDir(draftSafe)
   ensureDir(dir)
   const destPath = path.join(dir, fileName)
   fs.copyFileSync(sourcePath, destPath)
 
   const relativeFsPath =
     owner.kind === 'topic'
-      ? topicFileRelativePath(owner.topicId, fileName)
+      ? topicFileRelativePath(owner.departmentId, owner.topicId, fileName)
       : draftFileRelativePath(draftSafe, fileName)
 
   queueMediaUpload(relativeFsPath)
@@ -304,12 +339,16 @@ export function saveFileForOwner(owner: ImageOwner, sourcePath: string): SavedTo
 }
 
 /** Move draft files to topic folder; markdown paths stay as files/…. */
-export function migrateDraftFilesToTopic(draftId: string, topicId: number): void {
+export function migrateDraftFilesToTopic(
+  draftId: string,
+  topicId: number,
+  departmentId: DepartmentId,
+): void {
   const safe = sanitizeDraftId(draftId)
   const fromDir = getDraftFilesDir(safe)
-  const toDir = getTopicFilesDir(topicId)
+  const toDir = getTopicFilesDir(departmentId, topicId)
   const fromPrefix = `media/_draft/${safe}/files/`
-  const toPrefix = `media/${topicId}/files/`
+  const toPrefix = `media/${departmentId}/${topicId}/files/`
 
   if (fs.existsSync(fromDir)) {
     ensureDir(toDir)
@@ -318,7 +357,7 @@ export function migrateDraftFilesToTopic(draftId: string, topicId: number): void
       if (!fs.statSync(from).isFile()) continue
       const to = path.join(toDir, name)
       fs.renameSync(from, to)
-      queueMediaUpload(topicFileRelativePath(topicId, name))
+      queueMediaUpload(topicFileRelativePath(departmentId, topicId, name))
     }
     try {
       fs.rmSync(fromDir, { recursive: true, force: true })

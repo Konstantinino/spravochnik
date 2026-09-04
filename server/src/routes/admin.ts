@@ -493,38 +493,23 @@ adminRouter.get('/storage-stats', requireRole('owner'), async (_req, res) => {
       `WITH parsed AS (
          SELECT
            COALESCE(m.size_bytes, 0) AS size_bytes,
-           NULLIF(m.department_id, '') AS media_dept,
            CASE
              WHEN m.relative_path ~ '(^|/)images/' THEN 'photos'
              WHEN m.relative_path ~* '\\.(png|jpe?g|gif|webp|bmp)$' THEN 'photos'
              ELSE 'files'
            END AS kind,
            COALESCE(
-             m.topic_id,
-             NULLIF((regexp_match(m.relative_path, '^media/([0-9]+)/'))[1], '')::int
-           ) AS parsed_topic_id
+             NULLIF((regexp_match(m.relative_path, '^media/(support|lawyers|managers|spp|templates)/'))[1], ''),
+             NULLIF(m.department_id, ''),
+             'support'
+           ) AS department_id
          FROM media_files m
          WHERE m.deleted_at IS NULL
            AND m.relative_path NOT LIKE 'media/_draft/%'
            AND m.relative_path NOT LIKE 'updates/%'
-       ),
-       resolved AS (
-         SELECT
-           p.kind,
-           p.size_bytes,
-           COALESCE(p.media_dept, t.department_id) AS department_id
-         FROM parsed p
-         LEFT JOIN LATERAL (
-           SELECT department_id
-             FROM topics
-            WHERE deleted_at IS NULL
-              AND id = p.parsed_topic_id
-            ORDER BY CASE WHEN department_id = p.media_dept THEN 0 ELSE 1 END
-            LIMIT 1
-         ) t ON true
        )
        SELECT department_id, kind, SUM(size_bytes) AS bytes
-         FROM resolved
+         FROM parsed
         GROUP BY department_id, kind`,
     )
 

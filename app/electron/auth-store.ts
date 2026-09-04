@@ -45,6 +45,7 @@ export interface SettingsData {
   serverUrl: string
   authToken: string
   lastSyncAt: string | null
+  lastGlobalVersion?: number | null
   hasPendingChanges: boolean
   offlineWarningShown?: boolean
 }
@@ -148,6 +149,7 @@ function defaultSettings(): SettingsData {
     serverUrl: '',
     authToken: '',
     lastSyncAt: null,
+    lastGlobalVersion: null,
     hasPendingChanges: false,
   }
 }
@@ -213,7 +215,7 @@ export function getOwnerEmail(): string {
 }
 
 export function coerceAccountsData(raw: {
-  users?: unknown[]
+  users?: unknown
   whitelist?: unknown
   removedEmails?: unknown
 }): AccountsData {
@@ -242,6 +244,10 @@ export function readSettings(): SettingsData {
       serverUrl: typeof raw.serverUrl === 'string' ? raw.serverUrl : '',
       authToken: typeof raw.authToken === 'string' ? raw.authToken : '',
       lastSyncAt: typeof raw.lastSyncAt === 'string' ? raw.lastSyncAt : null,
+      lastGlobalVersion:
+        typeof raw.lastGlobalVersion === 'number' && Number.isFinite(raw.lastGlobalVersion)
+          ? raw.lastGlobalVersion
+          : null,
       hasPendingChanges: Boolean(raw.hasPendingChanges),
       offlineWarningShown: Boolean(raw.offlineWarningShown),
     }
@@ -605,9 +611,7 @@ export function getWhitelist(): WhitelistEntry[] {
   return readAccounts().whitelist
 }
 
-export function setWhitelist(
-  entries: Array<string | WhitelistEntry>,
-): WhitelistEntry[] {
+export function setWhitelist(entries: unknown): WhitelistEntry[] {
   const accounts = readAccounts()
   accounts.whitelist = normalizeWhitelistRaw(entries)
   ensureLocalOwner(accounts)

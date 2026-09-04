@@ -1,6 +1,6 @@
 # REST INFO — клиент (Electron)
 
-Версия: **1.2.1** · Корневой README: [../README.md](../README.md) · AI handoff: [../AGENTS.md](../AGENTS.md)
+Версия: **1.3.0** · Корневой README: [../README.md](../README.md) · AI handoff: [../AGENTS.md](../AGENTS.md)
 
 ## Запуск dev
 
@@ -16,7 +16,7 @@ Vite: `http://127.0.0.1:5173` · Electron main: `electron/main.ts`
 
 ```powershell
 npm run dist:ascii
-# → release/REST-INFO-Setup-1.2.1.exe
+# → release/REST-INFO-Setup-1.3.0.exe
 ```
 
 ## Ключевые файлы
@@ -42,5 +42,5 @@ npm run dist:ascii
 
 ```bash
 RESTINFO_SERVER_URL=https://... RESTINFO_ADMIN_TOKEN=<jwt> \
-  node scripts/upload-release.js release/REST-INFO-Setup-1.2.1.exe
+  node scripts/upload-release.js release/REST-INFO-Setup-1.3.0.exe
 ```

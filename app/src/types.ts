@@ -139,6 +139,8 @@ export interface SyncStatus {
   retryAfterSec?: number
   lockBy?: string
   conflicts?: SyncConflictInfo[]
+  /** Changes when remote topics/media were applied — UI reloads the list. */
+  lastPulledAt?: string
 }
 
 export interface ConflictResolution {

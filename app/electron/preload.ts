@@ -22,9 +22,8 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
   saveTopicFile: (payload: unknown) => ipcRenderer.invoke('save-topic-file', payload),
 
-  resolveMediaUrl: (relativePath: string, topicId?: number) =>
-
-    ipcRenderer.invoke('resolve-media-url', relativePath, topicId),
+  resolveMediaUrl: (relativePath: string, topicId?: number, departmentId?: string) =>
+    ipcRenderer.invoke('resolve-media-url', relativePath, topicId, departmentId),
 
   downloadMediaImage: (resolvedSrc: string, suggestedName?: string) =>
 

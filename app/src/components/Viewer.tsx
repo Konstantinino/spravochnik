@@ -38,6 +38,7 @@ interface ViewerProps {
   isAdmin: boolean
   canGoBack: boolean
   onBack: () => void
+  onClose: () => void
   onNavigateToTopic: (id: number) => void
   onSave: (payload: {
     question: string
@@ -89,6 +90,7 @@ export function Viewer({
   isAdmin,
   canGoBack,
   onBack,
+  onClose,
   onNavigateToTopic,
   onSave,
   onSaveImageDisplay,
@@ -137,11 +139,6 @@ export function Viewer({
         if (editing) return
         e.preventDefault()
         setFindOpen(true)
-      }
-      if (e.key === 'Escape') {
-        setImgMenu(null)
-        setTopicMenu(null)
-        setLightboxSrc(null)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -267,6 +264,73 @@ export function Viewer({
     })
     return () => cancelAnimationFrame(frame)
   }, [findOpen, findQuery, findIndex, editing, item?.id, item?.answer, localDisplay])
+
+  function closeFind() {
+    setFindOpen(false)
+    setFindQuery('')
+    setFindIndex(0)
+    setFindCount(0)
+    if (bodyRef.current) clearFindHighlights(bodyRef.current)
+  }
+
+  function cancelEditing() {
+    if (!item) return
+    setEditing(false)
+    setQuestion(item.question)
+    setAnswer(item.answer ?? '')
+    setParentId(item.parent_id ?? null)
+    setAttachParent(item.parent_id != null)
+    setParty(getItemParty(item))
+    setError(null)
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (linkPicker || scaleEditor) return
+      if (findOpen) {
+        closeFind()
+        return
+      }
+      if (lightboxSrc) {
+        setLightboxSrc(null)
+        return
+      }
+      if (imgMenu) {
+        setImgMenu(null)
+        return
+      }
+      if (topicMenu) {
+        setTopicMenu(null)
+        return
+      }
+      if (editing) {
+        cancelEditing()
+        return
+      }
+      if (canGoBack) {
+        onBack()
+        return
+      }
+      if (item) {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [
+    linkPicker,
+    scaleEditor,
+    findOpen,
+    lightboxSrc,
+    imgMenu,
+    topicMenu,
+    editing,
+    canGoBack,
+    onBack,
+    onClose,
+    item,
+  ])
 
   if (!item) {
     return (
@@ -412,14 +476,6 @@ export function Viewer({
 
   function openFind() {
     setFindOpen(true)
-  }
-
-  function closeFind() {
-    setFindOpen(false)
-    setFindQuery('')
-    setFindIndex(0)
-    setFindCount(0)
-    if (bodyRef.current) clearFindHighlights(bodyRef.current)
   }
 
   function findNext(dir: 1 | -1) {
@@ -850,13 +906,7 @@ export function Viewer({
                 type="button"
                 className="btn btn-ghost"
                 onClick={() => {
-                  setEditing(false)
-                  setQuestion(current.question)
-                  setAnswer(current.answer ?? '')
-                  setParentId(current.parent_id ?? null)
-                  setAttachParent(current.parent_id != null)
-                  setParty(getItemParty(current))
-                  setError(null)
+                  cancelEditing()
                 }}
                 disabled={saving}
               >

@@ -163,9 +163,17 @@ RESTINFO_ADMIN_TOKEN=<jwt> \
 
 ## Обновление сервера после изменений в Git
 
+На production с изолированным пользователем `rest-info` см. [SERVER-USER-SETUP.md](SERVER-USER-SETUP.md).
+
 ```bash
 git pull
 docker compose up -d --build
+```
+
+Или одной командой (от `rest-info`):
+
+```bash
+bash ~/spravochnik/scripts/server/deploy.sh --prod
 ```
 
 Миграции БД применяются автоматически при старте `api`.
@@ -179,7 +187,7 @@ docker compose up -d --build
 docker compose exec postgres pg_dump -U restinfo restinfo > backup-$(date +%F).sql
 
 # Медиа
-docker run --rm -v spravochnik_media_data:/data -v $(pwd):/backup alpine \
+docker run --rm -v restinfo_media_data:/data -v $(pwd):/backup alpine \
   tar czf /backup/media-backup.tar.gz -C /data .
 ```
 

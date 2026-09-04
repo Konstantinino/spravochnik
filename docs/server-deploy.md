@@ -100,11 +100,13 @@ Invoke-RestMethod -Uri "https://info.r-est.ru/admin/releases" -Method POST `
 docker compose exec postgres pg_dump -U restinfo restinfo > backup.sql
 
 # Медиа
-docker run --rm -v spravochnik_media_data:/data -v $(pwd):/backup alpine \
+docker run --rm -v restinfo_media_data:/data -v $(pwd):/backup alpine \
   tar czf /backup/media-backup.tar.gz -C /data .
 ```
 
 ## Обновление
+
+На production с пользователем `rest-info` и read-only deploy key — [SERVER-USER-SETUP.md](SERVER-USER-SETUP.md).
 
 ```bash
 git pull

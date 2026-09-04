@@ -21,6 +21,7 @@ Windows-приложение — корпоративный справочник
 | [docs/PROJECT-STATUS.md](docs/PROJECT-STATUS.md) | Текущий статус, handoff |
 | [docs/DEPLOY-FOR-PROGRAMMER.md](docs/DEPLOY-FOR-PROGRAMMER.md) | **Инструкция для серверного программиста** |
 | [docs/server-deploy.md](docs/server-deploy.md) | Docker deploy |
+| [docs/SERVER-USER-SETUP.md](docs/SERVER-USER-SETUP.md) | Пользователь rest-info, read-only deploy key |
 | [docs/migration-from-yandex.md](docs/migration-from-yandex.md) | Миграция данных |
 | [docs/legacy-yandex-disk.md](docs/legacy-yandex-disk.md) | Откат на v1 (Яндекс.Диск) |
 | [docs/scripts.md](docs/scripts.md) | Описание всех скриптов |
@@ -49,7 +50,7 @@ URL сервера и сессия сохраняются в `%AppData%\rest-inf
 ```bash
 cd app && npm run dist:ascii
 RESTINFO_SERVER_URL=https://your-server RESTINFO_ADMIN_TOKEN=<jwt> \
-  node scripts/upload-release.js release/REST-INFO-Setup-1.3.0.exe
+  node scripts/upload-release.js release/REST-INFO-Setup-1.3.1.exe
 ```
 
 ## Разработка
@@ -75,7 +76,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```
 docker-compose.yml
 server/                     REST API, миграции, import
-app/                        Electron + React (v1.3.0)
+app/                        Electron + React (v1.3.1)
 docs/                       документация + scripts.md
 scripts/                    pull/push yandex export (разово)
 graphify-out/               карта кода (graphify)

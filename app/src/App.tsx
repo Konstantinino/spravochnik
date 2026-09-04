@@ -183,6 +183,18 @@ export default function App() {
     if (user) saveListFilter(user.id, departmentId, filter)
   }
 
+  /** After save: align party filter without deselecting the open topic. */
+  function syncListFilterAfterPartySave(party: SupportParty) {
+    if (listFilter === 'all' || listFilter === 'archive' || listFilter === party) return
+    setListFilter(party)
+    if (user) saveListFilter(user.id, departmentId, party)
+  }
+
+  function closeTopic() {
+    setSelectedId(null)
+    setNavHistory([])
+  }
+
   const load = useCallback(async (id: DepartmentId) => {
     setLoading(true)
     setError(null)
@@ -405,13 +417,8 @@ export default function App() {
       })
       setGuide(data)
       setSelectedId(payload.id)
-      if (
-        payload.departmentId === 'support' &&
-        payload.party &&
-        listFilter !== 'all' &&
-        listFilter !== 'archive'
-      ) {
-        handleListFilterChange(payload.party)
+      if (payload.departmentId === 'support' && payload.party) {
+        syncListFilterAfterPartySave(payload.party)
       }
       return
     }
@@ -435,13 +442,8 @@ export default function App() {
       const newest = list.reduce((a, b) => (a.id > b.id ? a : b))
       setSelectedId(newest.id)
       setQuery('')
-      if (
-        payload.departmentId === 'support' &&
-        payload.party &&
-        listFilter !== 'all' &&
-        listFilter !== 'archive'
-      ) {
-        handleListFilterChange(payload.party)
+      if (payload.departmentId === 'support' && payload.party) {
+        syncListFilterAfterPartySave(payload.party)
       }
     } else {
       setDepartmentId(payload.departmentId)
@@ -466,13 +468,8 @@ export default function App() {
       },
     })
     setGuide(data)
-    if (
-      departmentId === 'support' &&
-      payload.party &&
-      listFilter !== 'all' &&
-      listFilter !== 'archive'
-    ) {
-      handleListFilterChange(payload.party)
+    if (departmentId === 'support' && payload.party) {
+      syncListFilterAfterPartySave(payload.party)
     }
   }
 
@@ -616,6 +613,7 @@ export default function App() {
             isAdmin={!!isAdmin && !!selected}
             canGoBack={navHistory.length > 0}
             onBack={navigateBack}
+            onClose={closeTopic}
             onNavigateToTopic={navigateToTopic}
             onSave={handleInlineSave}
             onSaveImageDisplay={handleSaveImageDisplay}

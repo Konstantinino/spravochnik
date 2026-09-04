@@ -1,3 +1,6 @@
+# Имя проекта фиксирует префиксы volume/network — не пересекается с другими compose-проектами.
+name: restinfo
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,6 +13,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    networks:
+      - restinfo_internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-restinfo} -d ${POSTGRES_DB:-restinfo}"]
       interval: 5s
@@ -36,8 +41,18 @@ services:
       - ./import:/import:ro
     ports:
       - "3000:3000"
+    networks:
+      - restinfo_internal
+
+networks:
+  restinfo_internal:
+    name: restinfo_internal
+    driver: bridge
 
 volumes:
   postgres_data:
+    name: restinfo_postgres_data
   media_data:
+    name: restinfo_media_data
   updates_data:
+    name: restinfo_updates_data

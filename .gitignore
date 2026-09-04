@@ -27,3 +27,10 @@ graphify-out/.graphify_python
 REST-INFO-export/
 server/data/
 import/REST-INFO-export/
+
+# Deploy keys — только публичный .pub в deploy/keys/; приватный ключ только на сервере
+deploy/keys/rest-info-deploy-key
+deploy/keys/*_key
+deploy/keys/id_*
+!deploy/keys/*.pub
+!deploy/keys/README.md

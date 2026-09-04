@@ -4,6 +4,8 @@ services:
       NODE_ENV: production
     expose:
       - "3000"
+    networks:
+      - restinfo_internal
 
   nginx:
     image: nginx:alpine
@@ -18,3 +20,5 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - media_data:/data/media:ro
       - updates_data:/data/updates:ro
+    networks:
+      - restinfo_internal

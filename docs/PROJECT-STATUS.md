@@ -8,7 +8,7 @@
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows (4 сент.): медиа `media/{отдел}/{id}/images|files`, фото на сервер при сохранении темы, автоподгрузка чужих правок без перезапуска, Setup **1.3.0**. Production: nginx `client_max_body_size` ≥120M для upload Setup (~81 МБ), иначе **413**.
+Локально на Windows (4 сент.): медиа `media/{отдел}/{id}/images|files`, фото на сервер при сохранении темы, автоподгрузка чужих правок без перезапуска, **тема остаётся открытой после сохранения** (Esc закрывает / «← Назад» при переходе по ссылке), Setup **1.3.1**. Production: nginx `client_max_body_size` ≥120M для upload Setup (~81 МБ), иначе **413**.
 
 **Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
@@ -28,6 +28,7 @@
 - [x] Миграции `002_user_department.sql`, `003_owner_role.sql`
 - [x] `import-from-json.ts` — импорт из REST-INFO-export
 - [x] Docker Compose + nginx prod overlay (`client_max_body_size 120M`)
+- [x] Изолированный deploy: пользователь `rest-info`, read-only deploy key, сеть `restinfo_internal`, скрипты `scripts/server/`, [SERVER-USER-SETUP.md](SERVER-USER-SETUP.md)
 - [x] `dev-local.ts` — embedded Postgres для Windows без Docker
 - [x] `lib/media-layout.ts` — пути `media/{отдел}/{id}/images|files`, миграция legacy → `media/support/…` при старте API и после import
 - [x] `GET /sync/status` — `globalVersion` для быстрой проверки изменений
@@ -48,13 +49,14 @@
 - [x] SettingsPage: роль + Изменить + Удалить в одну строку, модал подтверждения удаления
 - [x] Список тем и подтем — **алфавит** (`compareTopicsByTitle` в `data.ts`)
 - [x] Markdown: фон цитат `>` и блоков кода в цвет шапки (`--header-blue-soft`)
-- [x] Ссылки между темами: в режиме правки **⋮** → «Скопировать ссылку»; в тексте **`+`** → плавающий список тем у курсора (пробел после `+` отменяет до нового `+`); выделение + `+` — ссылка на выделенное; переход + **← Назад**
+- [x] Ссылки между темами: в режиме правки **⋮** → «Скопировать ссылку»; в тексте **`+`** → плавающий список тем у курсора (пробел после `+` отменяет до нового `+`); выделение + `+` — ссылка на выделенное; переход + **← Назад**; **Esc** — назад по ссылке или закрыть тему (если открыта из списка)
+- [x] После **сохранения** тема остаётся открытой (фильтр support/party не сбрасывает выбор)
 - [x] Вложение файлов в текст темы (до **10 МБ**): «Вставить файл»; карточка в просмотре; exe/скрипты запрещены
 - [x] Медиа на диске: `media/{отдел}/{id темы}/images|files/`; legacy → `media/support/…` при старте; старые пути — fallback
 - [x] При **сохранении темы** (онлайн) фото/файлы из очереди сразу на сервер (`flushPendingMedia`), не только по «Синхронизировать»
 - [x] **Автоподгрузка** чужих правок: `GET /sync/status` после API-запросов + pull; UI обновляется без перезапуска (30 с, фокус окна); черновик в редакторе не затирается
 - [x] `serverUrl` / сессия в `%AppData%\rest-info\REST-INFO\settings.json` — **переживают** установку новой версии Setup
-- [x] Клиент **1.3.0** (`REST-INFO-Setup-1.3.0.exe`); публикация на production может упираться в nginx 413 до деплоя лимита 120M
+- [x] Клиент **1.3.1** (`REST-INFO-Setup-1.3.1.exe`); публикация на production может упираться в nginx 413 до деплоя лимита 120M
 
 ### Скрипты и восстановление
 
@@ -88,6 +90,8 @@
 - [x] Поле текста в модалке создания темы — меньше по высоте (`rows={10}`)
 - [x] `media-layout.ts` / `lib/media-layout.ts` — единые пути медиа клиент + сервер
 - [x] `settings.json`: `lastGlobalVersion` для автоподгрузки
+- [x] Сохранение темы не закрывает просмотр; `syncListFilterAfterPartySave` вместо сброса `selectedId`
+- [x] Esc в Viewer: отмена правки → «← Назад» по ссылке → закрыть тему
 
 ---
 
@@ -98,7 +102,7 @@
 | Production deploy (Docker + HTTPS) | **Высокий** | Серверный программист |
 | Передать ZIP `REST-INFO-export/` программисту | **Высокий** | Администратор |
 | Импорт на production: `import-from-json.js` | **Высокий** | Программист |
-| Задеплоить nginx 120M + media `updates/` fix; залить Setup 1.3.0 | **Высокий** | Админ / программист |
+| Задеплоить nginx 120M + media `updates/` fix; залить Setup 1.3.1 | **Высокий** | Админ / программист |
 | Указать production URL в клиентах | Средний | Админ |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |
@@ -127,7 +131,7 @@
 
 ```
 spravochnik-repo/
-├── app/                    # Electron клиент (v1.3.0)
+├── app/                    # Electron клиент (v1.3.1)
 ├── server/                 # REST API (v1.0.0)
 ├── docker-compose.yml
 ├── docker-compose.prod.yml

@@ -124,6 +124,48 @@ DATABASE_URL=postgres://... npx tsx src/reset-password.ts email@example.com newp
 
 ---
 
+## Сервер (production, Linux)
+
+### `scripts/server/setup-rest-info-user.sh`
+
+**Зачем:** создать изолированного пользователя `rest-info` (root), домашняя `/home/rest-info/`, группа `docker`, без sudo.
+
+```bash
+sudo bash scripts/server/setup-rest-info-user.sh
+```
+
+---
+
+### `scripts/server/setup-deploy-key.sh`
+
+**Зачем:** Ed25519 deploy key только на чтение для `git pull`; публичный ключ → `deploy/keys/rest-info-deploy.pub`.
+
+```bash
+sudo -u rest-info bash scripts/server/setup-deploy-key.sh
+# GitHub → Deploy keys → read-only
+```
+
+---
+
+### `scripts/server/clone-or-update.sh`
+
+**Зачем:** `git clone` / `git pull --ff-only` через deploy key + установка pre-push hook.
+
+---
+
+### `scripts/server/deploy.sh`
+
+**Зачем:** обновление на сервере: pull + `docker compose up -d --build`.
+
+```bash
+bash ~/spravochnik/scripts/server/deploy.sh          # dev/test
+bash ~/spravochnik/scripts/server/deploy.sh --prod   # nginx overlay
+```
+
+Подробнее: [docs/SERVER-USER-SETUP.md](../docs/SERVER-USER-SETUP.md).
+
+---
+
 ## Сводка
 
 | Скрипт | Куда | Актуален в v2 |
@@ -135,3 +177,4 @@ DATABASE_URL=postgres://... npx tsx src/reset-password.ts email@example.com newp
 | `import-from-json.js` | JSON → PostgreSQL | ✅ да |
 | `reset-password.ts` | PostgreSQL | ✅ да |
 | `upload-update-manifest.js` | Яндекс.Диск | ❌ legacy |
+| `scripts/server/*.sh` | изолированный deploy на Linux | ✅ да |

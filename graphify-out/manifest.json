@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "app/src/App.tsx": {
-    "mtime": 1788510783.4445233,
-    "seen": 1788510817.2398493,
-    "ast_hash": "3c8f954a907c62a579b613562178981e",
+    "mtime": 1788511740.924527,
+    "seen": 1788511750.0071754,
+    "ast_hash": "1edbcd0f272463015a2b311eda3adca2",
     "semantic_hash": ""
   },
   "app/src/components/AuthScreen.tsx": {
@@ -294,9 +294,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788507650.2676253,
-    "seen": 1788507662.7859428,
-    "ast_hash": "64b521c154ccd1ace440c5dbe7497338",
+    "mtime": 1788510980.1192641,
+    "seen": 1788511026.3378444,
+    "ast_hash": "323d696bb876167709674e0f41351e10",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -553,7 +553,7 @@
   },
   "server/migrations/001_initial.sql": {
     "mtime": 1788341272.4382584,
-    "seen": 1788496015.1126475,
+    "seen": 1788511026.3378167,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -589,13 +589,13 @@
   },
   "server/migrations/002_user_department.sql": {
     "mtime": 1788434556.8390355,
-    "seen": 1788496015.1126497,
+    "seen": 1788511026.3378186,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "server/migrations/003_owner_role.sql": {
     "mtime": 1788434556.8400316,
-    "seen": 1788496015.1126513,
+    "seen": 1788511026.3378198,
     "ast_hash": "",
     "semantic_hash": ""
   },

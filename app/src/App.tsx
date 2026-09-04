@@ -116,6 +116,8 @@ export default function App() {
   const [conflictOpen, setConflictOpen] = useState(false)
   const [navHistory, setNavHistory] = useState<number[]>([])
   const pushInFlight = useRef(false)
+  /** Skip auto-deselect while save/reload settles (avoid race with background sync). */
+  const keepSelectedIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -216,7 +218,7 @@ export default function App() {
     void load(departmentId)
   }, [departmentId, load, user])
 
-  // After background sync, refresh current department quietly
+  // After background sync, refresh current department quietly (keep open topic)
   useEffect(() => {
     if (!user) return
     if (
@@ -224,7 +226,14 @@ export default function App() {
       syncStatus.code === 'pending' ||
       syncStatus.code === 'conflict'
     ) {
-      void window.spravochnik.loadGuide(departmentId).then(setGuide).catch(() => undefined)
+      void window.spravochnik.loadGuide(departmentId).then((data) => {
+        setGuide(data)
+        setSelectedId((current) => {
+          if (current == null) return null
+          const list = getItems(data)
+          return list.some((i) => Number(i.id) === Number(current)) ? current : null
+        })
+      }).catch(() => undefined)
     }
   }, [syncStatus.code, syncStatus.lastPulledAt, departmentId, user])
 
@@ -321,10 +330,21 @@ export default function App() {
     return base
   }, [departmentId, canEdit])
 
-  const selected = useMemo(
-    () => items.find((i) => i.id === selectedId) ?? null,
-    [items, selectedId],
-  )
+  const selected = useMemo(() => {
+    if (selectedId == null) return null
+    return items.find((i) => Number(i.id) === Number(selectedId)) ?? null
+  }, [items, selectedId])
+
+  function pinSelectedTopic(id: number) {
+    keepSelectedIdRef.current = id
+    setSelectedId(id)
+  }
+
+  function releasePinnedTopic(id: number) {
+    if (keepSelectedIdRef.current === id) {
+      keepSelectedIdRef.current = null
+    }
+  }
 
   function selectTopicFromSidebar(id: number) {
     setNavHistory([])
@@ -368,9 +388,21 @@ export default function App() {
   }
 
   useEffect(() => {
+    const pinned = keepSelectedIdRef.current
+    if (pinned == null) return
+    if (items.some((i) => Number(i.id) === Number(pinned))) {
+      keepSelectedIdRef.current = null
+    }
+  }, [items])
+
+  useEffect(() => {
     if (selectedId == null) return
-    if (!items.some((i) => i.id === selectedId)) {
+    if (keepSelectedIdRef.current != null && Number(keepSelectedIdRef.current) === Number(selectedId)) {
+      return
+    }
+    if (!items.some((i) => Number(i.id) === Number(selectedId))) {
       setSelectedId(null)
+      setNavHistory([])
     }
   }, [items, selectedId])
 
@@ -405,6 +437,7 @@ export default function App() {
     if (payload.id != null) {
       const existing = items.find((i) => i.id === payload.id)
       if (!existing) throw new Error('Тема не найдена')
+      pinSelectedTopic(payload.id)
       const data = await window.spravochnik.updateItem({
         departmentId: payload.departmentId,
         item: {
@@ -416,7 +449,7 @@ export default function App() {
         },
       })
       setGuide(data)
-      setSelectedId(payload.id)
+      pinSelectedTopic(payload.id)
       if (payload.departmentId === 'support' && payload.party) {
         syncListFilterAfterPartySave(payload.party)
       }
@@ -440,7 +473,7 @@ export default function App() {
       setGuide(data)
       const list = getItems(data)
       const newest = list.reduce((a, b) => (a.id > b.id ? a : b))
-      setSelectedId(newest.id)
+      pinSelectedTopic(newest.id)
       setQuery('')
       if (payload.departmentId === 'support' && payload.party) {
         syncListFilterAfterPartySave(payload.party)
@@ -457,19 +490,27 @@ export default function App() {
     party?: SupportParty
   }) {
     if (!selected) return
-    const data = await window.spravochnik.updateItem({
-      departmentId,
-      item: {
-        ...selected,
-        question: payload.question,
-        answer: payload.answer,
-        parent_id: payload.parent_id,
-        party: payload.party ?? selected.party,
-      },
-    })
-    setGuide(data)
-    if (departmentId === 'support' && payload.party) {
-      syncListFilterAfterPartySave(payload.party)
+    const topicId = selected.id
+    pinSelectedTopic(topicId)
+    try {
+      const data = await window.spravochnik.updateItem({
+        departmentId,
+        item: {
+          ...selected,
+          question: payload.question,
+          answer: payload.answer,
+          parent_id: payload.parent_id,
+          party: payload.party ?? selected.party,
+        },
+      })
+      setGuide(data)
+      pinSelectedTopic(topicId)
+      if (departmentId === 'support' && payload.party) {
+        syncListFilterAfterPartySave(payload.party)
+      }
+    } catch (e) {
+      releasePinnedTopic(topicId)
+      throw e
     }
   }
 
@@ -492,14 +533,22 @@ export default function App() {
 
   async function handleSaveImageDisplay(image_display: ImageDisplayMap | undefined) {
     if (!selected) return
-    const data = await window.spravochnik.updateItem({
-      departmentId,
-      item: {
-        ...selected,
-        image_display: image_display ?? {},
-      },
-    })
-    setGuide(data)
+    const topicId = selected.id
+    pinSelectedTopic(topicId)
+    try {
+      const data = await window.spravochnik.updateItem({
+        departmentId,
+        item: {
+          ...selected,
+          image_display: image_display ?? {},
+        },
+      })
+      setGuide(data)
+      pinSelectedTopic(topicId)
+    } catch (e) {
+      releasePinnedTopic(topicId)
+      throw e
+    }
   }
 
   async function handleDelete() {

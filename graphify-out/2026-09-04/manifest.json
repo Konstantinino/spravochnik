@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "app/src/App.tsx": {
-    "mtime": 1788510783.4445233,
-    "seen": 1788510817.2398493,
-    "ast_hash": "3c8f954a907c62a579b613562178981e",
+    "mtime": 1788511592.465479,
+    "seen": 1788511598.3217006,
+    "ast_hash": "fd7bb1437da1874a599d915fca1f0a2b",
     "semantic_hash": ""
   },
   "app/src/components/AuthScreen.tsx": {
@@ -288,15 +288,15 @@
     "semantic_hash": "5ab518c19a1fece2b2becb0ae07bf8a2"
   },
   "AGENTS.md": {
-    "mtime": 1788507648.3955798,
-    "seen": 1788507662.7859416,
-    "ast_hash": "674db5ef0174c8f89255a3ced53292bc",
+    "mtime": 1788510967.055873,
+    "seen": 1788510976.7060237,
+    "ast_hash": "1188d83afe59b55f5af93f302446017b",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788507650.2676253,
-    "seen": 1788507662.7859428,
-    "ast_hash": "64b521c154ccd1ace440c5dbe7497338",
+    "mtime": 1788510980.1192641,
+    "seen": 1788511026.3378444,
+    "ast_hash": "323d696bb876167709674e0f41351e10",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -510,9 +510,9 @@
     "semantic_hash": ""
   },
   "docs/PROJECT-STATUS.md": {
-    "mtime": 1788507651.8981905,
-    "seen": 1788507662.7861307,
-    "ast_hash": "ca31759d8cb93e0bfa93b0f2b2714962",
+    "mtime": 1788510965.8380713,
+    "seen": 1788510976.7064993,
+    "ast_hash": "a8ccb786bf3f1766660476c0eccdea6c",
     "semantic_hash": ""
   },
   "docs/legacy-yandex-disk.md": {
@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "docs/testing-checklist.md": {
-    "mtime": 1788495966.9830287,
-    "seen": 1788496015.1126897,
-    "ast_hash": "7a408322d1e47f3cde3e69fad0e68175",
+    "mtime": 1788510967.3985243,
+    "seen": 1788510976.70679,
+    "ast_hash": "f3eef306e1c68cc647e5867e47d75817",
     "semantic_hash": ""
   },
   "server/README.md": {
@@ -553,7 +553,7 @@
   },
   "server/migrations/001_initial.sql": {
     "mtime": 1788341272.4382584,
-    "seen": 1788496015.1126475,
+    "seen": 1788511026.3378167,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -589,13 +589,13 @@
   },
   "server/migrations/002_user_department.sql": {
     "mtime": 1788434556.8390355,
-    "seen": 1788496015.1126497,
+    "seen": 1788511026.3378186,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "server/migrations/003_owner_role.sql": {
     "mtime": 1788434556.8400316,
-    "seen": 1788496015.1126513,
+    "seen": 1788511026.3378198,
     "ast_hash": "",
     "semantic_hash": ""
   },

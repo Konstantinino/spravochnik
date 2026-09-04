@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "docs/testing-checklist.md": {
-    "mtime": 1788495948.37141,
-    "seen": 1788495964.058039,
-    "ast_hash": "135cb3dd11945764bf7ad30974d8be8c",
+    "mtime": 1788495966.9830287,
+    "seen": 1788496015.1126897,
+    "ast_hash": "7a408322d1e47f3cde3e69fad0e68175",
     "semantic_hash": ""
   },
   "server/README.md": {
@@ -553,8 +553,8 @@
   },
   "server/migrations/001_initial.sql": {
     "mtime": 1788341272.4382584,
-    "seen": 1788434301.4288683,
-    "ast_hash": "",
+    "seen": 1788496015.1126475,
+    "ast_hash": "cfa3c8f846f1b2cf6307242869ac0c33",
     "semantic_hash": ""
   },
   "app/src/components/TopicLinkPicker.tsx": {
@@ -585,6 +585,18 @@
     "mtime": 1788494960.7794309,
     "seen": 1788495126.2685964,
     "ast_hash": "2b02616a06489afdd2f15155c0896b1e",
+    "semantic_hash": ""
+  },
+  "server/migrations/002_user_department.sql": {
+    "mtime": 1788434556.8390355,
+    "seen": 1788496015.1126497,
+    "ast_hash": "9b91743bfe463088399cc5aee5d874ad",
+    "semantic_hash": ""
+  },
+  "server/migrations/003_owner_role.sql": {
+    "mtime": 1788434556.8400316,
+    "seen": 1788496015.1126513,
+    "ast_hash": "0f265ad1d9ee7baaff293d81ba1d77f1",
     "semantic_hash": ""
   }
 }

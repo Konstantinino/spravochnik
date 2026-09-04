@@ -288,15 +288,15 @@
     "semantic_hash": "5ab518c19a1fece2b2becb0ae07bf8a2"
   },
   "AGENTS.md": {
-    "mtime": 1788495086.0548387,
-    "seen": 1788495126.2692623,
-    "ast_hash": "12d54e07b24ea47bb501d91352f4fc8a",
+    "mtime": 1788495944.2767076,
+    "seen": 1788495964.0574481,
+    "ast_hash": "32562a79ee3b6a64dd794a87493f3043",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788434699.7246203,
-    "seen": 1788434795.595046,
-    "ast_hash": "21fcdefebe87e0485566380b3c9a53ba",
+    "mtime": 1788495946.5596368,
+    "seen": 1788495964.05745,
+    "ast_hash": "3426d35650a83dfeba6e36f2232be01c",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -510,9 +510,9 @@
     "semantic_hash": ""
   },
   "docs/PROJECT-STATUS.md": {
-    "mtime": 1788495091.6684933,
-    "seen": 1788495126.2696831,
-    "ast_hash": "a7addba5e624dbb84a329ef4d342ecbc",
+    "mtime": 1788495946.1310153,
+    "seen": 1788495964.0578063,
+    "ast_hash": "6b08b4722fee2e4a5ab4b764753580ae",
     "semantic_hash": ""
   },
   "docs/legacy-yandex-disk.md": {
@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "docs/testing-checklist.md": {
-    "mtime": 1788434556.8181057,
-    "seen": 1788434559.882286,
-    "ast_hash": "eb0381c42ce551667b7ba8d72d405dd4",
+    "mtime": 1788495948.37141,
+    "seen": 1788495964.058039,
+    "ast_hash": "135cb3dd11945764bf7ad30974d8be8c",
     "semantic_hash": ""
   },
   "server/README.md": {

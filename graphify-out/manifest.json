@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "app/package.json": {
-    "mtime": 1788496110.4916756,
-    "seen": 1788496386.8076556,
-    "ast_hash": "764e28b3645e310296b83176eba778f8",
+    "mtime": 1788511925.6533015,
+    "seen": 1788512318.9248893,
+    "ast_hash": "278a73c75efcc8c787d20f5bbc323d5c",
     "semantic_hash": ""
   },
   "app/resources/data/app-update.json": {
@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "app/src/App.tsx": {
-    "mtime": 1788511740.924527,
-    "seen": 1788511750.0071754,
-    "ast_hash": "1edbcd0f272463015a2b311eda3adca2",
+    "mtime": 1788512309.3845959,
+    "seen": 1788512318.9254353,
+    "ast_hash": "b9ad753049e0150014f681a490986e71",
     "semantic_hash": ""
   },
   "app/src/components/AuthScreen.tsx": {
@@ -510,9 +510,9 @@
     "semantic_hash": ""
   },
   "docs/PROJECT-STATUS.md": {
-    "mtime": 1788510965.8380713,
-    "seen": 1788510976.7064993,
-    "ast_hash": "a8ccb786bf3f1766660476c0eccdea6c",
+    "mtime": 1788513624.7577279,
+    "seen": 1788513642.5709968,
+    "ast_hash": "8594ef4321d25604bc41ed46ad135d49",
     "semantic_hash": ""
   },
   "docs/legacy-yandex-disk.md": {
@@ -553,7 +553,7 @@
   },
   "server/migrations/001_initial.sql": {
     "mtime": 1788341272.4382584,
-    "seen": 1788511026.3378167,
+    "seen": 1788511801.743468,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -589,13 +589,13 @@
   },
   "server/migrations/002_user_department.sql": {
     "mtime": 1788434556.8390355,
-    "seen": 1788511026.3378186,
+    "seen": 1788511801.7434711,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "server/migrations/003_owner_role.sql": {
     "mtime": 1788434556.8400316,
-    "seen": 1788511026.3378198,
+    "seen": 1788511801.743473,
     "ast_hash": "",
     "semantic_hash": ""
   },

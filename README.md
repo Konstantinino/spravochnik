@@ -50,7 +50,7 @@ URL сервера и сессия сохраняются в `%AppData%\rest-inf
 ```bash
 cd app && npm run dist:ascii
 RESTINFO_SERVER_URL=https://your-server RESTINFO_ADMIN_TOKEN=<jwt> \
-  node scripts/upload-release.js release/REST-INFO-Setup-1.3.1.exe
+  node scripts/upload-release.js release/REST-INFO-Setup-1.3.2.exe
 ```
 
 ## Разработка
@@ -76,7 +76,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```
 docker-compose.yml
 server/                     REST API, миграции, import
-app/                        Electron + React (v1.3.1)
+app/                        Electron + React (v1.3.2)
 docs/                       документация + scripts.md
 scripts/                    pull/push yandex export (разово)
 graphify-out/               карта кода (graphify)

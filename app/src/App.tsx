@@ -143,7 +143,20 @@ export default function App() {
       if (status.code === 'up_to_date' || status.code === 'pending') {
         void window.spravochnik.getCurrentUser().then((u) => {
           if (!u) return
-          setUser(u)
+          // Avoid new object identity on every sync — that re-triggers load() and clears selection.
+          setUser((prev) => {
+            if (
+              prev &&
+              prev.id === u.id &&
+              prev.role === u.role &&
+              prev.departmentId === u.departmentId &&
+              prev.name === u.name &&
+              prev.email === u.email
+            ) {
+              return prev
+            }
+            return u
+          })
           if (!isStaffRole(u.role)) {
             const dept = normalizeWorkDepartmentId(u.departmentId)
             setDepartmentId(dept)
@@ -213,10 +226,12 @@ export default function App() {
     }
   }, [])
 
+  // Reload guide only when department or logged-in user *id* changes — not on every
+  // sync-driven PublicUser object refresh (that used to wipe selectedId via load()).
   useEffect(() => {
     if (!user) return
     void load(departmentId)
-  }, [departmentId, load, user])
+  }, [departmentId, load, user?.id])
 
   // After background sync, refresh current department quietly (keep open topic)
   useEffect(() => {
@@ -229,13 +244,14 @@ export default function App() {
       void window.spravochnik.loadGuide(departmentId).then((data) => {
         setGuide(data)
         setSelectedId((current) => {
-          if (current == null) return null
+          const prefer = keepSelectedIdRef.current ?? current
+          if (prefer == null) return null
           const list = getItems(data)
-          return list.some((i) => Number(i.id) === Number(current)) ? current : null
+          return list.some((i) => Number(i.id) === Number(prefer)) ? prefer : null
         })
       }).catch(() => undefined)
     }
-  }, [syncStatus.code, syncStatus.lastPulledAt, departmentId, user])
+  }, [syncStatus.code, syncStatus.lastPulledAt, departmentId, user?.id])
 
   async function runPush() {
     if (pushInFlight.current) return

@@ -87,7 +87,7 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
 | `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере по отделам |
-| `Viewer.tsx`, `Header.tsx` | просмотр/правка темы; ⋮ → копия ссылки; ← Назад; Esc (назад/закрыть); тема остаётся открытой после save; вложение файлов |
+| `Viewer.tsx`, `Header.tsx` | просмотр/правка темы; ⋮ → копия ссылки; ← Назад; Esc (назад/закрыть); тема остаётся открытой после save (не после ручной смены фильтра); вложение файлов |
 | `TopicLinkPicker.tsx` | плавающий выбор темы по `+` у курсора |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
 | `TopicList.tsx` | дерево тем (корни через `buildTree`) |
@@ -149,7 +149,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.3.1.exe
+# → app/release/REST-INFO-Setup-1.3.2.exe
 ```
 
 ## Владелец / bootstrap
@@ -180,6 +180,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.3.1** (`app/package.json`)
+- Клиент: **1.3.2** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

@@ -107,7 +107,8 @@
 - [x] Ручная смена фильтра списка (Поставщик/Покупатель/…) по-прежнему закрывает тему
 - [x] `session-log.ts` — ring buffer журнала сессии; `guide-data.ts` — reconcile `has_children`
 - [x] Кнопка «Удаление…» в Viewer: сброс состояния в `finally`
-- [x] Диагностика sync 404: на production (`info.r-est.ru`) ~107 записей `media_files` с путём `media/images/*`, файлы на диске — `media/support/{id}/images/*`; скрипт fix готов
+- [x] Диагностика sync 404: на production (`info.r-est.ru`) ~107 записей `media_files` с путём `media/images/*`, файлы на диске — `media/support/{id}/images/*`
+- [x] **Production (9 сент.):** `fix-media-paths.js --apply` — обновлено **107** путей в `media_files`, `global_version` bumped; sync «media/images/…» 404 устранён
 
 ---
 
@@ -119,7 +120,6 @@
 | Передать ZIP `REST-INFO-export/` программисту | **Высокий** | Администратор |
 | Импорт на production: `import-from-json.js` | **Высокий** | Программист |
 | Задеплоить nginx 120M + media `updates/` fix; залить Setup 1.3.3 | **Высокий** | Админ / программист |
-| **Production:** `git pull` + rebuild api → `fix-media-paths.js --apply` (убрать ошибки sync «media/images/…») | **Высокий** | Программист / владелец |
 | Указать production URL в клиентах | Средний | Админ |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |

@@ -369,3 +369,68 @@ export function migrateDraftFilesToTopic(
   rewritePendingMediaPaths(fromPrefix, toPrefix)
   removeDraftOwnerDirIfEmpty(draftId)
 }
+
+/** When server assigns a different topic id than the local draft, move media on disk. */
+export function remigrateTopicMediaIds(
+  departmentId: DepartmentId,
+  fromTopicId: number,
+  toTopicId: number,
+): void {
+  if (fromTopicId === toTopicId) return
+  const mediaDir = getMediaDir()
+  const fromBase = path.join(mediaDir, departmentId, String(fromTopicId))
+  const toBase = path.join(mediaDir, departmentId, String(toTopicId))
+  if (!fs.existsSync(fromBase)) return
+
+  for (const sub of ['images', 'files'] as const) {
+    const fromDir = path.join(fromBase, sub)
+    const toDir = path.join(toBase, sub)
+    if (!fs.existsSync(fromDir)) continue
+    ensureDir(toDir)
+    for (const name of fs.readdirSync(fromDir)) {
+      const from = path.join(fromDir, name)
+      if (!fs.statSync(from).isFile()) continue
+      const to = path.join(toDir, name)
+      fs.renameSync(from, to)
+      const rel =
+        sub === 'images'
+          ? topicImageRelativePath(departmentId, toTopicId, name)
+          : topicFileRelativePath(departmentId, toTopicId, name)
+      queueMediaUpload(rel)
+    }
+    try {
+      fs.rmSync(fromDir, { recursive: true, force: true })
+    } catch {
+      /* ignore */
+    }
+  }
+
+  try {
+    fs.rmSync(fromBase, { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
+
+  const fromPrefix = `media/${departmentId}/${fromTopicId}/`
+  const toPrefix = `media/${departmentId}/${toTopicId}/`
+  rewritePendingMediaPaths(fromPrefix, toPrefix)
+}
+
+/** Remove local media folders for deleted topic ids (images + files). */
+export function removeLocalTopicMedia(departmentId: DepartmentId, topicIds: number[]): void {
+  if (topicIds.length === 0) return
+  const mediaDir = getMediaDir()
+  for (const id of topicIds) {
+    for (const dir of [
+      path.join(mediaDir, departmentId, String(id)),
+      path.join(mediaDir, String(id)),
+    ]) {
+      if (!fs.existsSync(dir)) continue
+      try {
+        fs.rmSync(dir, { recursive: true, force: true })
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}

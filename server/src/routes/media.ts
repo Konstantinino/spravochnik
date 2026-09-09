@@ -4,6 +4,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import multer from 'multer'
 import { query, bumpGlobalVersion } from '../db/pool.js'
+import { canEditDepartment } from '../lib/auth-utils.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
 import {
   canonicalizeMediaRelativePath,
@@ -88,6 +89,18 @@ mediaRouter.post(
       const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '')
       if (normalized.includes('..')) {
         res.status(400).json({ error: 'Недопустимый путь' })
+        return
+      }
+
+      const parsedEarly = parseMediaRelativePath(normalized)
+      const uploadDept =
+        parsedEarly.departmentId ??
+        (req.body.departmentId ? String(req.body.departmentId) : null)
+      if (
+        uploadDept &&
+        !canEditDepartment(req.user!.role, req.user!.departmentId, uploadDept)
+      ) {
+        res.status(403).json({ error: 'Редактор может изменять только свой отдел' })
         return
       }
 
@@ -195,6 +208,14 @@ mediaRouter.delete(
       const normalized = rel.replace(/\\/g, '/').replace(/^\/+/, '')
       if (normalized.includes('..')) {
         res.status(400).json({ error: 'Недопустимый путь' })
+        return
+      }
+      const parsed = parseMediaRelativePath(normalized)
+      if (
+        parsed.departmentId &&
+        !canEditDepartment(req.user!.role, req.user!.departmentId, parsed.departmentId)
+      ) {
+        res.status(403).json({ error: 'Редактор может изменять только свой отдел' })
         return
       }
       const candidates = mediaRelativePathCandidates(normalized)

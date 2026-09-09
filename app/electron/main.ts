@@ -25,6 +25,7 @@ import {
   parseUserRole,
   STAFF_ROLES,
   CONTENT_EDITOR_ROLES,
+  canEditDepartment,
   type DepartmentId,
   type UserRole,
   type WorkDepartmentId,
@@ -34,6 +35,7 @@ import {
   cleanupTopicImageOrphans,
   migrateDraftFilesToTopic,
   migrateDraftImagesToTopic,
+  removeLocalTopicMedia,
   saveFileForOwner,
   saveImageFileForOwner,
   saveNativeImageForOwner,
@@ -109,6 +111,13 @@ import {
   resolveExistingMediaAbsolutePath,
 } from './media-layout'
 import { queueMediaUpload } from './pending-media'
+import { reconcileHasChildren } from './guide-data'
+import {
+  appendSessionLog,
+  clearSessionLogs,
+  getSessionLogs,
+  onSessionLog,
+} from './session-log'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -146,6 +155,14 @@ function ensureDataReady(): void {
   ensureAuthFiles()
   ensureLocalUpdateManifest()
   migrateLegacyLocalMedia()
+}
+
+function requireEditDepartment(departmentId: DepartmentId): void {
+  const user = getCurrentUser()
+  requireRole(user, CONTENT_EDITOR_ROLES)
+  if (!canEditDepartment(user!.role, user!.departmentId, departmentId)) {
+    throw new Error('Редактор может изменять только свой отдел')
+  }
 }
 
 function roleFromServerUser(user: Record<string, unknown>): UserRole {
@@ -308,6 +325,7 @@ function registerIpc(): void {
         setAuthToken(token)
         cacheServerUser(user)
         writeSession(String(user.id), Boolean(payload.rememberMe))
+        appendSessionLog('info', 'auth', `Вход: ${String(user.email)}`)
         void pullFromYandex()
         return {
           id: String(user.id),
@@ -771,6 +789,10 @@ function registerIpc(): void {
 
   ipcMain.handle('sync:status', () => getSyncStatus())
   ipcMain.handle('sync:pull', async () => pullFromYandex())
+  ipcMain.handle('sync:pull-full', async () => {
+    appendSessionLog('info', 'sync', 'Полная синхронизация с сервера (темы, фото, файлы)…')
+    return pullFromYandex({ force: true })
+  })
   ipcMain.handle('sync:discard', async () => {
     const user = getCurrentUser()
     requireRole(user, CONTENT_EDITOR_ROLES)
@@ -795,7 +817,7 @@ function registerIpc(): void {
     'sync:lock-topic',
     async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
       try {
-        requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+        requireEditDepartment(payload.departmentId)
         await lockTopic(payload.departmentId, payload.topicId)
         return { ok: true as const }
       } catch (e) {
@@ -809,7 +831,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'sync:unlock-topic',
     async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
-      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+      requireEditDepartment(payload.departmentId)
       await unlockTopic(payload.departmentId, payload.topicId)
       return { ok: true }
     },
@@ -817,7 +839,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'sync:renew-lock',
     async (_e, payload: { departmentId: DepartmentId; topicId: number }) => {
-      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+      requireEditDepartment(payload.departmentId)
       await renewTopicLock(payload.departmentId, payload.topicId)
       return { ok: true }
     },
@@ -825,7 +847,23 @@ function registerIpc(): void {
 
   ipcMain.handle('load-guide', (_event, departmentId: DepartmentId) => {
     const dept = departmentById(departmentId)
-    return readGuideFile(dept.fileName)
+    const data = readGuideFile(dept.fileName) as Record<string, unknown>
+    const listKey = dept.listKey
+    const list = (data[listKey] as Array<{
+      id: number
+      parent_id?: number | null
+      has_children?: boolean
+      archived?: boolean
+    }>) ?? []
+    const reconciled = reconcileHasChildren(list)
+    const changed = reconciled.some(
+      (item, index) => item.has_children !== list[index]?.has_children,
+    )
+    if (changed) {
+      data[listKey] = reconciled
+      writeGuideFile(dept.fileName, data)
+    }
+    return data
   })
 
   ipcMain.handle(
@@ -848,7 +886,7 @@ function registerIpc(): void {
         }
       },
     ) => {
-      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+      requireEditDepartment(payload.departmentId)
       const dept = departmentById(payload.departmentId)
       const data = readGuideFile(dept.fileName) as Record<string, unknown>
       const listKey = dept.listKey
@@ -948,7 +986,7 @@ function registerIpc(): void {
         }
       },
     ) => {
-      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+      requireEditDepartment(payload.departmentId)
       const dept = departmentById(payload.departmentId)
       const data = readGuideFile(dept.fileName) as Record<string, unknown>
       const listKey = dept.listKey
@@ -1063,12 +1101,15 @@ function registerIpc(): void {
         }
       }
 
-      // Refresh has_children for all items after possible reparent
-      for (const row of list) {
-        const id = row.id
-        if (typeof id !== 'number') continue
-        row.has_children = list.some((child) => child.parent_id === id)
-      }
+      const reconciled = reconcileHasChildren(
+        list as Array<{
+          id: number
+          parent_id?: number | null
+          has_children?: boolean
+          archived?: boolean
+        }>,
+      )
+      data[listKey] = reconciled
 
       try {
         cleanupTopicImageOrphans(
@@ -1085,7 +1126,6 @@ function registerIpc(): void {
         console.error('media orphan cleanup failed', err)
       }
 
-      data[listKey] = list
       writeGuideFile(dept.fileName, data)
 
       const settings = readSettings()
@@ -1143,19 +1183,18 @@ function registerIpc(): void {
       }
       collect(payload.id)
 
-      const parentId = target.parent_id
       const next = list.filter((item) => typeof item.id !== 'number' || !toRemove.has(item.id))
 
-      if (parentId != null) {
-        const parent = next.find((item) => item.id === parentId)
-        if (parent) {
-          const stillHasChildren = next.some((item) => item.parent_id === parentId)
-          parent.has_children = stillHasChildren
-        }
-      }
-
-      data[listKey] = next
+      data[listKey] = reconcileHasChildren(
+        next as Array<{
+          id: number
+          parent_id?: number | null
+          has_children?: boolean
+          archived?: boolean
+        }>,
+      )
       writeGuideFile(dept.fileName, data)
+      removeLocalTopicMedia(payload.departmentId, [...toRemove])
 
       const settings = readSettings()
       if (settings.serverUrl.trim()) {
@@ -1200,7 +1239,7 @@ function registerIpc(): void {
       event,
       payload: { topicId?: number; draftId?: string; departmentId?: DepartmentId },
     ) => {
-      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+      requireEditDepartment(normalizeMediaDepartmentId(payload.departmentId))
       const owner = resolveImageOwner(payload ?? {})
       const win = BrowserWindow.fromWebContents(event.sender)
       const options = {
@@ -1225,7 +1264,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'save-topic-image-clipboard',
     (_event, payload: { topicId?: number; draftId?: string; departmentId?: DepartmentId }) => {
-      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+      requireEditDepartment(normalizeMediaDepartmentId(payload.departmentId))
       const owner = resolveImageOwner(payload ?? {})
       const image = clipboard.readImage()
       return saveNativeImageForOwner(owner, image)
@@ -1238,7 +1277,7 @@ function registerIpc(): void {
       event,
       payload: { topicId?: number; draftId?: string; departmentId?: DepartmentId },
     ) => {
-      requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+      requireEditDepartment(normalizeMediaDepartmentId(payload.departmentId))
       const owner = resolveImageOwner(payload ?? {})
       const win = BrowserWindow.fromWebContents(event.sender)
       const options = {
@@ -1267,7 +1306,7 @@ function registerIpc(): void {
 
   // Legacy flat media pick — keep for compatibility; prefer save-topic-image
   ipcMain.handle('pick-and-save-image', async (event) => {
-    requireRole(getCurrentUser(), CONTENT_EDITOR_ROLES)
+    requireEditDepartment('support')
     const win = BrowserWindow.fromWebContents(event.sender)
     const options = {
       title: 'Выберите фото',
@@ -1361,12 +1400,25 @@ function registerIpc(): void {
       win.webContents.send('updates:status-changed', info)
     }
   })
+
+  ipcMain.handle('session-log:get', () => getSessionLogs())
+  ipcMain.handle('session-log:clear', () => {
+    clearSessionLogs()
+    return getSessionLogs()
+  })
+
+  onSessionLog(() => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('session-log:changed')
+    }
+  })
 }
 
 app.whenReady().then(() => {
   ensureDataReady()
   clearEphemeralSessionOnStartup()
   refreshStatusFromSettings()
+  appendSessionLog('info', 'app', `Запуск REST INFO ${app.getVersion()}`)
 
   protocol.handle('spravochnik', (request) => {
     try {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GuideItem } from '../types'
-import { compareTopicsByTitle, topicLabelWithPath } from '../lib/data'
+import { compareTopicsByTitle, topicDisplayLabel, topicMatchesQuery } from '../lib/data'
 
 export type TopicLinkPickerState = {
   mode: 'insert' | 'wrap'
@@ -34,16 +34,10 @@ export function TopicLinkPicker({
 
   const options = useMemo(() => {
     if (!open) return []
-    const q = open.query.trim().toLowerCase()
     return items
       .filter((item) => item.id !== excludeId)
-      .filter((item) => {
-        if (!q) return true
-        const label = topicLabelWithPath(items, item).toLowerCase()
-        return label.includes(q) || item.question.toLowerCase().includes(q)
-      })
+      .filter((item) => topicMatchesQuery(items, item, open.query))
       .sort(compareTopicsByTitle)
-      .slice(0, 60)
   }, [items, excludeId, open])
 
   useEffect(() => {
@@ -143,7 +137,7 @@ export function TopicLinkPicker({
                 onMouseEnter={() => setActive(index)}
                 onClick={() => onPick(item)}
               >
-                {topicLabelWithPath(items, item)}
+                {topicDisplayLabel(item)}
               </button>
             </li>
           ))

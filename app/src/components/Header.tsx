@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DepartmentId, PublicUser, SyncStatus, UpdateInfo, UserRole } from '../types'
-import { DEPARTMENTS, ROLE_LABELS, isStaffRole } from '../types'
+import {
+  ROLE_LABELS,
+  canSwitchDepartment,
+  departmentsForUser,
+  isStaffRole,
+} from '../types'
 
 interface HeaderProps {
   departmentId: DepartmentId
@@ -96,14 +101,14 @@ export function Header({
 
       <label className="app-header__dept">
         <span className="visually-hidden">Отдел</span>
-        {isStaffRole(user.role) ? (
+        {canSwitchDepartment(user.role) ? (
           <select
             value={departmentId}
             onChange={(e) => onDepartmentChange(e.target.value as DepartmentId)}
             aria-label="Отдел"
             disabled={interactionLocked}
           >
-            {DEPARTMENTS.map((d) => (
+            {departmentsForUser(user.role).map((d) => (
               <option key={d.id} value={d.id}>
                 {d.label}
               </option>
@@ -111,9 +116,7 @@ export function Header({
           </select>
         ) : (
           <span className="app-header__dept-label" aria-label="Отдел">
-            {DEPARTMENTS.find((d) => d.id === user.departmentId)?.label ??
-              DEPARTMENTS.find((d) => d.id === departmentId)?.label ??
-              'Отдел'}
+            {departmentsForUser(user.role).find((d) => d.id === departmentId)?.label ?? 'Отдел'}
           </span>
         )}
       </label>

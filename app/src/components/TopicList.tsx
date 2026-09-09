@@ -93,9 +93,7 @@ function TreeNode({
   const children = searchFilter
     ? allChildren.filter((c) => searchFilter.visibleIds.has(c.id))
     : allChildren
-  const isFolder = searchFilter
-    ? children.length > 0
-    : item.has_children || allChildren.length > 0
+  const isFolder = children.length > 0
   const [manualOpen, setManualOpen] = useState(depth < 1)
   const open = searchFilter ? children.length > 0 : manualOpen
   const match = searchFilter?.matchById.get(item.id)

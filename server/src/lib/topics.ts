@@ -84,6 +84,7 @@ export async function refreshHasChildren(
        WHERE c.department_id = t.department_id
          AND c.parent_id = t.id
          AND c.deleted_at IS NULL
+         AND c.archived = false
      )
      WHERE t.department_id = $1 AND t.deleted_at IS NULL`,
     [departmentId],

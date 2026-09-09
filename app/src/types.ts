@@ -50,6 +50,25 @@ export function canEditContent(role: string | undefined | null): boolean {
   return role === 'editor' || isStaffRole(role)
 }
 
+/** All roles can switch departments in the header (templates — only admin/owner). */
+export function canSwitchDepartment(role: string | undefined | null): boolean {
+  return role === 'user' || role === 'editor' || isStaffRole(role)
+}
+
+export function departmentsForUser(role: string | undefined | null): Department[] {
+  return isStaffRole(role) ? DEPARTMENTS : [...WORK_DEPARTMENTS]
+}
+
+export function canEditDepartment(
+  role: string | undefined | null,
+  userDepartmentId: WorkDepartmentId | DepartmentId | undefined,
+  targetDepartmentId: DepartmentId,
+): boolean {
+  if (!canEditContent(role)) return false
+  if (isStaffRole(role)) return true
+  return normalizeWorkDepartmentId(userDepartmentId) === normalizeWorkDepartmentId(targetDepartmentId)
+}
+
 export function isOwnerRole(role: string | undefined | null): boolean {
   return role === 'owner'
 }
@@ -147,6 +166,16 @@ export interface ConflictResolution {
   fileName: string
   id: number
   choice: 'local' | 'remote'
+}
+
+export type SessionLogLevel = 'info' | 'warn' | 'error'
+
+export interface SessionLogEntry {
+  id: number
+  at: string
+  level: SessionLogLevel
+  tag: string
+  message: string
 }
 
 export interface UpdateInfo {

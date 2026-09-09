@@ -49,6 +49,19 @@ export function getChildren(items: GuideItem[], parentId: number): GuideItem[] {
     .sort(compareTopicsByTitle)
 }
 
+/** Recompute has_children from actual non-archived children (fixes stale flags). */
+export function reconcileHasChildren(items: GuideItem[]): GuideItem[] {
+  const childCounts = new Map<number, number>()
+  for (const item of items) {
+    if (item.parent_id == null || isArchived(item)) continue
+    childCounts.set(item.parent_id, (childCounts.get(item.parent_id) ?? 0) + 1)
+  }
+  return items.map((item) => ({
+    ...item,
+    has_children: (childCounts.get(item.id) ?? 0) > 0,
+  }))
+}
+
 export function getItemPath(items: GuideItem[], itemId: number): string[] {
   const byId = new Map(items.map((i) => [i.id, i]))
   const path: string[] = []
@@ -100,10 +113,22 @@ export function isValidParent(
   return !getDescendantIds(items, itemId).has(parentId)
 }
 
+export function topicDisplayLabel(item: GuideItem): string {
+  return item.question?.trim() || 'Без названия'
+}
+
 export function topicLabelWithPath(items: GuideItem[], item: GuideItem): string {
   const path = getItemPath(items, item.id)
-  if (path.length <= 1) return item.question
+  if (path.length <= 1) return topicDisplayLabel(item)
   return path.join(' → ')
+}
+
+/** Match picker search by title or full path (path not shown in the list). */
+export function topicMatchesQuery(items: GuideItem[], item: GuideItem, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  if (topicDisplayLabel(item).toLowerCase().includes(q)) return true
+  return topicLabelWithPath(items, item).toLowerCase().includes(q)
 }
 
 export function nextId(items: GuideItem[]): number {

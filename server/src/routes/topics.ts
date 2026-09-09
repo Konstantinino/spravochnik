@@ -1,6 +1,9 @@
-import { Router } from 'express'
+import { Router, type Response } from 'express'
+import fs from 'node:fs'
+import path from 'node:path'
 import type pg from 'pg'
 import { query, withTransaction, bumpGlobalVersion } from '../db/pool.js'
+import { deleteTopicMediaFiles } from '../lib/media-layout.js'
 import {
   acquireTopicLock,
   DEPARTMENTS,
@@ -11,12 +14,23 @@ import {
   rowToGuideItem,
   type TopicRow,
 } from '../lib/topics.js'
+import { canEditDepartment } from '../lib/auth-utils.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
 
 export const topicsRouter = Router()
 
+const MEDIA_DIR = process.env.MEDIA_DIR ?? path.join(process.cwd(), 'data', 'media')
+
 function param(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value
+}
+
+function rejectForeignDepartmentEdit(req: AuthRequest, dept: string, res: Response): boolean {
+  if (!canEditDepartment(req.user!.role, req.user!.departmentId, dept)) {
+    res.status(403).json({ error: 'Редактор может изменять только свой отдел' })
+    return true
+  }
+  return false
 }
 
 topicsRouter.get('/:dept/topics', async (req, res) => {
@@ -53,6 +67,7 @@ topicsRouter.post(
         res.status(400).json({ error: 'Некорректные параметры' })
         return
       }
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
 
       const lock = await acquireTopicLock(dept, topicId, req.user!.id, req.user!.name)
       if (!lock.ok) {
@@ -79,6 +94,7 @@ topicsRouter.post(
     try {
       const dept = param(req.params.dept)
       const topicId = parseInt(param(req.params.topicId), 10)
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
       await releaseTopicLock(dept, topicId, req.user!.id)
       res.json({ ok: true })
     } catch (err) {
@@ -96,6 +112,7 @@ topicsRouter.post(
     try {
       const dept = param(req.params.dept)
       const topicId = parseInt(param(req.params.topicId), 10)
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
       await renewTopicLock(dept, topicId, req.user!.id)
       res.json({ ok: true })
     } catch (err) {
@@ -116,6 +133,7 @@ topicsRouter.post(
         res.status(404).json({ error: 'Неизвестный отдел' })
         return
       }
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
 
       const item = req.body.item ?? req.body
       const question = String(item.question ?? '').trim()
@@ -183,6 +201,7 @@ topicsRouter.put(
         res.status(400).json({ error: 'Некорректные параметры' })
         return
       }
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
 
       const expectedVersion = parseInt(String(req.headers['if-match'] ?? req.body.version ?? '0'), 10)
       const item = req.body.item ?? req.body
@@ -306,6 +325,8 @@ topicsRouter.delete(
             [dept, id, req.user!.id],
           )
         }
+        fs.mkdirSync(MEDIA_DIR, { recursive: true })
+        await deleteTopicMediaFiles(MEDIA_DIR, dept, [...toDelete], client)
         await refreshHasChildren(dept, client)
         await bumpGlobalVersion(client)
       })

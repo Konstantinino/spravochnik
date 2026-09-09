@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
   pullSync: () => ipcRenderer.invoke('sync:pull'),
 
+  pullSyncFull: () => ipcRenderer.invoke('sync:pull-full'),
+
   discardSync: () => ipcRenderer.invoke('sync:discard'),
 
   pushSync: () => ipcRenderer.invoke('sync:push'),
@@ -135,6 +137,22 @@ contextBridge.exposeInMainWorld('spravochnik', {
     ipcRenderer.on('updates:status-changed', listener)
 
     return () => ipcRenderer.removeListener('updates:status-changed', listener)
+
+  },
+
+
+
+  getSessionLogs: () => ipcRenderer.invoke('session-log:get'),
+
+  clearSessionLogs: () => ipcRenderer.invoke('session-log:clear'),
+
+  onSessionLog: (callback: () => void) => {
+
+    const listener = () => callback()
+
+    ipcRenderer.on('session-log:changed', listener)
+
+    return () => ipcRenderer.removeListener('session-log:changed', listener)
 
   },
 

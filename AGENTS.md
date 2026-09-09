@@ -53,9 +53,11 @@ graphify update .
 
 | Файл | Назначение |
 |---|---|
-| `main.ts` | IPC, auth, CRUD, admin, storage-stats |
+| `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment` |
 | `server-api.ts` | HTTP-клиент к REST API |
-| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа при save, peek remote changes |
+| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа при save, reconcile create (без дублей id) |
+| `session-log.ts` | журнал сессии (ring buffer), IPC для настроек |
+| `guide-data.ts` | reconcile `has_children` в локальном JSON |
 | `media-layout.ts` | пути `media/{отдел}/{id}/images|files`, миграция legacy → `support/` |
 | `sync-backend.ts` | server vs yandex по `STORAGE_BACKEND` |
 | `auth-store.ts` | accounts.json, settings, сессия |
@@ -86,12 +88,12 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | Файл | Назначение |
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
-| `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере по отделам |
-| `Viewer.tsx`, `Header.tsx` | просмотр/правка темы; ⋮ → копия ссылки; ← Назад; Esc (назад/закрыть); тема остаётся открытой после save (не после ручной смены фильтра); вложение файлов |
-| `TopicLinkPicker.tsx` | плавающий выбор темы по `+` у курсора |
+| `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
+| `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; ⋮ → копия ссылки; ← Назад; Esc; выпадающий список отделов (все роли, кроме шаблонов у не-staff) |
+| `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | выбор родителя / ссылки «+» — полный список отдела, только название темы; родитель → авто party |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
 | `TopicList.tsx` | дерево тем (корни через `buildTree`) |
-| `lib/data.ts` | фильтры, `compareTopicsByTitle`, children |
+| `lib/data.ts` | фильтры, `compareTopicsByTitle`, `canEditDepartment`, `topicDisplayLabel` |
 | `lib/markdown.ts` | media src, ссылки тем, вложения `files/` |
 | `lib/textInsert.ts` | вставка / `+query` / обёртка выделения ссылкой |
 | `lib/textareaCaret.ts` | координаты каретки для пикера |
@@ -149,7 +151,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.3.2.exe
+# → app/release/REST-INFO-Setup-1.3.3.exe
 ```
 
 ## Владелец / bootstrap
@@ -180,6 +182,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.3.2** (`app/package.json`)
+- Клиент: **1.3.3** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

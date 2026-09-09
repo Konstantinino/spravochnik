@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { DepartmentId, GuideItem, ImageDisplayMap, SupportParty } from '../types'
 import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
-import { filterItemsByParty, getChildren, getItemParty } from '../lib/data'
+import { getChildren, getItemParty, isArchived } from '../lib/data'
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
 import {
   IMAGE_SCALE_DEFAULT,
@@ -231,10 +231,18 @@ export function Viewer({
 
   const showParty = departmentId === 'support'
 
-  const parentChoices = useMemo(() => {
-    if (!showParty) return items
-    return filterItemsByParty(items, party)
-  }, [items, party, showParty])
+  const pickerItems = useMemo(
+    () => allItems.filter((item) => !isArchived(item)),
+    [allItems],
+  )
+
+  function handleParentIdChange(id: number | null) {
+    setParentId(id)
+    if (id != null && showParty) {
+      const parent = pickerItems.find((i) => i.id === id)
+      if (parent) setParty(getItemParty(parent))
+    }
+  }
 
   const children = useMemo(
     () => (item ? getChildren(items, item.id) : []),
@@ -334,8 +342,10 @@ export function Viewer({
 
   if (!item) {
     return (
-      <div className="viewer viewer--empty">
-        <p>Выберите тему слева, чтобы увидеть ответ</p>
+      <div className="viewer-shell viewer-shell--empty">
+        <div className="viewer viewer--empty">
+          <p>Выберите тему слева, чтобы увидеть ответ</p>
+        </div>
       </div>
     )
   }
@@ -383,6 +393,7 @@ export function Viewer({
       await onDelete()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка удаления')
+    } finally {
       setDeleting(false)
     }
   }
@@ -676,72 +687,76 @@ export function Viewer({
   }
 
   return (
-    <article className="viewer">
+    <div className="viewer-shell">
       {!editing && (
-        <div className="viewer__toolbar">
-          <div className="viewer__toolbar-start">
-            {canGoBack && (
-              <button type="button" className="btn btn-secondary" onClick={onBack}>
-                ← Назад
-              </button>
-            )}
-          </div>
-
-          <div className="viewer__actions">
-            <button
-              type="button"
-              className="icon-btn--light"
-              onClick={() => (findOpen ? closeFind() : openFind())}
-              title="Поиск по содержимому"
-              aria-label="Поиск по содержимому"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path
-                  fill="currentColor"
-                  d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
-                />
-              </svg>
-            </button>
-
-            {canEdit && (
-              <>
-                <button type="button" className="btn btn-secondary" onClick={onAddSubtopic}>
-                  Добавить подтему
+        <header className="viewer__topbar">
+          <div className="viewer__toolbar">
+            <div className="viewer__toolbar-start">
+              {canGoBack && (
+                <button type="button" className="btn btn-secondary" onClick={onBack}>
+                  ← Назад
                 </button>
-                {onToggleArchive && (
-                  <button type="button" className="btn btn-secondary" onClick={onToggleArchive}>
-                    {current.archived ? 'Из архива' : 'В архив'}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    closeFind()
-                    setError(null)
-                    setEditing(true)
-                  }}
-                >
-                  Изменить
-                </button>
-              </>
-            )}
+              )}
+            </div>
 
-            {isAdmin && (
+            <div className="viewer__actions">
               <button
                 type="button"
-                className="btn btn-danger"
-                onClick={() => void handleDelete()}
-                disabled={deleting}
+                className="icon-btn--light"
+                onClick={() => (findOpen ? closeFind() : openFind())}
+                title="Поиск по содержимому"
+                aria-label="Поиск по содержимому"
               >
-                {deleting ? 'Удаление…' : 'Удалить'}
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
+                  />
+                </svg>
               </button>
-            )}
+
+              {canEdit && (
+                <>
+                  <button type="button" className="btn btn-secondary" onClick={onAddSubtopic}>
+                    Добавить подтему
+                  </button>
+                  {onToggleArchive && (
+                    <button type="button" className="btn btn-secondary" onClick={onToggleArchive}>
+                      {current.archived ? 'Из архива' : 'В архив'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      closeFind()
+                      setError(null)
+                      setEditing(true)
+                    }}
+                  >
+                    Изменить
+                  </button>
+                </>
+              )}
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => void handleDelete()}
+                  disabled={deleting}
+                >
+                  {deleting ? 'Удаление…' : 'Удалить'}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        </header>
       )}
 
-      {error && !editing && <div className="form-error viewer__notice">{error}</div>}
+      <div className="viewer__scroll">
+        <article className="viewer">
+          {error && !editing && <div className="form-error viewer__notice">{error}</div>}
 
       <div className="viewer__header">
         {editing ? (
@@ -848,7 +863,7 @@ export function Viewer({
                   const next = e.target.value as SupportParty
                   setParty(next)
                   if (parentId != null) {
-                    const parent = items.find((i) => i.id === parentId)
+                    const parent = pickerItems.find((i) => i.id === parentId)
                     if (parent && getItemParty(parent) !== next) {
                       setParentId(null)
                       setAttachParent(false)
@@ -865,12 +880,12 @@ export function Viewer({
             </label>
           )}
           <ParentTopicField
-            items={parentChoices}
+            items={pickerItems}
             excludeId={current.id}
             attach={attachParent}
             onAttachChange={setAttachParent}
             parentId={parentId}
-            onParentIdChange={setParentId}
+            onParentIdChange={handleParentIdChange}
           />
           <textarea
             ref={textareaRef}
@@ -886,7 +901,7 @@ export function Viewer({
           />
           <TopicLinkPicker
             open={linkPicker}
-            items={items}
+            items={pickerItems}
             excludeId={current.id}
             onPick={pickTopicForLink}
             onClose={closePicker}
@@ -958,6 +973,8 @@ export function Viewer({
           )}
         </div>
       )}
+        </article>
+      </div>
 
       {topicMenu && (
         <div
@@ -1058,6 +1075,6 @@ export function Viewer({
           />
         </div>
       )}
-    </article>
+    </div>
   )
 }

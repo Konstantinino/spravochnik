@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "app/package.json": {
-    "mtime": 1788930427.669158,
-    "seen": 1788930521.3872387,
-    "ast_hash": "11bedc7d9a8ab0ab6a62a1af6691136d",
+    "mtime": 1788511925.6533015,
+    "seen": 1788512318.9248893,
+    "ast_hash": "278a73c75efcc8c787d20f5bbc323d5c",
     "semantic_hash": ""
   },
   "app/resources/data/app-update.json": {
@@ -162,9 +162,9 @@
     "semantic_hash": ""
   },
   "app/src/components/TopicEditorModal.tsx": {
-    "mtime": 1788930309.6803162,
-    "seen": 1788930521.3882678,
-    "ast_hash": "7d49cc5323c3108106e3743294c15560",
+    "mtime": 1788929993.648221,
+    "seen": 1788930079.5008667,
+    "ast_hash": "8afaa510d7d858a7b9301fbd49e4601b",
     "semantic_hash": ""
   },
   "app/src/components/TopicList.tsx": {
@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "app/src/components/Viewer.tsx": {
-    "mtime": 1788930310.1612544,
-    "seen": 1788930521.3883905,
-    "ast_hash": "9885346c6368721ded75d0e4308264a1",
+    "mtime": 1788929994.7978926,
+    "seen": 1788930079.5009308,
+    "ast_hash": "53c3ec0782b019829e0188c0811cbd64",
     "semantic_hash": ""
   },
   "app/src/lib/data.ts": {

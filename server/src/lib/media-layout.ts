@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import type pg from 'pg'
 import { query } from '../db/pool.js'
 
 export const MEDIA_DEPARTMENT_IDS = [
@@ -221,4 +222,98 @@ export async function migrateLegacyServerMedia(
       )
     }
   }
+}
+
+function topicMediaLikePatterns(departmentId: string, topicIds: number[]): string[] {
+  const patterns: string[] = []
+  for (const id of topicIds) {
+    patterns.push(`media/${departmentId}/${id}/%`)
+    patterns.push(`media/${id}/%`)
+  }
+  return patterns
+}
+
+function removeTopicMediaDirs(mediaDir: string, departmentId: string, topicIds: number[]): void {
+  const nested = path.join(mediaDir, 'media')
+  for (const id of topicIds) {
+    for (const dir of [
+      path.join(mediaDir, departmentId, String(id)),
+      path.join(nested, departmentId, String(id)),
+      path.join(mediaDir, String(id)),
+      path.join(nested, String(id)),
+    ]) {
+      if (!fs.existsSync(dir)) continue
+      try {
+        fs.rmSync(dir, { recursive: true, force: true })
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+/** Remove disk files + soft-delete media_files rows for deleted topic ids. */
+export async function deleteTopicMediaFiles(
+  mediaDir: string,
+  departmentId: string,
+  topicIds: number[],
+  client?: pg.PoolClient,
+): Promise<number> {
+  if (topicIds.length === 0) return 0
+  const runQuery = client ? client.query.bind(client) : query
+  const patterns = topicMediaLikePatterns(departmentId, topicIds)
+
+  const result = await runQuery<{ relative_path: string }>(
+    `SELECT relative_path FROM media_files
+      WHERE deleted_at IS NULL
+        AND (
+          (department_id = $1 AND topic_id = ANY($2::int[]))
+          OR relative_path LIKE ANY($3::text[])
+        )`,
+    [departmentId, topicIds, patterns],
+  )
+
+  const pathsToMark = new Set<string>()
+  for (const row of result.rows) {
+    for (const rel of mediaRelativePathCandidates(row.relative_path, departmentId)) {
+      pathsToMark.add(rel)
+      const filePath = resolveExistingMediaFile(mediaDir, rel)
+      if (filePath && fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath)
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  removeTopicMediaDirs(mediaDir, departmentId, topicIds)
+
+  if (pathsToMark.size === 0) return 0
+  await runQuery(
+    `UPDATE media_files SET deleted_at = NOW(), updated_at = NOW()
+      WHERE relative_path = ANY($1::text[]) AND deleted_at IS NULL`,
+    [[...pathsToMark]],
+  )
+  return pathsToMark.size
+}
+
+/** Clean media left behind by topics that were soft-deleted earlier. */
+export async function purgeOrphanTopicMedia(mediaDir: string): Promise<number> {
+  const deletedTopics = await query<{ department_id: string; id: number }>(
+    `SELECT department_id, id FROM topics WHERE deleted_at IS NOT NULL`,
+  )
+  const byDept = new Map<string, number[]>()
+  for (const row of deletedTopics.rows) {
+    const arr = byDept.get(row.department_id) ?? []
+    arr.push(row.id)
+    byDept.set(row.department_id, arr)
+  }
+
+  let purged = 0
+  for (const [dept, ids] of byDept) {
+    purged += await deleteTopicMediaFiles(mediaDir, dept, ids)
+  }
+  return purged
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DepartmentId, GuideItem, SupportParty } from '../types'
 import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
-import { filterItemsByParty, getItemParty } from '../lib/data'
+import { getItemParty, isArchived } from '../lib/data'
 import { formatFileMarkdownLink } from '../lib/markdown'
 import {
   focusCursor,
@@ -75,10 +75,11 @@ export function TopicEditorModal({
 
   const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
 
-  const parentChoices = useMemo(() => {
-    if (!showParty) return items
-    return filterItemsByParty(items, party)
-  }, [items, party, showParty])
+  /** Full dept list for parent/link pickers (same pool as «+» links). */
+  const pickerItems = useMemo(
+    () => items.filter((item) => !isArchived(item)),
+    [items],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -123,11 +124,19 @@ export function TopicEditorModal({
   function handlePartyChange(next: SupportParty) {
     setParty(next)
     if (selectedParentId != null) {
-      const parent = items.find((i) => i.id === selectedParentId)
+      const parent = pickerItems.find((i) => i.id === selectedParentId)
       if (parent && getItemParty(parent) !== next) {
         setSelectedParentId(null)
         setAttachParent(false)
       }
+    }
+  }
+
+  function handleParentIdChange(id: number | null) {
+    setSelectedParentId(id)
+    if (id != null && showParty) {
+      const parent = pickerItems.find((i) => i.id === id)
+      if (parent) setParty(getItemParty(parent))
     }
   }
 
@@ -299,12 +308,12 @@ export function TopicEditorModal({
           </label>
 
           <ParentTopicField
-            items={parentChoices}
+            items={pickerItems}
             excludeId={mode === 'edit' ? initial?.id ?? null : null}
             attach={attachParent}
             onAttachChange={setAttachParent}
             parentId={selectedParentId}
-            onParentIdChange={setSelectedParentId}
+            onParentIdChange={handleParentIdChange}
           />
 
           <label className="field">
@@ -323,7 +332,7 @@ export function TopicEditorModal({
           </label>
           <TopicLinkPicker
             open={linkPicker}
-            items={parentChoices}
+            items={pickerItems}
             excludeId={mode === 'edit' ? initial?.id ?? null : null}
             onPick={pickTopicForLink}
             onClose={closePicker}

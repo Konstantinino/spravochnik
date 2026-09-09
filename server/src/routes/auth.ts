@@ -74,6 +74,7 @@ authRouter.post('/login', async (req, res) => {
       email: user.email,
       name: user.name,
       role: publicUser.role,
+      departmentId: publicUser.departmentId,
     })
 
     res.json({ token, user: publicUser })
@@ -151,6 +152,7 @@ authRouter.post('/register', async (req, res) => {
       email: user.email,
       name: user.name,
       role: publicUser.role,
+      departmentId: publicUser.departmentId,
     })
 
     res.status(201).json({ token, user: publicUser })

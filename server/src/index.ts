@@ -3,7 +3,7 @@ import cors from 'cors'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runMigrations } from './migrate.js'
-import { migrateLegacyServerMedia } from './lib/media-layout.js'
+import { migrateLegacyServerMedia, purgeOrphanTopicMedia } from './lib/media-layout.js'
 import { ensureBootstrapWhitelist, ensureOwnerRole, authRouter } from './routes/auth.js'
 import { adminRouter } from './routes/admin.js'
 import { topicsRouter } from './routes/topics.js'
@@ -21,6 +21,10 @@ async function main(): Promise<void> {
 
   await runMigrations()
   await migrateLegacyServerMedia(MEDIA_DIR)
+  const purgedMedia = await purgeOrphanTopicMedia(MEDIA_DIR)
+  if (purgedMedia > 0) {
+    console.log(`Purged ${purgedMedia} orphan media file record(s) for deleted topics`)
+  }
   await ensureBootstrapWhitelist()
   await ensureOwnerRole()
 

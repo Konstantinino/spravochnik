@@ -12,6 +12,7 @@ export interface JwtUser {
   email: string
   name: string
   role: UserRole
+  departmentId: WorkDepartmentId
 }
 
 export function isUserRole(value: unknown): value is UserRole {
@@ -28,6 +29,16 @@ export function isStaffRole(role: string | undefined | null): boolean {
 
 export function canEditContent(role: string | undefined | null): boolean {
   return role === 'editor' || isStaffRole(role)
+}
+
+export function canEditDepartment(
+  role: string | undefined | null,
+  userDepartmentId: WorkDepartmentId | string | undefined | null,
+  targetDepartmentId: string,
+): boolean {
+  if (!canEditContent(role)) return false
+  if (isStaffRole(role)) return true
+  return normalizeWorkDepartmentId(userDepartmentId) === normalizeWorkDepartmentId(targetDepartmentId)
 }
 
 export function isOwnerRole(role: string | undefined | null): boolean {

@@ -391,12 +391,38 @@ option {
 }
 
 .content {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   background:
     radial-gradient(circle at top right, rgba(180, 35, 24, 0.06), transparent 40%),
     linear-gradient(180deg, #f7f4ee 0%, #efe9df 100%);
+}
+
+.viewer-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.viewer-shell--empty {
+  min-height: 0;
+}
+
+.viewer__topbar {
+  flex-shrink: 0;
+  padding: 12px 36px 8px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.viewer__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .topic-list,
@@ -513,7 +539,8 @@ option {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  flex: 1;
+  min-height: 100%;
   color: var(--muted);
 }
 
@@ -522,7 +549,7 @@ option {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  min-height: 40px;
 }
 
 .viewer__toolbar-start {
@@ -1687,6 +1714,17 @@ mark.find-hit--active {
   border-radius: 8px;
   background: rgba(31, 58, 76, 0.06);
   border: 1px solid rgba(31, 58, 76, 0.15);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.settings-sync-status__btn {
+  padding: 6px 14px;
+  font-size: 0.9rem;
+  white-space: nowrap;
 }
 
 .settings-app-download {
@@ -1861,6 +1899,93 @@ mark.find-hit--active {
   border-bottom: 1px solid var(--border);
 }
 
+.session-log-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+
+.session-log-toolbar__btn {
+  padding: 4px 10px;
+  font-size: 0.88rem;
+}
+
+.session-log-toolbar__hint {
+  font-size: 0.88rem;
+}
+
+.session-log {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8f9fb;
+  padding: 8px 10px;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.session-log__empty {
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.session-log__line {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.session-log__line:last-child {
+  border-bottom: none;
+}
+
+.session-log__time {
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.session-log__level {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.session-log__level--info {
+  color: #2563eb;
+}
+
+.session-log__level--warn {
+  color: #d97706;
+}
+
+.session-log__level--error {
+  color: #dc2626;
+}
+
+.session-log__tag {
+  color: #4b5563;
+  white-space: nowrap;
+}
+
+.session-log__message {
+  color: #111827;
+  word-break: break-word;
+}
+
+.session-log__line--error .session-log__message {
+  color: #991b1b;
+}
+
 .whitelist li .btn {
   justify-self: start;
 }
@@ -1983,6 +2108,10 @@ mark.find-hit--active {
 
   .viewer {
     padding: 20px;
+  }
+
+  .viewer__topbar {
+    padding: 12px 20px 8px;
   }
 
   .app-header__sync-label {

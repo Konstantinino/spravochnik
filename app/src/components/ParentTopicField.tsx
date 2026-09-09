@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { GuideItem } from '../types'
-import { compareTopicsByTitle, getDescendantIds, isValidParent, topicLabelWithPath } from '../lib/data'
+import {
+  compareTopicsByTitle,
+  getDescendantIds,
+  isValidParent,
+  topicDisplayLabel,
+  topicMatchesQuery,
+} from '../lib/data'
 
 interface ParentTopicFieldProps {
   items: GuideItem[]
@@ -34,17 +40,11 @@ export function ParentTopicField({
   }, [items, excludeId])
 
   const options = useMemo(() => {
-    const q = query.trim().toLowerCase()
     return items
       .filter((item) => !excluded.has(item.id))
       .filter((item) => isValidParent(items, excludeId, item.id))
-      .filter((item) => {
-        if (!q) return true
-        const label = topicLabelWithPath(items, item).toLowerCase()
-        return label.includes(q) || item.question.toLowerCase().includes(q)
-      })
+      .filter((item) => topicMatchesQuery(items, item, query))
       .sort(compareTopicsByTitle)
-      .slice(0, 80)
   }, [items, excluded, excludeId, query])
 
   const selected = parentId != null ? items.find((i) => i.id === parentId) : null
@@ -77,7 +77,7 @@ export function ParentTopicField({
         <div className="parent-topic-field__picker">
           {selected ? (
             <div className="parent-topic-field__selected">
-              <span className="muted">Родитель:</span> {topicLabelWithPath(items, selected)}
+              <span className="muted">Родитель:</span> {topicDisplayLabel(selected)}
               <button
                 type="button"
                 className="btn btn-ghost parent-topic-field__clear"
@@ -106,7 +106,7 @@ export function ParentTopicField({
                         className="parent-topic-field__option"
                         onClick={() => pick(item.id)}
                       >
-                        {topicLabelWithPath(items, item)}
+                        {topicDisplayLabel(item)}
                       </button>
                     </li>
                   ))

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   LatestReleaseInfo,
   PublicUser,
+  SessionLogEntry,
+  SessionLogLevel,
   StorageStats,
   SyncStatus,
   UserRole,
@@ -16,6 +18,24 @@ function assignableRoles(actorIsOwner: boolean): UserRole[] {
 
 function userIsOwner(u: PublicUser): boolean {
   return Boolean(u.isOwner) || isOwnerRole(u.role)
+}
+
+function formatLogTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function formatLogLine(entry: SessionLogEntry): string {
+  return `[${formatLogTime(entry.at)}] ${entry.level.toUpperCase()} ${entry.tag}: ${entry.message}`
+}
+
+function levelLabel(level: SessionLogLevel): string {
+  if (level === 'error') return 'Ошибка'
+  if (level === 'warn') return 'Предупр.'
+  return 'Инфо'
 }
 
 function formatBytes(bytes: number): string {
@@ -103,8 +123,17 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
   const [storageError, setStorageError] = useState<string | null>(null)
   const [storageLoading, setStorageLoading] = useState(false)
+  const [sessionLogs, setSessionLogs] = useState<SessionLogEntry[]>([])
+  const [copyLogHint, setCopyLogHint] = useState<string | null>(null)
+  const [pullingFull, setPullingFull] = useState(false)
+  const sessionLogRef = useRef<HTMLDivElement>(null)
 
   const actorIsOwner = userIsOwner(currentUser)
+
+  async function reloadSessionLogs() {
+    const logs = await window.spravochnik.getSessionLogs()
+    setSessionLogs(logs)
+  }
 
   function deptLabel(id: WorkDepartmentId): string {
     return WORK_DEPARTMENTS.find((d) => d.id === id)?.label ?? id
@@ -139,7 +168,23 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
 
   useEffect(() => {
     void reload().catch((e) => setError(e instanceof Error ? e.message : 'Ошибка загрузки'))
+    void reloadSessionLogs()
     void window.spravochnik.getLatestRelease().then(setLatestRelease).catch(() => undefined)
+    const offLog = window.spravochnik.onSessionLog(() => {
+      void reloadSessionLogs()
+    })
+    return () => {
+      offLog()
+    }
+  }, [])
+
+  useEffect(() => {
+    const el = sessionLogRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [sessionLogs])
+
+  useEffect(() => {
     return window.spravochnik.onSyncStatus((status) => {
       setSyncStatus(status)
       if (status.code === 'up_to_date' || status.code === 'pending') {
@@ -344,6 +389,48 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
 
   const canDownloadLatest = Boolean(latestRelease?.downloadUrl || latestRelease?.remoteSetupPath)
 
+  async function handlePullFull() {
+    setError(null)
+    setInfo(null)
+    setPullingFull(true)
+    try {
+      const status = await window.spravochnik.pullSyncFull()
+      setSyncStatus(status)
+      if (status.code === 'error') {
+        setError(status.detail || status.label)
+      } else if (status.code === 'no_server' || status.code === 'no_token') {
+        setError(status.detail || status.label)
+      } else if (status.code === 'up_to_date') {
+        setInfo('Темы, фото и файлы загружены с сервера.')
+        await reload()
+      } else {
+        setInfo(status.detail || status.label)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка синхронизации')
+    } finally {
+      setPullingFull(false)
+    }
+  }
+
+  async function handleClearSessionLogs() {
+    setCopyLogHint(null)
+    const logs = await window.spravochnik.clearSessionLogs()
+    setSessionLogs(logs)
+  }
+
+  async function handleCopySessionLogs() {
+    if (sessionLogs.length === 0) return
+    const text = sessionLogs.map(formatLogLine).join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyLogHint('Скопировано')
+      window.setTimeout(() => setCopyLogHint(null), 2000)
+    } catch {
+      setCopyLogHint('Не удалось скопировать')
+    }
+  }
+
   async function handleDownloadLatest() {
     if (!canDownloadLatest || downloadingLatest) return
     setError(null)
@@ -378,11 +465,26 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
         <section className="settings-section">
           <h2>Подключение</h2>
           <p className="settings-sync-status">
-            Статус: <strong>{syncStatus?.label ?? '—'}</strong>
+            <span>
+              Статус: <strong>{syncStatus?.label ?? '—'}</strong>
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary settings-sync-status__btn"
+              onClick={() => void handlePullFull()}
+              disabled={pullingFull}
+              title="Загрузить все темы, фото и файлы с сервера"
+            >
+              {pullingFull ? 'Синхронизация…' : 'Синхронизировать с диском'}
+            </button>
           </p>
+          {syncStatus?.detail && syncStatus.code !== 'up_to_date' && (
+            <p className="muted settings-section__hint">{syncStatus.detail}</p>
+          )}
           <p className="muted settings-section__hint">
-            Адрес сервера задаётся на экране входа (шестерёнка в углу). Данные синхронизируются с
-            вашим REST INFO сервером.
+            Адрес сервера задаётся на экране входа (шестерёнка в углу). Кнопка выше принудительно
+            проверяет и скачивает все темы, фото и файлы с сервера (удобно, если картинки не
+            появились после обновления).
           </p>
         </section>
 
@@ -577,6 +679,52 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
               )
             })}
           </ul>
+        </section>
+
+        <section className="settings-section">
+          <h2>Журнал сессии</h2>
+          <p className="muted">
+            Ошибки синхронизации, загрузки медиа и другие события текущего запуска приложения.
+          </p>
+          <div className="session-log-toolbar">
+            <button
+              type="button"
+              className="btn btn-ghost session-log-toolbar__btn"
+              onClick={() => void handleCopySessionLogs()}
+              disabled={sessionLogs.length === 0}
+            >
+              Копировать
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost session-log-toolbar__btn"
+              onClick={() => void handleClearSessionLogs()}
+              disabled={sessionLogs.length === 0}
+            >
+              Очистить
+            </button>
+            {copyLogHint && <span className="muted session-log-toolbar__hint">{copyLogHint}</span>}
+          </div>
+          <div className="session-log" ref={sessionLogRef} role="log" aria-live="polite">
+            {sessionLogs.length === 0 ? (
+              <p className="muted session-log__empty">Записей пока нет</p>
+            ) : (
+              sessionLogs.map((entry) => (
+                <div
+                  key={entry.id}
+                  className={`session-log__line session-log__line--${entry.level}`}
+                  title={formatLogLine(entry)}
+                >
+                  <span className="session-log__time">{formatLogTime(entry.at)}</span>
+                  <span className={`session-log__level session-log__level--${entry.level}`}>
+                    {levelLabel(entry.level)}
+                  </span>
+                  <span className="session-log__tag">{entry.tag}</span>
+                  <span className="session-log__message">{entry.message}</span>
+                </div>
+              ))
+            )}
+          </div>
         </section>
 
         {actorIsOwner && (

@@ -28,6 +28,9 @@ import {
   removeOperation,
   type PendingOperation,
 } from './pending-operations'
+import { reconcileHasChildren } from './guide-data'
+import { remigrateTopicMediaIds } from './topic-media'
+import { appendSessionLog } from './session-log'
 import {
   ServerApiError,
   downloadMediaFile,
@@ -105,6 +108,11 @@ function emit(partial: Partial<SyncStatus> & Pick<SyncStatus, 'code' | 'label'>)
     ...partial,
     hasPendingChanges: hasUnsyncedLocalWork(),
   }
+  if (partial.code === 'error' && partial.detail) {
+    appendSessionLog('error', 'sync', partial.detail)
+  } else if (partial.code === 'conflict' && partial.detail) {
+    appendSessionLog('warn', 'sync', partial.detail)
+  }
   for (const listener of listeners) listener(currentStatus)
   return currentStatus
 }
@@ -120,6 +128,19 @@ export function getSyncStatus(): SyncStatus {
     ...currentStatus,
     hasPendingChanges: hasUnsyncedLocalWork(),
   }
+}
+
+function reconcileCreatedTopic(
+  deptId: DepartmentId,
+  clientId: number | null | undefined,
+  serverTopic: Record<string, unknown>,
+): void {
+  const serverId = serverTopic.id as number
+  if (clientId != null && clientId !== serverId) {
+    removeTopicFromLocal(deptId, clientId)
+    remigrateTopicMediaIds(deptId, clientId, serverId)
+  }
+  applyTopicToLocal(deptId, serverTopic)
 }
 
 function applyTopicToLocal(deptId: DepartmentId, topic: Record<string, unknown>): void {
@@ -153,39 +174,69 @@ function writeFullDeptTopics(deptId: DepartmentId, topics: Record<string, unknow
   const dept = departmentById(deptId)
   const filePath = path.join(getUserDataRoot(), dept.fileName)
   const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>
-  const cleaned = topics.map((t) => {
-    const c = { ...t }
-    delete c.version
-    delete c.updated_at
-    return c
-  })
+  const cleaned = reconcileHasChildren(
+    topics.map((t) => {
+      const c = { ...t }
+      delete c.version
+      delete c.updated_at
+      return c as {
+        id: number
+        parent_id?: number | null
+        has_children?: boolean
+        archived?: boolean
+      }
+    }),
+  )
   data[dept.listKey] = cleaned
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+}
+
+function reconcileDeptHasChildren(deptId: DepartmentId): void {
+  const dept = departmentById(deptId)
+  const filePath = path.join(getUserDataRoot(), dept.fileName)
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>
+  const listKey = dept.listKey
+  const list = (data[listKey] as Array<{
+    id: number
+    parent_id?: number | null
+    has_children?: boolean
+    archived?: boolean
+  }>) ?? []
+  data[listKey] = reconcileHasChildren(list)
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
 }
 
 async function downloadMissingMedia(
   mediaList: Array<{ relative_path: string; deleted_at?: string | null }>,
   onProgress?: (done: number, total: number) => void,
-): Promise<void> {
+): Promise<{ downloaded: number; skipped: number; failed: number }> {
   const root = getUserDataRoot()
   const toDownload = mediaList.filter((m) => !m.deleted_at)
   let done = 0
+  let downloaded = 0
+  let skipped = 0
+  let failed = 0
   for (const m of toDownload) {
     const rel = m.relative_path
     const localPath = path.join(root, rel)
     if (fs.existsSync(localPath) || resolveExistingMediaAbsolutePath(rel)) {
+      skipped++
       done++
       onProgress?.(done, toDownload.length)
       continue
     }
     try {
       await downloadMediaFile(rel, localPath)
-    } catch {
-      /* skip failed downloads */
+      downloaded++
+    } catch (e) {
+      failed++
+      const detail = e instanceof Error ? e.message : String(e)
+      appendSessionLog('error', 'sync/media', `Не удалось скачать ${rel}: ${detail}`)
     }
     done++
     onProgress?.(done, toDownload.length)
   }
+  return { downloaded, skipped, failed }
 }
 
 interface SyncChangesResponse {
@@ -264,8 +315,14 @@ export async function pullFromServer(options?: {
           applyTopicToLocal(dept.id, topic)
         }
       }
+      const deptsWithDeletes = new Set<DepartmentId>()
       for (const del of changes.deletedTopics ?? []) {
-        removeTopicFromLocal(del.department_id as DepartmentId, del.id)
+        const deptId = del.department_id as DepartmentId
+        removeTopicFromLocal(deptId, del.id)
+        deptsWithDeletes.add(deptId)
+      }
+      for (const deptId of deptsWithDeletes) {
+        reconcileDeptHasChildren(deptId)
       }
     }
 
@@ -316,7 +373,16 @@ export async function pullFromServer(options?: {
     if (!options?.silent) {
       emit({ code: 'syncing', label: 'Загрузка медиа…' })
     }
-    await downloadMissingMedia(changes.media ?? [])
+    const mediaStats = await downloadMissingMedia(changes.media ?? [])
+    if (mediaStats.failed > 0) {
+      appendSessionLog(
+        'warn',
+        'sync/media',
+        `Не скачано файлов: ${mediaStats.failed} (скачано ${mediaStats.downloaded}, уже было ${mediaStats.skipped})`,
+      )
+    } else if (mediaStats.downloaded > 0) {
+      appendSessionLog('info', 'sync/media', `Скачано файлов: ${mediaStats.downloaded}`)
+    }
 
     const latest = readSettings()
     writeSettings({
@@ -326,6 +392,9 @@ export async function pullFromServer(options?: {
     })
     if (!options?.silent) {
       void checkForUpdates()
+    }
+    if (options?.force && !options?.silent) {
+      appendSessionLog('info', 'sync', 'Полная синхронизация завершена')
     }
     return emit({
       code: 'up_to_date',
@@ -348,11 +417,16 @@ export async function pullFromServer(options?: {
 async function replayOperation(op: PendingOperation): Promise<void> {
   switch (op.type) {
     case 'create_topic': {
-      const deptId = op.departmentId!
-      await serverFetch(`/departments/${deptId}/topics`, {
-        method: 'POST',
-        body: JSON.stringify({ item: op.payload }),
-      })
+      const deptId = op.departmentId as DepartmentId
+      const clientId = op.payload.id as number
+      const result = await serverFetch<{ topic: Record<string, unknown> }>(
+        `/departments/${deptId}/topics`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ item: op.payload }),
+        },
+      )
+      reconcileCreatedTopic(deptId, clientId, result.topic)
       break
     }
     case 'update_topic': {
@@ -611,11 +685,12 @@ export async function tryPushTopicOnline(
   try {
     await flushPendingMedia()
     if (type === 'create') {
+      const clientId = typeof payload.id === 'number' ? payload.id : null
       const result = await serverFetch<{ topic: Record<string, unknown> }>(
         `/departments/${departmentId}/topics`,
         { method: 'POST', body: JSON.stringify({ item: payload }) },
       )
-      applyTopicToLocal(departmentId, result.topic)
+      reconcileCreatedTopic(departmentId, clientId, result.topic)
     } else if (type === 'update') {
       const id = payload.id as number
       const headers: Record<string, string> = {}

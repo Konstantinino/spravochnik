@@ -52,6 +52,16 @@ export function canEditContent(role: string | undefined | null): boolean {
   return role === 'editor' || isStaffRole(role)
 }
 
+export function canEditDepartment(
+  role: UserRole | undefined,
+  userDepartmentId: unknown,
+  targetDepartmentId: DepartmentId,
+): boolean {
+  if (!role || role === 'user') return false
+  if (isStaffRole(role)) return true
+  return normalizeWorkDepartmentId(userDepartmentId) === normalizeWorkDepartmentId(targetDepartmentId)
+}
+
 export function isOwnerRole(role: string | undefined | null): boolean {
   return role === 'owner'
 }

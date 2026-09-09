@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { query } from '../db/pool.js'
 import {
+  normalizeWorkDepartmentId,
   parseUserRole,
   type JwtUser,
   type UserRole,
@@ -39,7 +40,8 @@ export async function authMiddleware(
       email: string
       name: string
       role: string
-    }>('SELECT id, email, name, role FROM users WHERE id = $1', [tokenUser.id])
+      department_id: string
+    }>('SELECT id, email, name, role, department_id FROM users WHERE id = $1', [tokenUser.id])
     const row = result.rows[0]
     if (!row) {
       res.status(401).json({ error: 'Пользователь не найден' })
@@ -50,6 +52,7 @@ export async function authMiddleware(
       email: row.email,
       name: row.name,
       role: parseUserRole(row.role),
+      departmentId: normalizeWorkDepartmentId(row.department_id),
     }
     next()
   } catch {
@@ -84,7 +87,8 @@ export async function optionalAuth(
       email: string
       name: string
       role: string
-    }>('SELECT id, email, name, role FROM users WHERE id = $1', [tokenUser.id])
+      department_id: string
+    }>('SELECT id, email, name, role, department_id FROM users WHERE id = $1', [tokenUser.id])
     const row = result.rows[0]
     if (row) {
       req.user = {
@@ -92,6 +96,7 @@ export async function optionalAuth(
         email: row.email,
         name: row.name,
         role: parseUserRole(row.role),
+        departmentId: normalizeWorkDepartmentId(row.department_id),
       }
     }
   } catch {

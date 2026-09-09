@@ -33,7 +33,7 @@ import {
   isSupportParty,
   normalizeWorkDepartmentId,
   isStaffRole,
-  canEditContent,
+  canEditDepartment,
 } from './types'
 
 const defaultSync: SyncStatus = {
@@ -73,9 +73,11 @@ class SettingsErrorBoundary extends Component<
 }
 
 function resolveUserDepartment(u: PublicUser): DepartmentId {
-  if (isStaffRole(u.role)) {
-    const saved = loadSavedDepartment(u.id)
-    return saved ?? normalizeWorkDepartmentId(u.departmentId)
+  const saved = loadSavedDepartment(u.id)
+  if (saved) {
+    if (isStaffRole(u.role) || saved !== 'templates') {
+      return saved
+    }
   }
   return normalizeWorkDepartmentId(u.departmentId)
 }
@@ -124,7 +126,7 @@ export default function App() {
       if (u) {
         const dept = resolveUserDepartment(u)
         setDepartmentId(dept)
-        const canEditUser = canEditContent(u.role)
+        const canEditUser = canEditDepartment(u.role, u.departmentId, dept)
         setListFilter(resolveListFilter(u.id, dept, canEditUser))
       }
       setUser(u)
@@ -157,22 +159,18 @@ export default function App() {
             }
             return u
           })
-          if (!isStaffRole(u.role)) {
-            const dept = normalizeWorkDepartmentId(u.departmentId)
-            setDepartmentId(dept)
-          }
         })
       }
     })
   }, [])
 
   function handleDepartmentChange(id: DepartmentId) {
-    if (user && !isStaffRole(user.role)) return
+    if (user && !isStaffRole(user.role) && id === 'templates') return
     setDepartmentId(id)
     setNavHistory([])
     if (user) {
       saveDepartment(user.id, id)
-      const canEditUser = canEditContent(user.role)
+      const canEditUser = canEditDepartment(user.role, user.departmentId, id)
       setListFilter(resolveListFilter(user.id, id, canEditUser))
     } else {
       setListFilter('all')
@@ -182,10 +180,8 @@ export default function App() {
   function handleAuthenticated(u: PublicUser) {
     const dept = resolveUserDepartment(u)
     setDepartmentId(dept)
-    if (isStaffRole(u.role)) {
-      saveDepartment(u.id, dept)
-    }
-    const canEditUser = canEditContent(u.role)
+    saveDepartment(u.id, dept)
+    const canEditUser = canEditDepartment(u.role, u.departmentId, dept)
     setListFilter(resolveListFilter(u.id, dept, canEditUser))
     setUser(u)
   }
@@ -331,7 +327,7 @@ export default function App() {
 
   const items: GuideItem[] = useMemo(() => (guide ? getItems(guide) : []), [guide])
 
-  const canEdit = canEditContent(user?.role)
+  const canEdit = canEditDepartment(user?.role, user?.departmentId, departmentId)
   const isAdmin = isStaffRole(user?.role)
 
   const visibleItems: GuideItem[] = useMemo(
@@ -700,7 +696,7 @@ export default function App() {
         mode={editorMode}
         departmentId={departmentId}
         parentId={editorParentId}
-        items={visibleItems}
+        items={items}
         defaultParty={editorDefaultParty}
         initial={editorInitial}
         onClose={() => {

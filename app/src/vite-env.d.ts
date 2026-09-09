@@ -28,6 +28,8 @@ import type {
 
   StorageStats,
 
+  SessionLogEntry,
+
 } from './types'
 
 
@@ -221,6 +223,8 @@ export interface SpravochnikApi {
 
   pullSync: () => Promise<SyncStatus>
 
+  pullSyncFull: () => Promise<SyncStatus>
+
   discardSync: () => Promise<SyncStatus>
 
   pushSync: () => Promise<SyncStatus>
@@ -277,6 +281,14 @@ export interface SpravochnikApi {
   }>
 
   onUpdateStatus: (callback: (info: UpdateInfo) => void) => () => void
+
+
+
+  getSessionLogs: () => Promise<SessionLogEntry[]>
+
+  clearSessionLogs: () => Promise<SessionLogEntry[]>
+
+  onSessionLog: (callback: () => void) => () => void
 
 
 

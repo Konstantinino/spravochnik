@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "app/package.json": {
-    "mtime": 1788511925.6533015,
-    "seen": 1788512318.9248893,
-    "ast_hash": "278a73c75efcc8c787d20f5bbc323d5c",
+    "mtime": 1788930427.669158,
+    "seen": 1788930521.3872387,
+    "ast_hash": "11bedc7d9a8ab0ab6a62a1af6691136d",
     "semantic_hash": ""
   },
   "app/resources/data/app-update.json": {
@@ -162,9 +162,9 @@
     "semantic_hash": ""
   },
   "app/src/components/TopicEditorModal.tsx": {
-    "mtime": 1788929993.648221,
-    "seen": 1788930079.5008667,
-    "ast_hash": "8afaa510d7d858a7b9301fbd49e4601b",
+    "mtime": 1788930309.6803162,
+    "seen": 1788930521.3882678,
+    "ast_hash": "7d49cc5323c3108106e3743294c15560",
     "semantic_hash": ""
   },
   "app/src/components/TopicList.tsx": {
@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "app/src/components/Viewer.tsx": {
-    "mtime": 1788929994.7978926,
-    "seen": 1788930079.5009308,
-    "ast_hash": "53c3ec0782b019829e0188c0811cbd64",
+    "mtime": 1788930310.1612544,
+    "seen": 1788930521.3883905,
+    "ast_hash": "9885346c6368721ded75d0e4308264a1",
     "semantic_hash": ""
   },
   "app/src/lib/data.ts": {
@@ -288,9 +288,9 @@
     "semantic_hash": "5ab518c19a1fece2b2becb0ae07bf8a2"
   },
   "AGENTS.md": {
-    "mtime": 1788513666.5251656,
-    "seen": 1788513719.2949362,
-    "ast_hash": "e81648c06ae5f468e3d7bff8dee5ff31",
+    "mtime": 1788930542.1301153,
+    "seen": 1788930570.5032506,
+    "ast_hash": "b9d4e182d6645b2e43aa44514c08ba01",
     "semantic_hash": ""
   },
   "README.md": {
@@ -378,9 +378,9 @@
     "semantic_hash": ""
   },
   "server/package.json": {
-    "mtime": 1788341725.4609482,
-    "seen": 1788348268.5898445,
-    "ast_hash": "565f4e3458e82f9af64e66a55e1fb8f7",
+    "mtime": 1788937233.660757,
+    "seen": 1788937247.2513585,
+    "ast_hash": "4fd36bd512412a36dce7dd5ef3df8e2a",
     "semantic_hash": ""
   },
   "server/src/db/pool.ts": {
@@ -510,9 +510,9 @@
     "semantic_hash": ""
   },
   "docs/PROJECT-STATUS.md": {
-    "mtime": 1788513624.7577279,
-    "seen": 1788513642.5709968,
-    "ast_hash": "8594ef4321d25604bc41ed46ad135d49",
+    "mtime": 1788930546.700738,
+    "seen": 1788930570.503261,
+    "ast_hash": "b6537a07218b48c7fe19751ebc533c36",
     "semantic_hash": ""
   },
   "docs/legacy-yandex-disk.md": {
@@ -528,9 +528,9 @@
     "semantic_hash": ""
   },
   "docs/scripts.md": {
-    "mtime": 1788507648.4746134,
-    "seen": 1788507662.7862532,
-    "ast_hash": "0db4c7e03899932b0e3d63cfe7b55bd7",
+    "mtime": 1788937236.7068298,
+    "seen": 1788937247.253773,
+    "ast_hash": "2dda74394be4e4cb2fe74f97769b2928",
     "semantic_hash": ""
   },
   "docs/server-deploy.md": {
@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "docs/testing-checklist.md": {
-    "mtime": 1788513666.547092,
-    "seen": 1788513719.2949538,
-    "ast_hash": "50d9176f070ef2599c3ddab7331c098c",
+    "mtime": 1788930543.1874182,
+    "seen": 1788930570.503268,
+    "ast_hash": "d36aa2c74ceefd808e39c7b6f7176c81",
     "semantic_hash": ""
   },
   "server/README.md": {
@@ -553,7 +553,7 @@
   },
   "server/migrations/001_initial.sql": {
     "mtime": 1788341272.4382584,
-    "seen": 1788513719.2949061,
+    "seen": 1788930570.5032232,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -589,13 +589,13 @@
   },
   "server/migrations/002_user_department.sql": {
     "mtime": 1788434556.8390355,
-    "seen": 1788513719.2949078,
+    "seen": 1788930570.5032248,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "server/migrations/003_owner_role.sql": {
     "mtime": 1788434556.8400316,
-    "seen": 1788513719.2949092,
+    "seen": 1788930570.5032263,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -651,6 +651,18 @@
     "mtime": 1788929069.29617,
     "seen": 1788929096.3999162,
     "ast_hash": "16713ffb3cd864e23b410ac8abcd2967",
+    "semantic_hash": ""
+  },
+  "server/src/fix-media-paths.ts": {
+    "mtime": 1788937230.352523,
+    "seen": 1788937247.2515035,
+    "ast_hash": "3f791ce3a34a647a042ea06fbf89a593",
+    "semantic_hash": ""
+  },
+  "docs/fix-media-paths.md": {
+    "mtime": 1788937233.4541361,
+    "seen": 1788937247.2532773,
+    "ast_hash": "8f653ad41c6b07df3431498d3614c970",
     "semantic_hash": ""
   }
 }

@@ -35,6 +35,8 @@
 - [x] Дашборд «Место на сервере» считает фото по отделу из пути (не только по JOIN темы)
 - [x] Удаление темы: очистка `media_files` + файлов на диске; purge orphan media при старте API
 - [x] Редактор API: `department_id` в сессии; мутации только в своём отделе (admin/owner — все)
+- [x] **`lib/fix-media-paths.ts`** + `POST /admin/fix-media-paths` (owner) — разовое исправление legacy-путей в `media_files` (`media/images/uuid.jpg` → `media/{отдел}/{id}/images/…`); файлы на диске не перемещает, только БД
+- [x] CLI: `node dist/fix-media-paths.js [--apply]` (на сервере в контейнере api)
 
 ### Клиент (`app/`)
 
@@ -48,6 +50,7 @@
 - [x] Topic lock при редактировании
 - [x] Updates с сервера, **только онлайн**, без Яндекс.Диска
 - [x] `upload-release.js` — публикация Setup на сервер
+- [x] **`fix-media-paths.js`** — разовое исправление путей медиа на сервере с Windows-ПК (как upload-release; см. [fix-media-paths.md](fix-media-paths.md))
 - [x] SettingsPage: роль + Изменить + Удалить в одну строку, модал подтверждения удаления
 - [x] Список тем и подтем — **алфавит** (`compareTopicsByTitle` в `data.ts`)
 - [x] Markdown: фон цитат `>` и блоков кода в цвет шапки (`--header-blue-soft`)
@@ -83,6 +86,7 @@
 - [x] `docs/DEPLOY-FOR-PROGRAMMER.md`
 - [x] `docs/server-deploy.md`, `migration-from-yandex.md`, `legacy-yandex-disk.md`
 - [x] `docs/testing-checklist.md`
+- [x] `docs/fix-media-paths.md` — инструкция по разовому fix legacy-путей медиа
 - [x] `AGENTS.md`, `PROJECT-STATUS.md`
 
 ### Исправления в ходе dev
@@ -103,6 +107,7 @@
 - [x] Ручная смена фильтра списка (Поставщик/Покупатель/…) по-прежнему закрывает тему
 - [x] `session-log.ts` — ring buffer журнала сессии; `guide-data.ts` — reconcile `has_children`
 - [x] Кнопка «Удаление…» в Viewer: сброс состояния в `finally`
+- [x] Диагностика sync 404: на production (`info.r-est.ru`) ~107 записей `media_files` с путём `media/images/*`, файлы на диске — `media/support/{id}/images/*`; скрипт fix готов
 
 ---
 
@@ -114,6 +119,7 @@
 | Передать ZIP `REST-INFO-export/` программисту | **Высокий** | Администратор |
 | Импорт на production: `import-from-json.js` | **Высокий** | Программист |
 | Задеплоить nginx 120M + media `updates/` fix; залить Setup 1.3.3 | **Высокий** | Админ / программист |
+| **Production:** `git pull` + rebuild api → `fix-media-paths.js --apply` (убрать ошибки sync «media/images/…») | **Высокий** | Программист / владелец |
 | Указать production URL в клиентах | Средний | Админ |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |

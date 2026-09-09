@@ -29,6 +29,7 @@
 
 - Проверка: `GET /app/update` на `serverUrl`, **только при наличии сети**
 - Публикация: `app/scripts/upload-release.js`
+- Разовый fix legacy-путей медиа после import: `app/scripts/fix-media-paths.js` → `POST /admin/fix-media-paths` (см. `docs/fix-media-paths.md`)
 - Яндекс.Диск в `updates.ts` **удалён**
 
 ## graphify
@@ -71,13 +72,15 @@ graphify update .
 |---|---|
 | `index.ts` | Express app, роуты |
 | `routes/auth.ts` | login, register, JWT |
-| `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner) |
+| `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`** (owner, разовый fix legacy-путей медиа) |
 | `routes/topics.ts` | CRUD тем, блокировки |
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
 | `routes/updates.ts` | GET /app/update, download |
 | `import-from-json.ts` | импорт из REST-INFO-export |
+| `lib/fix-media-paths.ts` | reconcile `media_files.relative_path` с файлами на диске (по basename) |
+| `fix-media-paths.ts` | CLI на сервере: `node dist/fix-media-paths.js [--apply]` |
 | `dev-local.ts` | embedded PostgreSQL без Docker (Windows dev) |
 | `reset-password.ts` | сброс пароля (recovery) |
 
@@ -110,6 +113,7 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | [docs/migration-from-yandex.md](docs/migration-from-yandex.md) | Миграция данных |
 | [docs/legacy-yandex-disk.md](docs/legacy-yandex-disk.md) | Откат на v1 |
 | [docs/scripts.md](docs/scripts.md) | **Описание скриптов** |
+| [docs/fix-media-paths.md](docs/fix-media-paths.md) | Разовый fix `media/images/*` в БД после import |
 | [docs/testing-checklist.md](docs/testing-checklist.md) | E2E чеклист |
 
 ## Команды разработки
@@ -170,6 +174,7 @@ npm run dist:ascii
 5. **Incremental sync:** исправлен баг обнуления users; merge вместо replace.
 6. **Оффлайн-удаление темы** (admin/owner): в очередь `delete_topic`; «Синхронизировать» удаляет на сервере вместе с подтемами.
 7. **Автоподгрузка с сервера** не перезаписывает локальные правки темы, пока в очереди `pending-operations` или `hasPendingChanges` (кроме force sync).
+8. **Legacy-пути медиа в БД после import:** в `media_files` могут остаться `media/images/uuid.jpg`, файлы на диске — `media/{отдел}/{id}/images/uuid.jpg` → sync 404 при «Синхронизировать». Fix: один раз `fix-media-paths.js --apply` (см. `docs/fix-media-paths.md`); файлы на диске не перемещает.
 
 ## Правила для агента
 

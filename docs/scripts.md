@@ -41,6 +41,26 @@ npm run dist:ascii
 
 ---
 
+## Исправление путей к медиа (разовое)
+
+### `app/scripts/fix-media-paths.js`
+
+**Зачем:** legacy-пути в `media_files` (`media/images/uuid.jpg`) → sync 404. **Запускается один раз** с Windows-ПК, как `upload-release.js`.
+
+**Подробная инструкция:** [fix-media-paths.md](fix-media-paths.md)
+
+```powershell
+cd app
+$env:RESTINFO_SERVER_URL = "https://info.r-est.ru"
+$env:RESTINFO_ADMIN_TOKEN = "<JWT владельца>"
+node scripts/fix-media-paths.js              # предпросмотр
+node scripts/fix-media-paths.js --apply      # применить
+```
+
+На сервере (SSH): `docker compose exec api node dist/fix-media-paths.js --apply`
+
+---
+
 ## Миграция с Яндекс.Диска (разовые)
 
 ### `scripts/pull-yandex-export.mjs`

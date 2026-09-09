@@ -1,6 +1,8 @@
 import { Router } from 'express'
+import path from 'node:path'
 import type pg from 'pg'
 import { query, bumpGlobalVersion, withTransaction } from '../db/pool.js'
+import { fixMediaPaths } from '../lib/fix-media-paths.js'
 import {
   generateSalt,
   hashPassword,
@@ -578,5 +580,18 @@ adminRouter.get('/storage-stats', requireRole('owner'), async (_req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка расчёта места' })
+  }
+})
+
+/** One-time maintenance: reconcile media_files paths with files on disk (owner only). */
+adminRouter.post('/fix-media-paths', requireRole('owner'), async (req: AuthRequest, res) => {
+  try {
+    const apply = Boolean(req.body?.apply)
+    const mediaDir = process.env.MEDIA_DIR ?? path.join(process.cwd(), 'data', 'media')
+    const result = await fixMediaPaths({ mediaDir, apply })
+    res.json(result)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка исправления путей медиа' })
   }
 })

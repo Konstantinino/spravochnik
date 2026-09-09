@@ -9,7 +9,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "node dist/migrate.js",
-    "import-json": "node dist/import-from-json.js"
+    "import-json": "node dist/import-from-json.js",
+    "fix-media-paths": "node dist/fix-media-paths.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

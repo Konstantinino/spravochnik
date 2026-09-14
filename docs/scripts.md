@@ -4,6 +4,40 @@
 
 ---
 
+## Локальные секреты (Windows, не в Git)
+
+Файл **`.env.deploy`** в корне репозитория — только на вашем ПК:
+
+```powershell
+copy .env.deploy.example .env.deploy
+notepad .env.deploy
+```
+
+- В **`.gitignore`** — не попадёт на GitHub
+- В **`.cursorignore`** — AI-агент в Cursor не читает этот файл
+
+### `app/scripts/publish-release.ps1`
+
+**Зачем:** опубликовать Setup без ручного `$env:RESTINFO_*` и без пароля в чате/терминале.
+
+```powershell
+cd app
+npm run dist:ascii
+.\scripts\publish-release.ps1
+# или явный путь:
+.\scripts\publish-release.ps1 release\REST-INFO-Setup-1.4.1.exe
+```
+
+### `scripts/server-deploy-remote.ps1`
+
+**Зачем:** на сервере `git pull` + `deploy.sh` по SSH (ключ в `~/.ssh/`, не в файле).
+
+```powershell
+.\scripts\server-deploy-remote.ps1 --prod
+```
+
+---
+
 ## Обновления приложения (актуальные)
 
 ### `app/scripts/upload-release.js`

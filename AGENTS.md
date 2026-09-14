@@ -55,7 +55,7 @@ graphify update .
 
 | Файл | Назначение |
 |---|---|
-| `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment`, `updates:install`, валидация URL сервера |
+| `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment`, `updates:install`, `app:focus-window`, валидация URL сервера |
 | `server-api.ts` | HTTP-клиент к REST API; `validateServerUrl()` через `GET /health` |
 | `server-sync.ts` | pull/push, конфликты, очередь, flush медиа при save, reconcile create (без дублей id), `ensureTopicMediaDownloaded` |
 | `session-log.ts` | журнал сессии (ring buffer), IPC для настроек |
@@ -93,9 +93,9 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
 | `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
-| `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; версия в шапке; профиль → «Обновить»; ⋮ → копия ссылки; ← Назад; Esc; выпадающий список отделов |
-| `Search.tsx` | локальный «Сбросить» после правки темы |
+| `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; версия в шапке; профиль → «Обновить»; **«Сбросить»** (локальный откат); ⋮ → копия ссылки; ← Назад; Esc |
 | `hooks/usePreserveTextareaFocus.ts` | сохранение фокуса textarea при Alt+Shift (Windows) |
+| `lib/restoreAppFocus.ts` | восстановление фокуса Electron после модалок / сброса |
 | `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | выбор родителя / ссылки «+» — полный список отдела, только название темы; родитель → авто party |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
 | `TopicList.tsx` | дерево тем (корни через `buildTree`) |
@@ -158,7 +158,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.4.0.exe
+# → app/release/REST-INFO-Setup-1.4.1.exe
 ```
 
 ## Владелец / bootstrap
@@ -191,6 +191,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.4.0** (`app/package.json`)
+- Клиент: **1.4.1** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

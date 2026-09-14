@@ -144,6 +144,8 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
 
 
+  focusAppWindow: () => ipcRenderer.invoke('app:focus-window'),
+
   getSessionLogs: () => ipcRenderer.invoke('session-log:get'),
 
   clearSessionLogs: () => ipcRenderer.invoke('session-log:clear'),

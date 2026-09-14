@@ -74,7 +74,7 @@ export function TopicEditorModal({
     setPickerQuery,
   } = useTopicLinkPicker(textareaRef)
 
-  usePreserveTextareaFocus(open, textareaRef, '.modal')
+  usePreserveTextareaFocus(open, textareaRef)
 
   const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
 

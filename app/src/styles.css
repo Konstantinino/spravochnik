@@ -73,6 +73,10 @@ option {
   height: 100%;
 }
 
+.app-shell:focus {
+  outline: none;
+}
+
 .app-shell--sync-busy .app-header,
 .app-shell--sync-busy .app-body {
   pointer-events: none;
@@ -100,17 +104,19 @@ option {
 .app-header__brand {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 0;
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .app-header__version {
-  font-size: 0.72rem;
+  margin-left: 0.35em;
+  font-size: 0.68rem;
   font-weight: 400;
-  opacity: 0.55;
-  letter-spacing: 0.02em;
+  opacity: 0.6;
+  letter-spacing: 0;
 }
 
 .app-header__sync {
@@ -1367,6 +1373,36 @@ mark.find-hit--active {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+  padding: 0 18px 18px;
+}
+
+.local-reset-modal {
+  width: min(420px, 100%);
+}
+
+.local-reset-modal .modal__header {
+  border-bottom: none;
+  padding: 12px 16px 0;
+}
+
+.local-reset-modal .modal__header h2 {
+  font-size: 1.05rem;
+}
+
+.local-reset-modal .modal__body {
+  gap: 0;
+  padding: 8px 16px 0;
+}
+
+.local-reset-modal .modal__body p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.local-reset-modal__actions {
+  padding: 12px 16px 14px;
+  margin-top: 0;
 }
 
 .sync-conflict-compare-grid {

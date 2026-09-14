@@ -1,0 +1,15 @@
+﻿# Секреты и локальные данные — не индексировать для AI
+.env
+.env.*
+!.env.example
+!.env.deploy.example
+
+REST-INFO-export/
+REST-INFO-export.rar
+REST-INFO-export.zip
+
+deploy/keys/rest-info-deploy-key
+deploy/keys/*_key
+deploy/keys/id_*
+
+app/release/

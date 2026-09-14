@@ -6,9 +6,6 @@ interface SearchProps {
   onChange: (value: string) => void
   canAdd?: boolean
   onAdd?: () => void
-  showReset?: boolean
-  onReset?: () => void
-  resetting?: boolean
   listFilter?: TopicViewFilter
   onListFilterChange?: (filter: TopicViewFilter) => void
   filterOptions?: TopicViewFilter[]
@@ -22,9 +19,6 @@ export function Search({
   onChange,
   canAdd,
   onAdd,
-  showReset,
-  onReset,
-  resetting = false,
   listFilter,
   onListFilterChange,
   filterOptions = [],
@@ -55,18 +49,6 @@ export function Search({
             </button>
           ) : null}
         </div>
-        {showReset && onReset ? (
-          <button
-            type="button"
-            className="search__reset"
-            onClick={onReset}
-            disabled={resetting}
-            title="Вернуть тему к состоянию до последнего сохранения с этого компьютера"
-            aria-label="Сбросить последние изменения темы"
-          >
-            {resetting ? 'Сброс…' : 'Сбросить'}
-          </button>
-        ) : null}
         {canAdd && onAdd ? (
           <button
             type="button"

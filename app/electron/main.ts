@@ -1450,6 +1450,18 @@ function registerIpc(): void {
     }
   })
 
+  ipcMain.handle('app:focus-window', () => {
+    const win =
+      BrowserWindow.getFocusedWindow() ??
+      BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+    if (!win) return false
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    win.webContents.focus()
+    return true
+  })
+
   ipcMain.handle('session-log:get', () => getSessionLogs())
   ipcMain.handle('session-log:clear', () => {
     clearSessionLogs()

@@ -286,6 +286,8 @@ export interface SpravochnikApi {
 
 
 
+  focusAppWindow: () => Promise<boolean>
+
   getSessionLogs: () => Promise<SessionLogEntry[]>
 
   clearSessionLogs: () => Promise<SessionLogEntry[]>

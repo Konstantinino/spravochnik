@@ -9,6 +9,7 @@ import { SettingsPage } from './components/SettingsPage'
 import { SyncConflictModal } from './components/SyncConflictModal'
 import { getItems, filterItemsByView, getItemParty, isArchived } from './lib/data'
 import { buildTopicSearchFilter } from './lib/search'
+import { releaseStaleFocus, restoreAppFocus } from './lib/restoreAppFocus'
 import {
   loadSavedDepartment,
   saveDepartment,
@@ -128,6 +129,7 @@ export default function App() {
     item: GuideItem
   } | null>(null)
   const [resettingTopic, setResettingTopic] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -551,16 +553,29 @@ export default function App() {
     }
   }
 
-  async function handleLocalReset() {
-    if (!localUndo || !canEdit) return
-    if (
-      !window.confirm(
-        'Сбросить последние изменения этой темы и вернуть версию до сохранения с этого компьютера?',
-      )
-    ) {
-      return
+  useEffect(() => {
+    if (!resetConfirmOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setResetConfirmOpen(false)
+        restoreAppFocus()
+      }
     }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [resetConfirmOpen])
+
+  function openLocalResetConfirm() {
+    if (!localUndo || !canEdit) return
+    releaseStaleFocus()
+    setResetConfirmOpen(true)
+  }
+
+  async function executeLocalReset() {
+    if (!localUndo || !canEdit) return
     const { departmentId: undoDept, item } = localUndo
+    setResetConfirmOpen(false)
+    releaseStaleFocus()
     setResettingTopic(true)
     pinSelectedTopic(item.id)
     try {
@@ -576,9 +591,10 @@ export default function App() {
       editSnapshotRef.current = null
     } catch (e) {
       releasePinnedTopic(item.id)
-      window.alert(e instanceof Error ? e.message : 'Не удалось сбросить изменения')
+      setError(e instanceof Error ? e.message : 'Не удалось сбросить изменения')
     } finally {
       setResettingTopic(false)
+      restoreAppFocus()
     }
   }
 
@@ -675,7 +691,10 @@ export default function App() {
   })()
 
   return (
-    <div className={`app-shell${syncBlocking ? ' app-shell--sync-busy' : ''}`}>
+    <div
+      className={`app-shell${syncBlocking ? ' app-shell--sync-busy' : ''}`}
+      tabIndex={-1}
+    >
       <Header
         departmentId={departmentId}
         onDepartmentChange={handleDepartmentChange}
@@ -707,9 +726,6 @@ export default function App() {
               setEditorParentId(null)
               setEditorOpen(true)
             }}
-            showReset={showLocalReset}
-            onReset={() => void handleLocalReset()}
-            resetting={resettingTopic}
           />
           <div className="sidebar__list">
             {loading ? (
@@ -752,6 +768,9 @@ export default function App() {
               setEditorParentId(selected.id)
               setEditorOpen(true)
             }}
+            showLocalReset={showLocalReset}
+            onLocalReset={openLocalResetConfirm}
+            resettingLocal={resettingTopic}
           />
         </main>
       </div>
@@ -777,6 +796,64 @@ export default function App() {
           onResolve={handleResolveConflicts}
           onClose={() => setConflictOpen(false)}
         />
+      )}
+
+      {resetConfirmOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            setResetConfirmOpen(false)
+            restoreAppFocus()
+          }}
+        >
+          <div
+            className="modal local-reset-modal"
+            role="dialog"
+            aria-labelledby="local-reset-title"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal__header">
+              <h2 id="local-reset-title">Откатить изменения</h2>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setResetConfirmOpen(false)
+                  restoreAppFocus()
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal__body">
+              <p>Сбросить последние изменения темы?</p>
+            </div>
+            <div className="modal__actions local-reset-modal__actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setResetConfirmOpen(false)
+                  restoreAppFocus()
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void executeLocalReset()}
+                disabled={resettingTopic}
+              >
+                {resettingTopic ? 'Сброс…' : 'Сбросить'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

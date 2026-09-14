@@ -52,6 +52,9 @@ interface ViewerProps {
   onDelete: () => Promise<void>
   onToggleArchive?: () => void
   onAddSubtopic: () => void
+  showLocalReset?: boolean
+  onLocalReset?: () => void
+  resettingLocal?: boolean
 }
 
 type ImgMenuState = {
@@ -100,6 +103,9 @@ export function Viewer({
   onDelete,
   onToggleArchive,
   onAddSubtopic,
+  showLocalReset = false,
+  onLocalReset,
+  resettingLocal = false,
 }: ViewerProps) {
   const [editing, setEditing] = useState(false)
   const [question, setQuestion] = useState('')
@@ -122,7 +128,7 @@ export function Viewer({
     setPickerQuery,
   } = useTopicLinkPicker(textareaRef)
 
-  usePreserveTextareaFocus(editing, textareaRef, '.viewer__editor')
+  usePreserveTextareaFocus(editing, textareaRef)
 
   const [findOpen, setFindOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
@@ -200,17 +206,27 @@ export function Viewer({
     setScaleEditor(null)
     setLightboxSrc(null)
     displayDirtyRef.current = false
-    if (item) {
-      setQuestion(item.question)
-      setAnswer(item.answer ?? '')
-      setParentId(item.parent_id ?? null)
-      setAttachParent(item.parent_id != null)
-      setParty(getItemParty(item))
-      setLocalDisplay(item.image_display)
-    } else {
+    if (!item) {
       setLocalDisplay(undefined)
     }
-  }, [item?.id])
+  }, [item?.id, clearPicker])
+
+  /** Sync editor fields when topic data changes while not editing (e.g. «Сбросить», background sync). */
+  useEffect(() => {
+    if (!item || editing) return
+    setQuestion(item.question)
+    setAnswer(item.answer ?? '')
+    setParentId(item.parent_id ?? null)
+    setAttachParent(item.parent_id != null)
+    setParty(getItemParty(item))
+  }, [
+    editing,
+    item?.id,
+    item?.question,
+    item?.answer,
+    item?.parent_id,
+    item?.party,
+  ])
 
   useEffect(() => {
     if (!editing) {
@@ -730,12 +746,29 @@ export function Viewer({
                       {current.archived ? 'Из архива' : 'В архив'}
                     </button>
                   )}
+                  {showLocalReset && onLocalReset && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={onLocalReset}
+                      disabled={resettingLocal}
+                      title="Вернуть тему к состоянию до последнего сохранения с этого компьютера"
+                    >
+                      {resettingLocal ? 'Сброс…' : 'Сбросить'}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-secondary"
                     onClick={() => {
                       closeFind()
                       setError(null)
+                      setQuestion(current.question)
+                      setAnswer(current.answer ?? '')
+                      setParentId(current.parent_id ?? null)
+                      setAttachParent(current.parent_id != null)
+                      setParty(getItemParty(current))
                       onEditStart?.(structuredClone(current))
                       setEditing(true)
                     }}

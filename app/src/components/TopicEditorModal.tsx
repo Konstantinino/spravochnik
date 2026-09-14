@@ -8,6 +8,7 @@ import {
   insertAtCursor,
   wrapSelectionWithTopicLink,
 } from '../lib/textInsert'
+import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ParentTopicField } from './ParentTopicField'
 import { TopicLinkPicker } from './TopicLinkPicker'
@@ -72,6 +73,8 @@ export function TopicEditorModal({
     pickTopicForLink: onPickTopicLink,
     setPickerQuery,
   } = useTopicLinkPicker(textareaRef)
+
+  usePreserveTextareaFocus(open, textareaRef, '.modal')
 
   const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
 

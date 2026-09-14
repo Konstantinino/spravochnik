@@ -1,6 +1,6 @@
 {
   "name": "rest-info",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "description": "REST INFO — корпоративный справочник",
   "main": "dist-electron/main.js",
   "author": "REST",
@@ -20,6 +20,7 @@
     "pack": "npm run build && electron-builder --win dir"
   },
   "dependencies": {
+    "electron-updater": "^6.6.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
@@ -51,26 +52,40 @@
       {
         "from": "resources/data",
         "to": "data",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",
       "artifactName": "REST-INFO-Setup-${version}.${ext}"
     },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://info.r-est.ru/app/updates/"
+      }
+    ],
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "REST INFO",
-      "installerLanguages": ["ru_RU"],
+      "installerLanguages": [
+        "ru_RU"
+      ],
       "language": "1049"
     }
   }

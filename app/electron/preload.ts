@@ -126,6 +126,8 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
   downloadUpdate: () => ipcRenderer.invoke('updates:download'),
 
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
+
   getLatestRelease: () => ipcRenderer.invoke('updates:latest'),
 
   downloadLatestRelease: () => ipcRenderer.invoke('updates:download-latest'),

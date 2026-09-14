@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * Upload REST INFO installer to server and register release.
+ * Also uploads latest.yml and .blockmap for electron-updater (if present).
+ *
  * Usage: node upload-release.js <path-to-Setup.exe> [serverUrl] [adminToken]
  *
  * Or set RESTINFO_SERVER_URL and RESTINFO_ADMIN_TOKEN env vars.
@@ -25,12 +27,13 @@ if (!serverUrl || !adminToken) {
 const fileName = path.basename(setupPath)
 const versionMatch = fileName.match(/Setup-([\d.]+)\.exe/i)
 const version = versionMatch ? versionMatch[1] : process.env.RESTINFO_VERSION || '0.0.0'
+const releaseDir = path.dirname(path.resolve(setupPath))
 
-async function main() {
-  const buffer = fs.readFileSync(setupPath)
+async function uploadUpdateFile(relativeName, localPath) {
+  const buffer = fs.readFileSync(localPath)
   const form = new FormData()
-  form.append('relativePath', `updates/${fileName}`)
-  form.append('file', new Blob([buffer]), fileName)
+  form.append('relativePath', `updates/${relativeName}`)
+  form.append('file', new Blob([buffer]), relativeName)
 
   const uploadRes = await fetch(`${serverUrl}/media/upload`, {
     method: 'POST',
@@ -39,8 +42,27 @@ async function main() {
   })
 
   if (!uploadRes.ok) {
-    console.error('Media upload failed:', await uploadRes.text())
-    process.exit(1)
+    throw new Error(`Upload ${relativeName} failed: ${await uploadRes.text()}`)
+  }
+  console.log(`Uploaded: ${relativeName}`)
+}
+
+async function main() {
+  await uploadUpdateFile(fileName, setupPath)
+
+  const extras = ['latest.yml']
+  const blockmap = fileName.replace(/\.exe$/i, '.exe.blockmap')
+  if (fs.existsSync(path.join(releaseDir, blockmap))) {
+    extras.push(blockmap)
+  }
+
+  for (const name of extras) {
+    const localPath = path.join(releaseDir, name)
+    if (!fs.existsSync(localPath)) {
+      console.warn(`Skip (not found): ${name}`)
+      continue
+    }
+    await uploadUpdateFile(name, localPath)
   }
 
   const releaseRes = await fetch(`${serverUrl}/admin/releases`, {

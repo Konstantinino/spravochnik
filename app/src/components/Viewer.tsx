@@ -24,6 +24,7 @@ import {
   insertAtCursor,
   wrapSelectionWithTopicLink,
 } from '../lib/textInsert'
+import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ImageScaleDialog } from './ImageScaleDialog'
 import { ParentTopicField } from './ParentTopicField'
@@ -40,6 +41,7 @@ interface ViewerProps {
   onBack: () => void
   onClose: () => void
   onNavigateToTopic: (id: number) => void
+  onEditStart?: (item: GuideItem) => void
   onSave: (payload: {
     question: string
     answer: string
@@ -92,6 +94,7 @@ export function Viewer({
   onBack,
   onClose,
   onNavigateToTopic,
+  onEditStart,
   onSave,
   onSaveImageDisplay,
   onDelete,
@@ -118,6 +121,8 @@ export function Viewer({
     pickTopicForLink: onPickTopicLink,
     setPickerQuery,
   } = useTopicLinkPicker(textareaRef)
+
+  usePreserveTextareaFocus(editing, textareaRef, '.viewer__editor')
 
   const [findOpen, setFindOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
@@ -731,6 +736,7 @@ export function Viewer({
                     onClick={() => {
                       closeFind()
                       setError(null)
+                      onEditStart?.(structuredClone(current))
                       setEditing(true)
                     }}
                   >

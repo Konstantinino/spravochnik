@@ -178,6 +178,15 @@ export interface SessionLogEntry {
   message: string
 }
 
+export type UpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'not-available'
+  | 'error'
+
 export interface UpdateInfo {
   available: boolean
   currentVersion: string
@@ -187,6 +196,9 @@ export interface UpdateInfo {
   downloadUrl?: string | null
   error?: string
   source?: 'server' | null
+  phase?: UpdatePhase
+  progress?: number | null
+  downloaded?: boolean
 }
 
 export interface LatestReleaseInfo {

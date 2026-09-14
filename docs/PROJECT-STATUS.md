@@ -1,6 +1,6 @@
 # REST INFO — статус проекта (handoff)
 
-Обновлено: 2026-09-09
+Обновлено: 2026-09-14
 
 ## Текущая фаза
 
@@ -8,7 +8,7 @@
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows (9 сент.): медиа `media/{отдел}/{id}/images|files`, фото на сервер при сохранении темы, автоподгрузка чужих правок без перезапуска, **тема остаётся открытой после сохранения** (Esc закрывает / «← Назад» при переходе по ссылке; ручная смена фильтра списка — сбрасывает выбор), Setup **1.3.3**. Production: nginx `client_max_body_size` ≥120M для upload Setup (~81 МБ), иначе **413**.
+Локально на Windows (14 сент.): медиа `media/{отдел}/{id}/images|files`, фото на сервер при сохранении темы, автоподгрузка чужих правок без перезапуска, **тема остаётся открытой после сохранения** (Esc закрывает / «← Назад» при переходе по ссылке; ручная смена фильтра списка — сбрасывает выбор), Setup **1.4.0** собран. Production: nginx `client_max_body_size` ≥120M для upload Setup (~81 МБ), иначе **413**.
 
 **Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
@@ -23,7 +23,7 @@
 - [x] Topics CRUD + optimistic locking + topic locks
 - [x] Media upload/download (лимит **120 МБ**; пути `updates/*` → `UPDATES_DIR`)
 - [x] Sync: `GET /sync/changes` (full + incremental)
-- [x] App updates: `GET /app/update`, download Setup.exe
+- [x] App updates: `GET /app/update`, download Setup.exe; **`GET /app/updates/*`** — static `latest.yml` + blockmap для electron-updater (1.4.0+)
 - [x] Admin: users, роли **owner / admin / editor / user**, whitelist, releases, **PUT /admin/users/:id**, **POST /admin/transfer-ownership**, **GET /admin/storage-stats** (только owner)
 - [x] Миграции `002_user_department.sql`, `003_owner_role.sql`
 - [x] `import-from-json.ts` — импорт из REST-INFO-export
@@ -66,7 +66,12 @@
 - [x] Viewer: фиксированная верхняя панель (не скроллится с текстом); исправлен «лишний» значок папки (`has_children` без детей)
 - [x] Создание темы онлайн: исправлено **дублирование** (локальный id ≠ серверный → reconcile после POST)
 - [x] Пикеры родителя и ссылки «+»: полный список тем/подтем отдела, подпись — только название; при выборе родителя — авто-смена Поставщик/Заказчик
-- [x] Клиент **1.3.3** (`REST-INFO-Setup-1.3.3.exe`); публикация на production может упираться в nginx 413 до деплоя лимита 120M
+- [x] Клиент **1.4.0** (`REST-INFO-Setup-1.4.0.exe`): auto-update через `electron-updater` (фоновое скачивание, «Обновить» / «Скачивание…» в профиле, версия в шапке)
+- [x] Валидация URL сервера: `GET /health` перед сохранением → «Неверно указан URL сервера»
+- [x] Локальный **«Сбросить»** после правки темы (откат к снимку до редактирования, только эта тема)
+- [x] Сохранение фокуса textarea при Alt+Shift (смена раскладки на Windows)
+- [x] Fix: фото не пропадают при правке текста — `ensureTopicMediaDownloaded` + учёт `photos`/`documents` при cleanup
+- [x] `upload-release.js` — публикует Setup + `latest.yml` + `.blockmap`
 
 ### Скрипты и восстановление
 
@@ -119,7 +124,7 @@
 | Production deploy (Docker + HTTPS) | **Высокий** | Серверный программист |
 | Передать ZIP `REST-INFO-export/` программисту | **Высокий** | Администратор |
 | Импорт на production: `import-from-json.js` | **Высокий** | Программист |
-| Задеплоить nginx 120M + media `updates/` fix; залить Setup 1.3.3 | **Высокий** | Админ / программист |
+| Задеплоить сервер с `/app/updates/*`; залить Setup 1.4.0 + `latest.yml` + blockmap | **Высокий** | Админ / программист |
 | Указать production URL в клиентах | Средний | Админ |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |
@@ -148,7 +153,7 @@
 
 ```
 spravochnik-repo/
-├── app/                    # Electron клиент (v1.3.3)
+├── app/                    # Electron клиент (v1.4.0)
 ├── server/                 # REST API (v1.0.0)
 ├── docker-compose.yml
 ├── docker-compose.prod.yml

@@ -83,6 +83,7 @@ import {
   refreshStatusFromSettings,
   resolveSyncConflicts,
   tryPushTopicOnline,
+  ensureTopicMediaDownloaded,
 } from './sync-backend'
 import { queueOperation } from './pending-operations'
 import {
@@ -94,6 +95,7 @@ import {
   serverLogin,
   serverRegister,
   ServerApiError,
+  validateServerUrl,
 } from './server-api'
 import {
   checkForUpdates,
@@ -102,7 +104,9 @@ import {
   ensureLocalUpdateManifest,
   fetchLatestRelease,
   getUpdateStatus,
+  installUpdate,
   onUpdateStatus,
+  startUpdateCheckInterval,
 } from './updates'
 import { downloadMediaImage } from './media-download'
 import {
@@ -254,6 +258,16 @@ function writeGuideFile(fileName: string, data: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
 }
 
+function attachWindowsInputFixes(win: BrowserWindow): void {
+  if (process.platform !== 'win32') return
+  // Alt+Shift (language switch) must not activate the hidden menu bar and blur the editor.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Alt') {
+      event.preventDefault()
+    }
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1200,
@@ -272,6 +286,7 @@ function createWindow(): void {
   })
 
   win.setMenuBarVisibility(false)
+  attachWindowsInputFixes(win)
   win.once('ready-to-show', () => win.show())
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -400,8 +415,9 @@ function registerIpc(): void {
     const s = readSettings()
     return { serverUrl: s.serverUrl }
   })
-  ipcMain.handle('sync:set-server-url', (_e, url: string) => {
-    const s = setServerUrl(url)
+  ipcMain.handle('sync:set-server-url', async (_e, url: string) => {
+    const normalized = await validateServerUrl(url)
+    const s = setServerUrl(normalized)
     refreshStatusFromSettings()
     return { serverUrl: s.serverUrl }
   })
@@ -934,8 +950,18 @@ function registerIpc(): void {
       }
 
       try {
-        cleanupTopicImageOrphans(payload.departmentId, newId, String(newItem.answer ?? ''))
-        cleanupTopicFileOrphans(payload.departmentId, newId, String(newItem.answer ?? ''))
+        cleanupTopicImageOrphans(
+          payload.departmentId,
+          newId,
+          String(newItem.answer ?? ''),
+          Array.isArray(newItem.photos) ? newItem.photos : undefined,
+        )
+        cleanupTopicFileOrphans(
+          payload.departmentId,
+          newId,
+          String(newItem.answer ?? ''),
+          Array.isArray(newItem.documents) ? newItem.documents : undefined,
+        )
       } catch (err) {
         console.error('media orphan cleanup failed', err)
       }
@@ -1111,16 +1137,29 @@ function registerIpc(): void {
       )
       data[listKey] = reconciled
 
+      const savedItem = list[idx]
+
+      try {
+        await ensureTopicMediaDownloaded(
+          payload.departmentId,
+          savedItem as Record<string, unknown>,
+        )
+      } catch (err) {
+        console.error('ensure topic media before save failed', err)
+      }
+
       try {
         cleanupTopicImageOrphans(
           payload.departmentId,
           payload.item.id,
-          String(payload.item.answer ?? ''),
+          String(savedItem.answer ?? ''),
+          Array.isArray(savedItem.photos) ? savedItem.photos : undefined,
         )
         cleanupTopicFileOrphans(
           payload.departmentId,
           payload.item.id,
-          String(payload.item.answer ?? ''),
+          String(savedItem.answer ?? ''),
+          Array.isArray(savedItem.documents) ? savedItem.documents : undefined,
         )
       } catch (err) {
         console.error('media orphan cleanup failed', err)
@@ -1133,7 +1172,7 @@ function registerIpc(): void {
         const result = await tryPushTopicOnline(
           'update',
           payload.departmentId,
-          list[idx] as Record<string, unknown>,
+          savedItem as Record<string, unknown>,
         )
         if (result.ok) return readGuideFile(dept.fileName)
         if (result.offline) {
@@ -1385,6 +1424,16 @@ function registerIpc(): void {
   ipcMain.handle('updates:status', () => getUpdateStatus())
   ipcMain.handle('updates:check', () => checkForUpdates())
   ipcMain.handle('updates:download', () => downloadUpdate())
+  ipcMain.handle('updates:install', async () => {
+    const sync = getSyncStatus()
+    if (sync.hasPendingChanges) {
+      return {
+        ok: false,
+        error: 'Сначала синхронизируйте локальные изменения',
+      } as const
+    }
+    return installUpdate()
+  })
   ipcMain.handle('updates:latest', () => fetchLatestRelease())
   ipcMain.handle('updates:download-latest', () => downloadLatestRelease())
 
@@ -1453,10 +1502,7 @@ app.whenReady().then(() => {
     void peekAndPullRemoteChanges()
   })
 
-  // Check GitHub Releases for a newer Setup (packaged builds only)
-  setTimeout(() => {
-    void checkForUpdates()
-  }, 2000)
+  startUpdateCheckInterval()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

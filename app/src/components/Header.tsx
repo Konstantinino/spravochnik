@@ -34,7 +34,7 @@ export function Header({
 }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
-  const [downloading, setDownloading] = useState(false)
+  const [installing, setInstalling] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,9 +50,6 @@ export function Header({
     void window.spravochnik.getUpdateStatus().then((info) => {
       if (!cancelled) setUpdateInfo(info)
     })
-    void window.spravochnik.checkForUpdates().then((info) => {
-      if (!cancelled) setUpdateInfo(info)
-    })
     const off = window.spravochnik.onUpdateStatus((info) => {
       setUpdateInfo(info)
     })
@@ -63,27 +60,41 @@ export function Header({
   }, [])
 
   const showSync = canEdit && syncStatus.hasPendingChanges && !pushing && !interactionLocked
-  const updateAvailable = Boolean(
-    updateInfo?.available && updateInfo.remoteSetupPath,
+  const updateReady = Boolean(updateInfo?.available && updateInfo.version)
+  const updateBusy = Boolean(
+    installing ||
+      updateInfo?.phase === 'checking' ||
+      updateInfo?.phase === 'downloading',
+  )
+  const updatePending = Boolean(
+    updateInfo?.available &&
+      (updateInfo.phase === 'available' ||
+        updateInfo.phase === 'downloading' ||
+        updateInfo.phase === 'downloaded'),
   )
 
-  async function handleDownloadUpdate() {
-    if (!updateAvailable || downloading || interactionLocked) return
-    setDownloading(true)
+  async function handleInstallUpdate() {
+    if (!updateReady || updateBusy || interactionLocked) return
+    setInstalling(true)
     try {
-      const result = await window.spravochnik.downloadUpdate()
-      if (result.canceled) return
+      const result = await window.spravochnik.installUpdate()
       if (!result.ok && result.error) {
         window.alert(result.error)
+        setInstalling(false)
       }
-    } finally {
-      setDownloading(false)
+    } catch {
+      setInstalling(false)
     }
   }
 
   return (
     <header className={`app-header${interactionLocked ? ' app-header--locked' : ''}`}>
-      <div className="app-header__brand">REST INFO</div>
+      <div className="app-header__brand">
+        REST INFO
+        {updateInfo?.currentVersion && (
+          <span className="app-header__version">{updateInfo.currentVersion}</span>
+        )}
+      </div>
 
       <div className="app-header__sync" title={syncStatus.detail || syncStatus.label}>
         <span className="app-header__sync-label">{syncStatus.label}</span>
@@ -158,7 +169,7 @@ export function Header({
                 d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5z"
               />
             </svg>
-            {updateAvailable && (
+            {updatePending && (
               <span className="user-menu__badge" aria-label="Доступно обновление" />
             )}
           </button>
@@ -170,19 +181,24 @@ export function Header({
               <button type="button" className="btn btn-secondary user-menu__logout" onClick={onLogout}>
                 Выйти
               </button>
-              {updateAvailable && (
+              {updateReady && (
                 <button
                   type="button"
                   className="btn btn-primary user-menu__update"
-                  onClick={() => void handleDownloadUpdate()}
-                  disabled={downloading}
+                  onClick={() => void handleInstallUpdate()}
+                  disabled={updateBusy}
                   title={
                     updateInfo?.version
-                      ? `Обновить до версии ${updateInfo.version}`
+                      ? `Установить версию ${updateInfo.version}`
                       : 'Обновить приложение'
                   }
                 >
-                  {downloading ? 'Скачивание…' : 'Обновить'}
+                  <span className="user-menu__update-label">
+                    {updateBusy ? 'Скачивание…' : 'Обновить'}
+                  </span>
+                  {updateInfo?.version && (
+                    <span className="user-menu__update-version">{updateInfo.version}</span>
+                  )}
                 </button>
               )}
             </div>

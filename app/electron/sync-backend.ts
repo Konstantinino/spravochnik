@@ -22,6 +22,7 @@ export const markLocalChange = serverSync.markLocalChange
 export const markOfflinePending = serverSync.markOfflinePending
 export const refreshStatusFromSettings = serverSync.refreshStatusFromSettings
 export const tryPushTopicOnline = serverSync.tryPushTopicOnline
+export const ensureTopicMediaDownloaded = serverSync.ensureTopicMediaDownloaded
 export const peekAndPullRemoteChanges = serverSync.peekAndPullRemoteChanges
 export const scheduleRemoteChangePeek = serverSync.scheduleRemoteChangePeek
 

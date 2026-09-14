@@ -120,6 +120,14 @@ export default function App() {
   const pushInFlight = useRef(false)
   /** Skip auto-deselect while save/reload settles (avoid race with background sync). */
   const keepSelectedIdRef = useRef<number | null>(null)
+  /** Snapshot of topic before inline edit; consumed on successful save. */
+  const editSnapshotRef = useRef<GuideItem | null>(null)
+  const [localUndo, setLocalUndo] = useState<{
+    departmentId: DepartmentId
+    topicId: number
+    item: GuideItem
+  } | null>(null)
+  const [resettingTopic, setResettingTopic] = useState(false)
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -347,6 +355,14 @@ export default function App() {
     return items.find((i) => Number(i.id) === Number(selectedId)) ?? null
   }, [items, selectedId])
 
+  const showLocalReset = Boolean(
+    canEdit &&
+      localUndo &&
+      localUndo.departmentId === departmentId &&
+      selectedId != null &&
+      localUndo.topicId === selectedId,
+  )
+
   function pinSelectedTopic(id: number) {
     keepSelectedIdRef.current = id
     setSelectedId(id)
@@ -495,6 +511,10 @@ export default function App() {
     }
   }
 
+  function handleEditStart(item: GuideItem) {
+    editSnapshotRef.current = item
+  }
+
   async function handleInlineSave(payload: {
     question: string
     answer: string
@@ -503,6 +523,7 @@ export default function App() {
   }) {
     if (!selected) return
     const topicId = selected.id
+    const snapshot = editSnapshotRef.current
     pinSelectedTopic(topicId)
     try {
       const data = await window.spravochnik.updateItem({
@@ -517,12 +538,47 @@ export default function App() {
       })
       setGuide(data)
       pinSelectedTopic(topicId)
+      if (snapshot?.id === topicId) {
+        setLocalUndo({ departmentId, topicId, item: snapshot })
+      }
+      editSnapshotRef.current = null
       if (departmentId === 'support' && payload.party) {
         syncListFilterAfterPartySave(payload.party)
       }
     } catch (e) {
       releasePinnedTopic(topicId)
       throw e
+    }
+  }
+
+  async function handleLocalReset() {
+    if (!localUndo || !canEdit) return
+    if (
+      !window.confirm(
+        'Сбросить последние изменения этой темы и вернуть версию до сохранения с этого компьютера?',
+      )
+    ) {
+      return
+    }
+    const { departmentId: undoDept, item } = localUndo
+    setResettingTopic(true)
+    pinSelectedTopic(item.id)
+    try {
+      const data = await window.spravochnik.updateItem({
+        departmentId: undoDept,
+        item,
+      })
+      if (undoDept === departmentId) {
+        setGuide(data)
+      }
+      pinSelectedTopic(item.id)
+      setLocalUndo(null)
+      editSnapshotRef.current = null
+    } catch (e) {
+      releasePinnedTopic(item.id)
+      window.alert(e instanceof Error ? e.message : 'Не удалось сбросить изменения')
+    } finally {
+      setResettingTopic(false)
     }
   }
 
@@ -565,13 +621,18 @@ export default function App() {
 
   async function handleDelete() {
     if (!selected) return
+    const deletedId = selected.id
     const data = await window.spravochnik.deleteItem({
       departmentId,
-      id: selected.id,
+      id: deletedId,
     })
     setGuide(data)
     setSelectedId(null)
     setNavHistory([])
+    if (localUndo?.topicId === deletedId) {
+      setLocalUndo(null)
+      editSnapshotRef.current = null
+    }
   }
 
   if (user === undefined) {
@@ -646,6 +707,9 @@ export default function App() {
               setEditorParentId(null)
               setEditorOpen(true)
             }}
+            showReset={showLocalReset}
+            onReset={() => void handleLocalReset()}
+            resetting={resettingTopic}
           />
           <div className="sidebar__list">
             {loading ? (
@@ -676,6 +740,7 @@ export default function App() {
             onBack={navigateBack}
             onClose={closeTopic}
             onNavigateToTopic={navigateToTopic}
+            onEditStart={handleEditStart}
             onSave={handleInlineSave}
             onSaveImageDisplay={handleSaveImageDisplay}
             onDelete={handleDelete}

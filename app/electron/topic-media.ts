@@ -29,13 +29,19 @@ export function extractImageRefsFromMarkdown(markdown: string): string[] {
   return refs
 }
 
-/** Basename of images/foo.jpg → foo.jpg */
+function stripSpravochnikPrefix(ref: string): string {
+  return ref.replace(/\\/g, '/').replace(/^spravochnik:\/\//, '')
+}
+
+/** Basename of images/foo.jpg or media/.../images/foo.jpg → foo.jpg */
 export function imagesBasename(ref: string): string | null {
-  const cleaned = ref.replace(/\\/g, '/')
+  const cleaned = stripSpravochnikPrefix(ref)
   if (cleaned.startsWith('images/')) {
-    const name = cleaned.slice('images/'.length)
+    const name = cleaned.slice('images/'.length).split(/[?#]/)[0]
     if (name && !name.includes('..') && !name.includes('/')) return name
   }
+  const fromMedia = cleaned.match(/\/images\/([^/?#\s]+)$/i)
+  if (fromMedia?.[1] && !fromMedia[1].includes('..')) return fromMedia[1]
   return null
 }
 
@@ -50,16 +56,64 @@ function topicImageDirs(departmentId: DepartmentId, topicId: number): string[] {
   ]
 }
 
+export function collectReferencedImageBasenames(
+  answerMarkdown: string,
+  extraRefs?: unknown[],
+): Set<string> {
+  const referenced = new Set<string>()
+  for (const ref of extractImageRefsFromMarkdown(answerMarkdown)) {
+    const base = imagesBasename(ref)
+    if (base) referenced.add(base)
+  }
+  for (const extra of extraRefs ?? []) {
+    if (typeof extra !== 'string') continue
+    const base = imagesBasename(extra)
+    if (base) referenced.add(base)
+  }
+  return referenced
+}
+
+/** Canonical media/… paths for images referenced in a topic (for sync download). */
+export function mediaImagePathsFromTopic(
+  departmentId: DepartmentId,
+  topicId: number,
+  answerMarkdown: string,
+  extraRefs?: unknown[],
+): string[] {
+  const paths = new Set<string>()
+  const addPath = (rel: string) => {
+    const n = rel.replace(/\\/g, '/').replace(/^\/+/, '')
+    if (n.startsWith('media/')) paths.add(n)
+  }
+  for (const ref of extractImageRefsFromMarkdown(answerMarkdown)) {
+    const cleaned = stripSpravochnikPrefix(ref)
+    if (cleaned.startsWith('media/')) {
+      addPath(cleaned.split(/[?#]/)[0])
+    } else {
+      const base = imagesBasename(cleaned)
+      if (base) addPath(topicImageRelativePath(departmentId, topicId, base))
+    }
+  }
+  for (const extra of extraRefs ?? []) {
+    if (typeof extra !== 'string') continue
+    const cleaned = stripSpravochnikPrefix(extra)
+    if (cleaned.startsWith('media/')) {
+      addPath(cleaned.split(/[?#]/)[0])
+    } else {
+      const base = imagesBasename(cleaned)
+      if (base) addPath(topicImageRelativePath(departmentId, topicId, base))
+    }
+  }
+  return [...paths]
+}
+
 export function cleanupTopicImageOrphans(
   departmentId: DepartmentId,
   topicId: number,
   answerMarkdown: string,
+  extraRefs?: unknown[],
 ): void {
-  const referenced = new Set(
-    extractImageRefsFromMarkdown(answerMarkdown)
-      .map(imagesBasename)
-      .filter((n): n is string => Boolean(n)),
-  )
+  const referenced = collectReferencedImageBasenames(answerMarkdown, extraRefs)
 
   for (const dir of topicImageDirs(departmentId, topicId)) {
     if (!fs.existsSync(dir)) continue
@@ -230,14 +284,83 @@ export function extractFileRefsFromMarkdown(markdown: string): string[] {
   return refs
 }
 
-/** Basename of files/foo.pdf → foo.pdf */
+/** Basename of files/foo.pdf or media/.../files/foo.pdf → foo.pdf */
 export function filesBasename(ref: string): string | null {
-  const cleaned = ref.replace(/\\/g, '/')
+  const cleaned = stripSpravochnikPrefix(ref)
   if (cleaned.startsWith('files/')) {
-    const name = cleaned.slice('files/'.length)
+    const name = cleaned.slice('files/'.length).split(/[?#]/)[0]
     if (name && !name.includes('..') && !name.includes('/')) return name
   }
+  const fromMedia = cleaned.match(/\/files\/([^/?#\s]+)$/i)
+  if (fromMedia?.[1] && !fromMedia[1].includes('..')) return fromMedia[1]
   return null
+}
+
+export function collectReferencedFileBasenames(
+  answerMarkdown: string,
+  extraRefs?: unknown[],
+): Set<string> {
+  const referenced = new Set<string>()
+  for (const ref of extractFileRefsFromMarkdown(answerMarkdown)) {
+    const base = filesBasename(ref)
+    if (base) referenced.add(base)
+  }
+  for (const extra of extraRefs ?? []) {
+    if (typeof extra === 'string') {
+      const base = filesBasename(extra)
+      if (base) referenced.add(base)
+      continue
+    }
+    if (extra && typeof extra === 'object' && 'file_id' in extra) {
+      const id = String((extra as { file_id: unknown }).file_id ?? '')
+      const base = filesBasename(id) ?? (id.includes('/') ? null : id)
+      if (base && !base.includes('..')) referenced.add(base)
+    }
+  }
+  return referenced
+}
+
+export function mediaFilePathsFromTopic(
+  departmentId: DepartmentId,
+  topicId: number,
+  answerMarkdown: string,
+  extraRefs?: unknown[],
+): string[] {
+  const paths = new Set<string>()
+  const addPath = (rel: string) => {
+    const n = rel.replace(/\\/g, '/').replace(/^\/+/, '')
+    if (n.startsWith('media/')) paths.add(n)
+  }
+  for (const ref of extractFileRefsFromMarkdown(answerMarkdown)) {
+    const cleaned = stripSpravochnikPrefix(ref)
+    if (cleaned.startsWith('media/')) {
+      addPath(cleaned.split(/[?#]/)[0])
+    } else {
+      const base = filesBasename(cleaned)
+      if (base) addPath(topicFileRelativePath(departmentId, topicId, base))
+    }
+  }
+  for (const extra of extraRefs ?? []) {
+    if (typeof extra === 'string') {
+      const cleaned = stripSpravochnikPrefix(extra)
+      if (cleaned.startsWith('media/')) addPath(cleaned.split(/[?#]/)[0])
+      else {
+        const base = filesBasename(cleaned)
+        if (base) addPath(topicFileRelativePath(departmentId, topicId, base))
+      }
+      continue
+    }
+    if (extra && typeof extra === 'object' && 'file_id' in extra) {
+      const id = String((extra as { file_id: unknown }).file_id ?? '')
+      const cleaned = stripSpravochnikPrefix(id)
+      if (cleaned.startsWith('media/')) addPath(cleaned.split(/[?#]/)[0])
+      else {
+        const base = filesBasename(cleaned) ?? id
+        if (base && !base.includes('..')) addPath(topicFileRelativePath(departmentId, topicId, base))
+      }
+    }
+  }
+  return [...paths]
 }
 
 function topicFileDirs(departmentId: DepartmentId, topicId: number): string[] {
@@ -251,13 +374,10 @@ export function cleanupTopicFileOrphans(
   departmentId: DepartmentId,
   topicId: number,
   answerMarkdown: string,
+  extraRefs?: unknown[],
 ): void {
   try {
-    const referenced = new Set(
-      extractFileRefsFromMarkdown(answerMarkdown)
-        .map(filesBasename)
-        .filter((n): n is string => Boolean(n)),
-    )
+    const referenced = collectReferencedFileBasenames(answerMarkdown, extraRefs)
 
     for (const dir of topicFileDirs(departmentId, topicId)) {
       if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue

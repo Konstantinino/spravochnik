@@ -44,13 +44,13 @@ URL сервера и сессия сохраняются в `%AppData%\rest-inf
 ## Синхронизация и обновления
 
 - **Синхронизация** — кнопка «Синхронизировать» отправляет очередь **на сервер**; чужие правки подтягиваются **автоматически** (без перезапуска приложения)
-- **Обновления приложения** — только **с сервера** и **при наличии сети** (`GET /app/update`)
+- **Обновления приложения** — с **1.4.0** in-app auto-update (`electron-updater` + `/app/updates/latest.yml`); старые клиенты — `GET /app/update`
 - Яндекс.Диск в v2 **не используется** (legacy: `STORAGE_BACKEND=yandex`)
 
 ```bash
 cd app && npm run dist:ascii
 RESTINFO_SERVER_URL=https://your-server RESTINFO_ADMIN_TOKEN=<jwt> \
-  node scripts/upload-release.js release/REST-INFO-Setup-1.3.2.exe
+  node scripts/upload-release.js release/REST-INFO-Setup-1.4.0.exe
 ```
 
 ## Разработка
@@ -76,7 +76,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```
 docker-compose.yml
 server/                     REST API, миграции, import
-app/                        Electron + React (v1.3.2)
+app/                        Electron + React (v1.4.0)
 docs/                       документация + scripts.md
 scripts/                    pull/push yandex export (разово)
 graphify-out/               карта кода (graphify)

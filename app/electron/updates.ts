@@ -1,10 +1,22 @@
 import { app, BrowserWindow, dialog, net, shell } from 'electron'
 import fs from 'node:fs'
 import { writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
+import { autoUpdater } from 'electron-updater'
 import { APP_UPDATE_FILE, getUserDataRoot, getSeedDataDir } from './paths'
 import { readSettings } from './auth-store'
+import { appendSessionLog } from './session-log'
 import { serverFetch } from './server-api'
+
+export type UpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'not-available'
+  | 'error'
 
 export interface UpdateInfo {
   available: boolean
@@ -14,6 +26,9 @@ export interface UpdateInfo {
   downloadUrl?: string | null
   error?: string
   source?: 'server' | null
+  phase?: UpdatePhase
+  progress?: number | null
+  downloaded?: boolean
 }
 
 export interface LatestReleaseInfo {
@@ -33,33 +48,32 @@ interface UpdateManifest {
 
 type UpdateListener = (info: UpdateInfo) => void
 
+const CHECK_INTERVAL_MS = 60_000
+
 let lastInfo: UpdateInfo = {
   available: false,
   currentVersion: '0.0.0',
   version: null,
   remoteSetupPath: null,
+  downloadUrl: null,
   source: null,
+  phase: 'idle',
+  progress: null,
+  downloaded: false,
 }
 
 const listeners = new Set<UpdateListener>()
-
-export function onUpdateStatus(listener: UpdateListener): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
-export function getUpdateStatus(): UpdateInfo {
-  return { ...lastInfo }
-}
-
-function emit(info: UpdateInfo): UpdateInfo {
-  lastInfo = info
-  for (const listener of listeners) listener(info)
-  return info
-}
+let autoUpdaterReady = false
+let checkTimer: ReturnType<typeof setInterval> | null = null
+let configuredFeedUrl: string | null = null
+let downloadArmed = false
 
 function isNetworkOnline(): boolean {
   return net.isOnline()
+}
+
+function useAutoUpdater(): boolean {
+  return app.isPackaged
 }
 
 /** Strip leading `v` and compare dotted numeric versions. Returns >0 if a>b. */
@@ -73,6 +87,24 @@ export function compareVersions(a: string, b: string): number {
     if (da !== db) return da - db
   }
   return 0
+}
+
+function emit(partial: Partial<UpdateInfo>): UpdateInfo {
+  lastInfo = { ...lastInfo, ...partial }
+  for (const listener of listeners) listener(lastInfo)
+  return lastInfo
+}
+
+export function onUpdateStatus(listener: UpdateListener): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+export function getUpdateStatus(): UpdateInfo {
+  return {
+    ...lastInfo,
+    currentVersion: app.getVersion(),
+  }
 }
 
 function parseManifest(raw: unknown): UpdateManifest | null {
@@ -92,10 +124,199 @@ function parseManifest(raw: unknown): UpdateManifest | null {
   }
 }
 
-/** Check for updates via server API — only when online and serverUrl is configured. */
-export async function checkForUpdates(options?: {
-  force?: boolean
-}): Promise<UpdateInfo> {
+function updatesFeedUrl(serverUrl: string): string {
+  return `${serverUrl.replace(/\/+$/, '')}/app/updates/`
+}
+
+function electronUpdaterCacheDir(): string {
+  const local =
+    process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local')
+  return path.join(local, app.getName())
+}
+
+async function clearPartialUpdateCache(): Promise<void> {
+  if (!useAutoUpdater()) return
+  if (lastInfo.downloaded) return
+  try {
+    const cacheRoot = electronUpdaterCacheDir()
+    const pendingDir = path.join(cacheRoot, 'pending')
+    if (fs.existsSync(pendingDir)) {
+      fs.rmSync(pendingDir, { recursive: true, force: true })
+    }
+    if (fs.existsSync(cacheRoot)) {
+      for (const entry of fs.readdirSync(cacheRoot)) {
+        if (entry.startsWith('temp-')) {
+          fs.rmSync(path.join(cacheRoot, entry), { force: true })
+        }
+      }
+    }
+    appendSessionLog('info', 'update', 'Кэш частичного обновления очищен')
+  } catch (e) {
+    appendSessionLog(
+      'warn',
+      'update',
+      `Не удалось очистить кэш обновления: ${e instanceof Error ? e.message : String(e)}`,
+    )
+  }
+}
+
+function configureAutoUpdaterFeed(serverUrl: string): boolean {
+  const feedUrl = updatesFeedUrl(serverUrl)
+  if (configuredFeedUrl === feedUrl && autoUpdaterReady) return true
+  try {
+    autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl })
+    configuredFeedUrl = feedUrl
+    return true
+  } catch (e) {
+    appendSessionLog(
+      'error',
+      'update',
+      `Feed URL: ${e instanceof Error ? e.message : String(e)}`,
+    )
+    return false
+  }
+}
+
+function setupAutoUpdaterEvents(): void {
+  if (autoUpdaterReady) return
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = false
+  autoUpdater.autoRunAppAfterInstall = true
+
+  autoUpdater.on('checking-for-update', () => {
+    emit({
+      phase: 'checking',
+      error: undefined,
+      currentVersion: app.getVersion(),
+    })
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    downloadArmed = false
+    emit({
+      available: false,
+      version: null,
+      remoteSetupPath: null,
+      downloadUrl: null,
+      phase: 'not-available',
+      progress: null,
+      downloaded: false,
+      error: undefined,
+      source: 'server',
+    })
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    const version = info.version?.replace(/^v/i, '') ?? null
+    downloadArmed = true
+    emit({
+      available: true,
+      version,
+      remoteSetupPath: version ? `updates/REST-INFO-Setup-${version}.exe` : null,
+      phase: 'downloading',
+      progress: 0,
+      downloaded: false,
+      error: undefined,
+      source: 'server',
+    })
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Math.round(progress.percent)
+    emit({
+      available: true,
+      phase: 'downloading',
+      progress: percent,
+      downloaded: false,
+      source: 'server',
+    })
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    downloadArmed = false
+    const version = info.version?.replace(/^v/i, '') ?? lastInfo.version
+    emit({
+      available: true,
+      version,
+      remoteSetupPath: version ? `updates/REST-INFO-Setup-${version}.exe` : null,
+      phase: 'downloaded',
+      progress: 100,
+      downloaded: true,
+      error: undefined,
+      source: 'server',
+    })
+    appendSessionLog('info', 'update', `Обновление ${version ?? ''} скачано`.trim())
+  })
+
+  autoUpdater.on('error', (err) => {
+    downloadArmed = false
+    const detail = err instanceof Error ? err.message : String(err)
+    appendSessionLog('error', 'update', detail)
+    void clearPartialUpdateCache().finally(() => {
+      emit({
+        phase: 'error',
+        progress: null,
+        downloaded: false,
+        error: detail,
+      })
+    })
+  })
+
+  autoUpdaterReady = true
+}
+
+async function checkForUpdatesAuto(): Promise<UpdateInfo> {
+  const currentVersion = app.getVersion()
+  const base: UpdateInfo = {
+    ...lastInfo,
+    currentVersion,
+    source: 'server',
+  }
+
+  if (!isNetworkOnline()) {
+    return emit({ ...base, phase: lastInfo.phase ?? 'idle' })
+  }
+
+  const settings = readSettings()
+  if (!settings.serverUrl.trim()) {
+    return emit({
+      ...base,
+      available: false,
+      phase: 'idle',
+      error: 'Укажите URL сервера на экране входа',
+    })
+  }
+
+  setupAutoUpdaterEvents()
+  if (!configureAutoUpdaterFeed(settings.serverUrl)) {
+    return emit({
+      ...base,
+      phase: 'error',
+      error: 'Не удалось настроить URL обновлений',
+    })
+  }
+
+  if (downloadArmed && !lastInfo.downloaded) {
+    await clearPartialUpdateCache()
+    downloadArmed = false
+  }
+
+  try {
+    await autoUpdater.checkForUpdates()
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e)
+    await clearPartialUpdateCache()
+    return emit({
+      ...base,
+      phase: 'error',
+      error: detail,
+    })
+  }
+
+  return getUpdateStatus()
+}
+
+async function checkForUpdatesLegacy(options?: { force?: boolean }): Promise<UpdateInfo> {
   const currentVersion = app.getVersion()
   const base: UpdateInfo = {
     available: false,
@@ -104,6 +325,9 @@ export async function checkForUpdates(options?: {
     remoteSetupPath: null,
     downloadUrl: null,
     source: null,
+    phase: 'idle',
+    progress: null,
+    downloaded: false,
   }
 
   if (!app.isPackaged && !options?.force) {
@@ -123,6 +347,7 @@ export async function checkForUpdates(options?: {
   }
 
   try {
+    emit({ ...base, phase: 'checking' })
     const data = await serverFetch<{
       available: boolean
       version: string | null
@@ -139,15 +364,121 @@ export async function checkForUpdates(options?: {
         version: data.version,
         remoteSetupPath: data.setupFilename ?? null,
         downloadUrl: data.downloadUrl,
+        phase: 'available',
         source: 'server',
       })
     }
-    return emit({ ...base, source: 'server' })
+    return emit({ ...base, phase: 'not-available', source: 'server' })
   } catch (e) {
     return emit({
       ...base,
+      phase: 'error',
       error: `Сервер: ${e instanceof Error ? e.message : String(e)}`,
     })
+  }
+}
+
+/** Check for updates — autoUpdater when packaged, legacy API in dev. */
+export async function checkForUpdates(options?: {
+  force?: boolean
+}): Promise<UpdateInfo> {
+  lastInfo = { ...lastInfo, currentVersion: app.getVersion() }
+  if (useAutoUpdater()) {
+    return checkForUpdatesAuto()
+  }
+  return checkForUpdatesLegacy(options)
+}
+
+export function startUpdateCheckInterval(): void {
+  if (checkTimer) return
+  void clearPartialUpdateCache().then(() => checkForUpdates())
+  checkTimer = setInterval(() => {
+    void checkForUpdates()
+  }, CHECK_INTERVAL_MS)
+}
+
+export function stopUpdateCheckInterval(): void {
+  if (checkTimer) {
+    clearInterval(checkTimer)
+    checkTimer = null
+  }
+}
+
+const DOWNLOAD_WAIT_MS = 15 * 60 * 1000
+
+function waitForUpdateDownloaded(timeoutMs = DOWNLOAD_WAIT_MS): Promise<void> {
+  if (lastInfo.downloaded) return Promise.resolve()
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      off()
+      reject(new Error('Превышено время ожидания загрузки обновления'))
+    }, timeoutMs)
+
+    const off = onUpdateStatus((info) => {
+      if (info.downloaded) {
+        clearTimeout(timer)
+        off()
+        resolve()
+      } else if (info.phase === 'error') {
+        clearTimeout(timer)
+        off()
+        reject(new Error(info.error ?? 'Ошибка загрузки обновления'))
+      }
+    })
+  })
+}
+
+async function ensureUpdateDownloaded(): Promise<void> {
+  if (lastInfo.downloaded) return
+
+  const needsCheck =
+    !lastInfo.available ||
+    lastInfo.phase === 'idle' ||
+    lastInfo.phase === 'not-available' ||
+    lastInfo.phase === 'error'
+
+  if (needsCheck) {
+    emit({ phase: 'checking', error: undefined })
+    await checkForUpdates({ force: true })
+  }
+
+  if (!lastInfo.available) {
+    throw new Error(lastInfo.error ?? 'Обновление недоступно')
+  }
+
+  if (!lastInfo.downloaded && lastInfo.phase !== 'downloading') {
+    emit({ phase: 'downloading', progress: lastInfo.progress ?? 0, downloaded: false })
+    try {
+      await autoUpdater.downloadUpdate()
+    } catch (e) {
+      const status = getUpdateStatus()
+      if (!status.downloaded && status.phase !== 'downloading') {
+        throw e instanceof Error ? e : new Error(String(e))
+      }
+    }
+  }
+
+  await waitForUpdateDownloaded()
+}
+
+export async function installUpdate(): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!useAutoUpdater()) {
+    return { ok: false, error: 'Установка доступна только в собранном приложении' }
+  }
+  if (!isNetworkOnline()) {
+    return { ok: false, error: 'Нет подключения к сети' }
+  }
+
+  try {
+    await ensureUpdateDownloaded()
+    autoUpdater.quitAndInstall(false, true)
+    return { ok: true }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+    }
   }
 }
 
@@ -273,6 +604,7 @@ export async function downloadLatestRelease(): Promise<{
   return saveInstallerFromSource(latest)
 }
 
+/** Legacy IPC — manual save dialog (dev / fallback). */
 export async function downloadUpdate(): Promise<{
   ok: boolean
   error?: string

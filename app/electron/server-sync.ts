@@ -29,7 +29,11 @@ import {
   type PendingOperation,
 } from './pending-operations'
 import { reconcileHasChildren } from './guide-data'
-import { remigrateTopicMediaIds } from './topic-media'
+import {
+  mediaFilePathsFromTopic,
+  mediaImagePathsFromTopic,
+  remigrateTopicMediaIds,
+} from './topic-media'
 import { appendSessionLog } from './session-log'
 import {
   ServerApiError,
@@ -143,6 +147,38 @@ function reconcileCreatedTopic(
   applyTopicToLocal(deptId, serverTopic)
 }
 
+export async function ensureTopicMediaDownloaded(
+  deptId: DepartmentId,
+  topic: Record<string, unknown>,
+): Promise<void> {
+  const settings = readSettings()
+  if (!settings.serverUrl.trim() || !settings.authToken.trim()) return
+  if (!(await isServerReachable())) return
+
+  const topicId = topic.id as number
+  if (!Number.isFinite(topicId)) return
+
+  const answer = String(topic.answer ?? '')
+  const photos = Array.isArray(topic.photos) ? topic.photos : []
+  const documents = Array.isArray(topic.documents) ? topic.documents : []
+  const relPaths = [
+    ...mediaImagePathsFromTopic(deptId, topicId, answer, photos),
+    ...mediaFilePathsFromTopic(deptId, topicId, answer, documents),
+  ]
+
+  const root = getUserDataRoot()
+  for (const rel of relPaths) {
+    if (resolveExistingMediaAbsolutePath(rel, deptId)) continue
+    const localPath = path.join(root, ...rel.split('/'))
+    try {
+      await downloadMediaFile(rel, localPath)
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e)
+      appendSessionLog('warn', 'sync/media', `Не удалось скачать ${rel}: ${detail}`)
+    }
+  }
+}
+
 function applyTopicToLocal(deptId: DepartmentId, topic: Record<string, unknown>): void {
   const dept = departmentById(deptId)
   const filePath = path.join(getUserDataRoot(), dept.fileName)
@@ -158,6 +194,7 @@ function applyTopicToLocal(deptId: DepartmentId, topic: Record<string, unknown>)
   else list.push(clean)
   data[listKey] = list
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+  void ensureTopicMediaDownloaded(deptId, clean)
 }
 
 function removeTopicFromLocal(deptId: DepartmentId, topicId: number): void {

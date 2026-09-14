@@ -1,13 +1,35 @@
 # План: автообновление «как Telegram Desktop»
 
-Обновлено: 2026-09-11  
-Статус: **не начато** (только план)
+Обновлено: 2026-09-14  
+Статус: **реализовано в клиенте 1.4.0** (нужен deploy сервера + upload latest.yml/blockmap)
 
 ## Цель
 
 Сейчас пользователь нажимает «Обновить» → выбирает папку → скачивает Setup.exe (~80 МБ) → **вручную запускает installer**.
 
-**Целевой UX:** нажал «Обновить» → приложение закрылось → установилось → открылось снова. Настройки в `%AppData%\rest-info\REST-INFO\` **не сбрасываются**.
+**Целевой UX:** обновление **скачивается в фоне**; по кнопке «Обновить» в попапе профиля → приложение закрылось → установилось → открылось снова. Настройки в `%AppData%\rest-info\REST-INFO\` **не сбрасываются**.
+
+---
+
+## UX и поведение (уточнения от 2026-09-14)
+
+### Где что показывается
+
+| Элемент | Где | Поведение |
+|---|---|---|
+| **Текущая версия** | Шапка слева, рядом с «REST INFO» | Всегда видна; мелкий/тонкий шрифт (напр. `1.3.3`) |
+| **Кнопка «Обновить»** | Попап профиля (аватар), **рядом с «Выйти»** | Когда версия на сервере новее **и** пакет скачан (`update-downloaded`) |
+| **Версия обновления** | Рядом с «Обновить» в попапе | Тонкий, меньший шрифт (напр. «Обновить» **1.4.0**) |
+| **«Скачивание… 45%»** | **Только Настройки** → «Приложение» | Не в шапке, не в попапе |
+| **«Обновление скачано»** | **Только Настройки** → «Приложение» | Подсказка: установка — из меню профиля |
+| **Badge на аватаре** | Попап профиля | Опционально: пока обновление качается или готово |
+
+### Правила
+
+1. **Скачивание в фоне**, **установка только по «Обновить»** в попапе профиля.
+2. **Проверка — раз в 1 минуту** (+ при старте; только online + `serverUrl`).
+3. **Обрыв загрузки** → при следующей проверке удалить partial, **скачать заново** целиком.
+4. **Админ «Скачать» Setup** в Настройках: кнопка **не пропадает**, ту же версию можно качать **много раз**; отдельно от auto-update cache.
 
 ---
 
@@ -16,24 +38,25 @@
 | Компонент | Что есть |
 |---|---|
 | Клиент `app/electron/updates.ts` | `GET /app/update`, скачивание Setup через «Сохранить как…», `shell.openPath` |
-| UI `Header.tsx` | Кнопка «Обновить», badge, «Скачивание…» |
+| UI `Header.tsx` | Кнопка «Обновить» и «Скачивание…» в попапе профиля (переделать под план) |
 | Сервер `server/src/routes/updates.ts` | `GET /app/update`, `GET /app/download/:filename` |
 | Публикация | `app/scripts/upload-release.js` → upload + `POST /admin/releases` |
 | Сборка | electron-builder, NSIS, `oneClick: false` |
 
-**Не хватает:** тихая установка, автоперезапуск, `latest.yml` для electron-updater.
+**Не хватает:** тихая установка, автоперезапуск, `latest.yml`, проверка 1 мин, UI по таблице выше.
 
 ---
 
 ## Как это работает (механизм)
 
 ```
-[REST INFO.exe]  →  проверяет версию на сервере
-                →  скачивает пакет в %TEMP% (можно в фоне)
-                →  пользователь жмёт «Обновить»
-                →  quitAndInstall() — приложение закрывается
-                →  NSIS / updater тихо ставит поверх старой версии
-                →  приложение запускается снова
+[REST INFO.exe]  →  каждые 60 с: проверка версии на сервере (online)
+                →  если новее — скачивание в фоне (%TEMP% / updater cache)
+                →  прогресс «Скачивание… N%» — только в Настройках
+                →  готово → «Обновление скачано» в Настройках + «Обновить» в попапе профиля
+                →  пользователь жмёт «Обновить» → quitAndInstall()
+                →  NSIS тихо ставит поверх → приложение открывается снова
+                →  обрыв загрузки → при следующей проверке: удалить частичный файл, скачать заново
 ```
 
 Работающий процесс **не может перезаписать свой `.exe`**. Поэтому используется отдельный installer/updater, который стартует **после** выхода основного приложения.
@@ -101,30 +124,42 @@
 - [ ] Импорт `autoUpdater` из `electron-updater`
 - [ ] Настройка:
   ```ts
-  autoUpdater.autoDownload = true          // или false + кнопка «Скачать»
-  autoUpdater.autoInstallOnAppQuit = false // только по кнопке «Обновить»
+  autoUpdater.autoDownload = true           // фоновая загрузка
+  autoUpdater.autoInstallOnAppQuit = false  // установка только по кнопке «Обновить»
   ```
 - [ ] URL provider: `${settings.serverUrl}/app/updates/` (не хардкод production)
+- [ ] Таймер проверки: `setInterval(checkForUpdates, 60_000)` в main (плюс проверка при старте)
+- [ ] При `error` / обрыве / перезапуске до `update-downloaded`:
+  - вызвать очистку cache updater (`autoUpdater.clearCache()` или удаление `%TEMP%`/pending path)
+  - при следующем `update-available` — полная перекачка
 - [ ] События → IPC → UI:
-  - `checking-for-update`
-  - `update-available` / `update-not-available`
-  - `download-progress` (процент, скорость)
-  - `update-downloaded` → показать «Перезапустить для обновления»
-  - `error`
-- [ ] Новый handler `updates:install`:
+  - `checking-for-update` / `update-available` / `update-not-available`
+  - `download-progress` → **только** SettingsPage (процент)
+  - `update-downloaded` → SettingsPage («Обновление скачано») + показать «Обновить» в попапе профиля
+  - `error` → session-log; сброс partial download
+- [ ] Handler `updates:install` (кнопка в попапе профиля):
   ```ts
   autoUpdater.quitAndInstall(false, true)
   ```
-- [ ] Сохранить fallback: «Скачать Setup вручную» (SettingsPage, admin) — на случай сбоя auto-update
+- [ ] `fetchLatestRelease` / `downloadLatestRelease` — **без** скрытия кнопки после успеха; всегда тянет `GET /app/update?currentVersion=0.0.0`
 - [ ] Dev mode: `autoUpdater` не активен (`!app.isPackaged`), как сейчас
 
 #### 1.3 Клиент — UI
 
-- [ ] `Header.tsx`:
-  - «Скачивание… 45%» при `download-progress`
-  - «Перезапустить» когда `update-downloaded`
-  - «Обновить» запускает install, не save dialog
-- [ ] `SettingsPage.tsx`: оставить «Скачать Setup» для admin (ручная раздача новым ПК)
+- [ ] `Header.tsx` — шапка:
+  - рядом с «REST INFO»: текущая версия (`app.getVersion()`), класс `.app-header__version` — мелкий, тонкий, приглушённый цвет
+- [ ] `Header.tsx` — попап профиля (`user-menu`):
+  - кнопка «Обновить» + `<span class="user-menu__update-version">1.4.0</span>` — версия **тоньше и меньше**
+  - видна только при `update-downloaded` (пакет готов к установке)
+  - клик → `updates:install`, **не** скачивание
+  - **без** текста «Скачивание…» в попапе
+  - badge на аватаре — пока `update-available` или идёт загрузка (опционально)
+- [ ] `SettingsPage.tsx` — блок «Приложение»:
+  - строка: «Версия: **1.3.3**» (текущая)
+  - при загрузке: «Скачивание… 45%»
+  - когда готово: «Обновление скачано — установите из меню профиля»
+  - кнопка «Скачать» Setup с сервера — **всегда** видна (admin), повторное скачивание той же версии OK
+- [ ] `styles.css`: `.app-header__version`, `.user-menu__update-version`
 
 #### 1.4 Клиент — IPC (`main.ts`, `preload.ts`, `vite-env.d.ts`)
 
@@ -161,11 +196,10 @@
 
 ### Фаза 2 — polish (~0.5–1 день)
 
-- [ ] Фоновая проверка при старте + раз в N часов (сейчас только по focus / manual)
-- [ ] Уведомление «Обновление скачано, перезапустите» если пользователь отложил
-- [ ] Release notes в модалке (поле `notes` из `app_releases`)
-- [ ] Delta updates: убедиться что `.blockmap` публикуется (экономия трафика)
-- [ ] Логирование в `session-log.ts`: update check, download, install errors
+- [ ] Release notes в Настройках (поле `notes` из `app_releases`)
+- [ ] Delta updates: `.blockmap` на сервере (экономия трафика)
+- [ ] Логирование в `session-log.ts`: check, download, cache purge, install errors
+- [ ] Предупреждение перед `quitAndInstall`, если `hasPendingChanges`
 
 ---
 
@@ -186,7 +220,9 @@
 | `app/electron/main.ts` | IPC handlers, события autoUpdater |
 | `app/electron/preload.ts` | новые IPC |
 | `app/src/vite-env.d.ts` | типы |
-| `app/src/components/Header.tsx` | progress, install button |
+| `app/src/components/Header.tsx` | версия в шапке; «Обновить» + версия в попапе профиля |
+| `app/src/components/SettingsPage.tsx` | прогресс/«скачано»; всегда видимая «Скачать» |
+| `app/src/styles.css` | `.app-header__version`, `.user-menu__update-version` |
 | `app/scripts/upload-release.js` | upload latest.yml + blockmap |
 | `server/src/routes/updates.ts` | static /app/updates/* |
 | `server/src/index.ts` | mount updates static |
@@ -207,12 +243,13 @@
 
 - [ ] Установить 1.3.3 в `Program Files` или `%LocalAppData%`
 - [ ] Опубликовать 1.4.0-test на сервер (upload-release-full)
-- [ ] Запустить 1.3.3 → «Обновить» → скачивание → перезапуск → версия 1.4.0
+- [ ] Запустить 1.3.3 → через ≤1 мин фоновое скачивание → в Настройках «Скачивание… N%» → «Обновление скачано»
+- [ ] В попапе профиля «Обновить» + мелкая «1.4.0» → перезапуск → версия 1.4.0; в шапке отображается «1.4.0»
 - [ ] `%AppData%\rest-info\REST-INFO\settings.json` — **на месте** (serverUrl, authToken)
-- [ ] Обновление при открытой теме с несохранёнными правками — предупредить или отложить install
-- [ ] Обрыв сети mid-download — ошибка, retry
-- [ ] Offline — «нет сети», без падения
-- [ ] Старый клиент 1.3.3 — старый flow (скачать Setup) всё ещё работает через `GET /app/update`
+- [ ] Обрыв mid-download → закрыть app → открыть → partial удалён → полная перекачка
+- [ ] Offline — проверка молча пропускается, без падения
+- [ ] Настройки: «Скачать» Setup 3 раза подряд — кнопка не пропадает, версия на сервере на месте
+- [ ] Старый клиент 1.3.3 — старый flow (скачать Setup) через `GET /app/update`
 
 ### Edge cases
 
@@ -233,6 +270,7 @@
 | Старые клиенты | оставить `GET /app/update` + ручной Setup |
 | Потеря данных при update | `%AppData%` не трогается NSIS; протестировать |
 | Несохранённые правки | проверять `hasPendingChanges` перед `quitAndInstall` |
+| Битый partial после обрыва | purge cache + full re-download на следующей проверке |
 
 ---
 
@@ -253,15 +291,17 @@
 
 ```
 [ ] 1. package.json: electron-updater + publish + nsis oneClick
-[ ] 2. dist:ascii → проверить latest.yml и blockmap в release/
+[ ] 2. dist:ascii → latest.yml + blockmap
 [ ] 3. server: GET /app/updates/* static
-[ ] 4. upload-release.js: заливка yml + blockmap + exe
-[ ] 5. updates.ts: autoUpdater events + quitAndInstall
-[ ] 6. main/preload/types: IPC
-[ ] 7. Header.tsx: progress + install UX
-[ ] 8. Тест 1.3.3 → 1.4.0 на Windows
-[ ] 9. docs: scripts.md, testing-checklist, PROJECT-STATUS
-[ ] 10. graphify update .
+[ ] 4. upload-release.js: yml + blockmap + exe
+[ ] 5. updates.ts: autoUpdater, interval 60s, purge partial, quitAndInstall
+[ ] 6. main/preload/types: IPC (install, progress → settings only)
+[ ] 7. Header: версия слева; «Обновить» + версия в попапе профиля
+[ ] 8. SettingsPage: прогресс/«скачано»; «Скачать» always-on для admin
+[ ] 9. styles.css: мелкие версии
+[ ] 10. Тест: фон, обрыв, повторное скачивание Setup
+[ ] 11. docs: scripts.md, testing-checklist, PROJECT-STATUS
+[ ] 12. graphify update .
 ```
 
 ---

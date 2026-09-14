@@ -13,6 +13,8 @@ export class ServerApiError extends Error {
   }
 }
 
+export const INVALID_SERVER_URL_MESSAGE = 'Неверно указан URL сервера'
+
 function baseUrl(): string {
   const url = normalizeServerUrl(readSettings().serverUrl)
   if (!url) throw new ServerApiError('URL сервера не указан', 0)
@@ -86,11 +88,46 @@ function shouldPeekAfterRequest(requestPath: string, init?: RequestInit & { skip
   return true
 }
 
+export async function validateServerUrl(rawUrl: string): Promise<string> {
+  const url = normalizeServerUrl(rawUrl)
+  if (!url) throw new ServerApiError('URL сервера не указан', 0)
+
+  let res: Response
+  try {
+    res = await fetch(`${url}/health`, {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch {
+    throw new ServerApiError(INVALID_SERVER_URL_MESSAGE, 0)
+  }
+
+  const text = await res.text()
+  let body: unknown = null
+  if (text) {
+    try {
+      body = JSON.parse(text)
+    } catch {
+      body = text
+    }
+  }
+
+  if (
+    !res.ok ||
+    !body ||
+    typeof body !== 'object' ||
+    (body as { ok?: boolean }).ok !== true
+  ) {
+    throw new ServerApiError(INVALID_SERVER_URL_MESSAGE, res.status, body)
+  }
+
+  return url
+}
+
 export async function isServerReachable(): Promise<boolean> {
   try {
     const settings = readSettings()
     if (!settings.serverUrl.trim()) return false
-    await serverFetch<{ ok: boolean }>('/health', { skipAuth: true })
+    await validateServerUrl(settings.serverUrl)
     return true
   } catch {
     return false

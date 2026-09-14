@@ -6,6 +6,7 @@ import type {
   SessionLogLevel,
   StorageStats,
   SyncStatus,
+  UpdateInfo,
   UserRole,
   WhitelistEntry,
   WorkDepartmentId,
@@ -108,6 +109,7 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [ownerEmail, setOwnerEmail] = useState('')
   const [latestRelease, setLatestRelease] = useState<LatestReleaseInfo | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [downloadingLatest, setDownloadingLatest] = useState(false)
   const [editingUser, setEditingUser] = useState<PublicUser | null>(null)
   const [editName, setEditName] = useState('')
@@ -170,11 +172,16 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
     void reload().catch((e) => setError(e instanceof Error ? e.message : 'Ошибка загрузки'))
     void reloadSessionLogs()
     void window.spravochnik.getLatestRelease().then(setLatestRelease).catch(() => undefined)
+    void window.spravochnik.getUpdateStatus().then(setUpdateInfo).catch(() => undefined)
     const offLog = window.spravochnik.onSessionLog(() => {
       void reloadSessionLogs()
     })
+    const offUpdate = window.spravochnik.onUpdateStatus((info) => {
+      setUpdateInfo(info)
+    })
     return () => {
       offLog()
+      offUpdate()
     }
   }, [])
 
@@ -490,6 +497,22 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
 
         <section className="settings-section">
           <h2>Приложение</h2>
+          <p className="settings-app-version">
+            Установленная версия: <strong>{updateInfo?.currentVersion ?? '—'}</strong>
+          </p>
+          {updateInfo?.phase === 'downloading' && updateInfo.progress != null && (
+            <p className="settings-app-update-progress">
+              Скачивание… {updateInfo.progress}%
+            </p>
+          )}
+          {updateInfo?.downloaded && updateInfo.version && (
+            <p className="settings-app-update-ready">
+              Обновление скачано — установите из меню профиля (Обновить {updateInfo.version})
+            </p>
+          )}
+          {updateInfo?.phase === 'error' && updateInfo.error && (
+            <p className="muted settings-section__hint">{updateInfo.error}</p>
+          )}
           <p className="settings-app-download">
             Скачать последнюю версию приложения{' '}
             <button

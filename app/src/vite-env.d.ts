@@ -266,6 +266,8 @@ export interface SpravochnikApi {
 
   }>
 
+  installUpdate: () => Promise<{ ok: boolean; error?: string }>
+
   getLatestRelease: () => Promise<LatestReleaseInfo>
 
   downloadLatestRelease: () => Promise<{

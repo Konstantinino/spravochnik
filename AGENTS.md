@@ -27,8 +27,9 @@
 
 ## Обновления приложения (v2)
 
-- Проверка: `GET /app/update` на `serverUrl`, **только при наличии сети**
-- Публикация: `app/scripts/upload-release.js`
+- **1.4.0+:** `electron-updater` — фоновая проверка каждые 60 с, скачивание `latest.yml` + delta через `GET /app/updates/*`; установка из попапа профиля («Обновить» / «Скачивание…»)
+- **Legacy (<1.4.0):** `GET /app/update` — скачать Setup.exe вручную
+- Публикация: `app/scripts/upload-release.js` (Setup + `latest.yml` + `.blockmap`)
 - Разовый fix legacy-путей медиа после import: `app/scripts/fix-media-paths.js` → `POST /admin/fix-media-paths` (см. `docs/fix-media-paths.md`)
 - Яндекс.Диск в `updates.ts` **удалён**
 
@@ -54,16 +55,16 @@ graphify update .
 
 | Файл | Назначение |
 |---|---|
-| `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment` |
-| `server-api.ts` | HTTP-клиент к REST API |
-| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа при save, reconcile create (без дублей id) |
+| `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment`, `updates:install`, валидация URL сервера |
+| `server-api.ts` | HTTP-клиент к REST API; `validateServerUrl()` через `GET /health` |
+| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа при save, reconcile create (без дублей id), `ensureTopicMediaDownloaded` |
 | `session-log.ts` | журнал сессии (ring buffer), IPC для настроек |
 | `guide-data.ts` | reconcile `has_children` в локальном JSON |
 | `media-layout.ts` | пути `media/{отдел}/{id}/images|files`, миграция legacy → `support/` |
 | `sync-backend.ts` | server vs yandex по `STORAGE_BACKEND` |
 | `auth-store.ts` | accounts.json, settings, сессия |
-| `topic-media.ts` | фото темы + вложения файлов (до 10 МБ); диск: `media/{отдел}/{id темы}/images|files/` |
-| `updates.ts` | проверка/скачивание обновлений с сервера |
+| `topic-media.ts` | фото темы + вложения файлов (до 10 МБ); диск: `media/{отдел}/{id темы}/images|files/`; cleanup с учётом `photos`/`documents` |
+| `updates.ts` | `electron-updater`: фоновая проверка/скачивание, `installUpdate()` |
 | `export-for-server.ts` | упаковка данных (CLI, не UI) |
 
 ### Сервер (`server/src/`)
@@ -77,7 +78,7 @@ graphify update .
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
-| `routes/updates.ts` | GET /app/update, download |
+| `routes/updates.ts` | GET /app/update (legacy), GET /app/updates/* (latest.yml, blockmap, Setup) |
 | `import-from-json.ts` | импорт из REST-INFO-export |
 | `lib/fix-media-paths.ts` | reconcile `media_files.relative_path` с файлами на диске (по basename) |
 | `fix-media-paths.ts` | CLI на сервере: `node dist/fix-media-paths.js [--apply]` |
@@ -92,7 +93,9 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
 | `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
-| `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; ⋮ → копия ссылки; ← Назад; Esc; выпадающий список отделов (все роли, кроме шаблонов у не-staff) |
+| `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; версия в шапке; профиль → «Обновить»; ⋮ → копия ссылки; ← Назад; Esc; выпадающий список отделов |
+| `Search.tsx` | локальный «Сбросить» после правки темы |
+| `hooks/usePreserveTextareaFocus.ts` | сохранение фокуса textarea при Alt+Shift (Windows) |
 | `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | выбор родителя / ссылки «+» — полный список отдела, только название темы; родитель → авто party |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
 | `TopicList.tsx` | дерево тем (корни через `buildTree`) |
@@ -155,7 +158,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.3.3.exe
+# → app/release/REST-INFO-Setup-1.4.0.exe
 ```
 
 ## Владелец / bootstrap
@@ -174,7 +177,8 @@ npm run dist:ascii
 5. **Incremental sync:** исправлен баг обнуления users; merge вместо replace.
 6. **Оффлайн-удаление темы** (admin/owner): в очередь `delete_topic`; «Синхронизировать» удаляет на сервере вместе с подтемами.
 7. **Автоподгрузка с сервера** не перезаписывает локальные правки темы, пока в очереди `pending-operations` или `hasPendingChanges` (кроме force sync).
-8. **Legacy-пути медиа в БД после import:** в `media_files` могут остаться `media/images/uuid.jpg`, файлы на диске — `media/{отдел}/{id}/images/uuid.jpg` → sync 404 при «Синхронизировать». Fix: один раз `fix-media-paths.js --apply` (см. `docs/fix-media-paths.md`); файлы на диске не перемещает.
+8. **Legacy-пути медиа в БД после import:** в `media_files` могут остаться `media/images/uuid.jpg`, файлы на диске — `media/{отдел}/{id}/images/uuid.jpg` → sync 404 при «Синхронизировать». Fix: один раз `fix-media-paths.js --apply` (см. `docs/fix-media-paths.md`); файлы на диске не перемещает. **Production (9 сент.):** fix применён (107 записей).
+9. **Auto-update 1.4.0:** требует deploy сервера с `GET /app/updates/*` и публикации `latest.yml` + blockmap через `upload-release.js`.
 
 ## Правила для агента
 
@@ -187,6 +191,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.3.3** (`app/package.json`)
+- Клиент: **1.4.0** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

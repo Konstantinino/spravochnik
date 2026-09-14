@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import express, { Router } from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import { query } from '../db/pool.js'
@@ -6,6 +6,20 @@ import { query } from '../db/pool.js'
 const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 'updates')
 
 export const updatesRouter = Router()
+
+/** electron-updater generic provider: latest.yml, Setup.exe, .blockmap */
+updatesRouter.use(
+  '/updates',
+  express.static(UPDATES_DIR, {
+    index: false,
+    fallthrough: true,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.yml')) {
+        res.setHeader('Content-Type', 'text/yaml; charset=utf-8')
+      }
+    },
+  }),
+)
 
 function compareVersions(a: string, b: string): number {
   const pa = a.replace(/^v/i, '').split(/[.+-]/).map((x) => parseInt(x, 10) || 0)

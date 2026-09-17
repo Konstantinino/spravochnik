@@ -164,5 +164,7 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
   deleteItem: (payload: unknown) => ipcRenderer.invoke('delete-item', payload),
 
+  reorderTopics: (payload: unknown) => ipcRenderer.invoke('reorder-topics', payload),
+
 })
 

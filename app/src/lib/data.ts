@@ -17,7 +17,7 @@ export function isArchived(item: GuideItem): boolean {
 /**
  * Filter sidebar list.
  * - archive: only archived
- * - all / supplier / customer: exclude archived; party filter for support
+ * - all / supplier / customer / errors / additional: exclude archived; party filter for support
  */
 export function filterItemsByView(items: GuideItem[], filter: TopicViewFilter): GuideItem[] {
   if (filter === 'archive') {
@@ -37,16 +37,94 @@ export function compareTopicsByTitle(a: GuideItem, b: GuideItem): number {
   return (a.question || '').localeCompare(b.question || '', 'ru', { sensitivity: 'base' })
 }
 
+function hasSortIndex(item: GuideItem): boolean {
+  return item.sort_index != null && Number.isFinite(item.sort_index)
+}
+
+/** List order: sort_index first, then title for ties / legacy topics. */
+export function compareTopicsForList(a: GuideItem, b: GuideItem): number {
+  const aHas = hasSortIndex(a)
+  const bHas = hasSortIndex(b)
+  if (aHas && bHas) {
+    const byIndex = a.sort_index! - b.sort_index!
+    if (byIndex !== 0) return byIndex
+  } else if (aHas) {
+    return -1
+  } else if (bHas) {
+    return 1
+  }
+  return compareTopicsByTitle(a, b)
+}
+
 export function buildTree(items: GuideItem[]): GuideItem[] {
   return items
     .filter((item) => item.parent_id == null)
-    .sort(compareTopicsByTitle)
+    .sort(compareTopicsForList)
 }
 
 export function getChildren(items: GuideItem[], parentId: number): GuideItem[] {
   return items
     .filter((item) => item.parent_id === parentId)
-    .sort(compareTopicsByTitle)
+    .sort(compareTopicsForList)
+}
+
+/** Assign sort_index 0..n-1 within each sibling group (keeps current list order). */
+export function ensureSortIndexes(items: GuideItem[]): GuideItem[] {
+  const byParent = new Map<string, GuideItem[]>()
+  for (const item of items) {
+    const key = item.parent_id == null ? 'root' : String(item.parent_id)
+    const group = byParent.get(key) ?? []
+    group.push(item)
+    byParent.set(key, group)
+  }
+
+  const updates = new Map<number, number>()
+  for (const group of byParent.values()) {
+    const ordered = [...group].sort(compareTopicsForList)
+    ordered.forEach((item, index) => updates.set(item.id, index))
+  }
+
+  return items.map((item) => {
+    const next = updates.get(item.id)
+    if (next === undefined || item.sort_index === next) return item
+    return { ...item, sort_index: next }
+  })
+}
+
+/** Reorder siblings after drag-and-drop; returns changed { id, sort_index } pairs. */
+export function reorderSiblingTopics(
+  items: GuideItem[],
+  parentId: number | null,
+  draggedId: number,
+  targetId: number,
+): { items: GuideItem[]; changes: Array<{ id: number; sort_index: number }> } {
+  const siblings = items
+    .filter((item) => (item.parent_id ?? null) === parentId)
+    .sort(compareTopicsForList)
+  const ids = siblings.map((item) => item.id)
+  const fromIdx = ids.indexOf(draggedId)
+  const toIdx = ids.indexOf(targetId)
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) {
+    return { items, changes: [] }
+  }
+
+  const nextIds = [...ids]
+  nextIds.splice(fromIdx, 1)
+  nextIds.splice(toIdx, 0, draggedId)
+
+  const indexById = new Map<number, number>()
+  nextIds.forEach((id, index) => indexById.set(id, index))
+
+  const changes: Array<{ id: number; sort_index: number }> = []
+  const nextItems = items.map((item) => {
+    const sortIndex = indexById.get(item.id)
+    if (sortIndex === undefined) return item
+    if (item.sort_index === sortIndex) return item
+    changes.push({ id: item.id, sort_index: sortIndex })
+    return { ...item, sort_index: sortIndex }
+  })
+
+  return { items: nextItems, changes }
 }
 
 /** Recompute has_children from actual non-archived children (fixes stale flags). */
@@ -77,7 +155,7 @@ export function getItemPath(items: GuideItem[], itemId: number): string[] {
 export function getFolders(items: GuideItem[]): GuideItem[] {
   return items
     .filter((item) => item.has_children)
-    .sort(compareTopicsByTitle)
+    .sort(compareTopicsForList)
 }
 
 /** All descendant ids of rootId (not including rootId itself). */

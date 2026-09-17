@@ -23,6 +23,7 @@ interface GuideItem {
   has_children?: boolean
   party?: string
   archived?: boolean
+  sort_index?: number | null
   image_display?: Record<string, number>
   photos?: unknown[]
   documents?: unknown[]
@@ -159,14 +160,19 @@ async function importFromDir(dataDir: string, mediaDir?: string): Promise<void> 
         if (typeof item.id !== 'number') continue
         maxId = Math.max(maxId, item.id)
 
+        const sortIndex =
+          item.sort_index === null || item.sort_index === undefined
+            ? null
+            : parseInt(String(item.sort_index), 10)
+
         await client.query(
           `INSERT INTO topics (
              department_id, id, question, answer, parent_id, has_children, party,
-             archived, image_display, photos, documents, version
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1)
+             archived, sort_index, image_display, photos, documents, version
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1)
            ON CONFLICT (department_id, id) DO UPDATE SET
              question = $3, answer = $4, parent_id = $5, has_children = $6, party = $7,
-             archived = $8, image_display = $9, photos = $10, documents = $11,
+             archived = $8, sort_index = $9, image_display = $10, photos = $11, documents = $12,
              version = topics.version + 1, updated_at = NOW()`,
           [
             deptId,
@@ -177,6 +183,7 @@ async function importFromDir(dataDir: string, mediaDir?: string): Promise<void> 
             Boolean(item.has_children),
             item.party ?? null,
             Boolean(item.archived),
+            Number.isFinite(sortIndex) ? sortIndex : null,
             item.image_display ? JSON.stringify(item.image_display) : null,
             JSON.stringify(item.photos ?? []),
             JSON.stringify(item.documents ?? []),

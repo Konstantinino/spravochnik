@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GuideItem } from '../types'
-import { compareTopicsByTitle, topicDisplayLabel, topicMatchesQuery } from '../lib/data'
+import { compareTopicsForList, topicDisplayLabel, topicMatchesQuery } from '../lib/data'
 
 export type TopicLinkPickerState = {
   mode: 'insert' | 'wrap'
@@ -37,7 +37,7 @@ export function TopicLinkPicker({
     return items
       .filter((item) => item.id !== excludeId)
       .filter((item) => topicMatchesQuery(items, item, open.query))
-      .sort(compareTopicsByTitle)
+      .sort(compareTopicsForList)
   }, [items, excludeId, open])
 
   useEffect(() => {

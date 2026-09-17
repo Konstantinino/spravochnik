@@ -6,6 +6,7 @@ export type OperationType =
   | 'create_topic'
   | 'update_topic'
   | 'delete_topic'
+  | 'reorder_topics'
   | 'set_user_role'
   | 'delete_user'
   | 'transfer_ownership'

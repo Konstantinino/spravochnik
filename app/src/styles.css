@@ -475,6 +475,35 @@ option {
   padding: 8px 0;
 }
 
+.topic-party-section {
+  list-style: none;
+}
+
+.topic-party-section + .topic-party-section .topic-party-section__heading {
+  margin-top: 6px;
+}
+
+.topic-party-section__heading {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 2px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(28, 36, 48, 0.52);
+  background: rgba(28, 36, 48, 0.045);
+  user-select: none;
+  pointer-events: none;
+}
+
+.topic-party-section__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 /* Guide line for nested subtopics */
 .topic-tree .topic-tree {
   position: relative;
@@ -510,6 +539,94 @@ option {
 .topic-item.is-selected {
   background: var(--selected);
   border-color: var(--selected-border);
+}
+
+.topic-list.is-reorder-active {
+  user-select: none;
+}
+
+/* Pointer reorder: invalid drop → ⊘, valid sibling → move (like HTML5 DnD). */
+body.topic-reorder-dragging,
+body.topic-reorder-dragging * {
+  cursor: not-allowed !important;
+}
+
+body.topic-reorder-dragging.topic-reorder-drop-ok,
+body.topic-reorder-dragging.topic-reorder-drop-ok * {
+  cursor: move !important;
+}
+
+.topic-list.is-reorder-active .topic-item.is-reorder-mode {
+  background: rgba(232, 240, 254, 0.95);
+  border-color: rgba(26, 115, 232, 0.18);
+  cursor: grab;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+@keyframes topic-reorder-focus-flash {
+  0% {
+    background: rgba(232, 240, 254, 0.95);
+    border-color: rgba(26, 115, 232, 0.18);
+  }
+  18% {
+    background: rgba(255, 152, 0, 0.42);
+    border-color: rgba(230, 120, 0, 0.58);
+  }
+  82% {
+    background: rgba(255, 152, 0, 0.42);
+    border-color: rgba(230, 120, 0, 0.58);
+  }
+  100% {
+    background: rgba(232, 240, 254, 0.95);
+    border-color: rgba(26, 115, 232, 0.18);
+  }
+}
+
+.topic-item.is-reorder-mode.is-dragging {
+  opacity: 0.35;
+  cursor: grabbing;
+}
+
+.topic-reorder-ghost {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(26, 115, 232, 0.35);
+  background: rgba(232, 240, 254, 0.98);
+  box-shadow: 0 8px 24px rgba(28, 36, 48, 0.16);
+  font: inherit;
+  color: var(--text);
+}
+
+.topic-reorder-ghost__spacer {
+  flex-shrink: 0;
+  width: 28px;
+}
+
+.topic-reorder-ghost__label {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px 6px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topic-item.is-reorder-mode.is-drag-over {
+  background: rgba(26, 115, 232, 0.14);
+  border-color: rgba(26, 115, 232, 0.45);
+}
+
+.topic-list.is-reorder-active .topic-item.is-reorder-mode.is-reorder-focus-flash {
+  animation: topic-reorder-focus-flash 0.6s ease-in-out;
 }
 
 .topic-item__toggle,
@@ -669,6 +786,15 @@ option {
   width: 1px;
   background: rgba(28, 36, 48, 0.14);
   pointer-events: none;
+}
+
+.viewer-children--nested {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.viewer-children--nested::before {
+  left: 4px;
 }
 
 .viewer-children__item {

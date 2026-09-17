@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { DepartmentId, GuideItem, ImageDisplayMap, SupportParty } from '../types'
 import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
-import { getChildren, getItemParty, isArchived } from '../lib/data'
+import { getChildren, getItemParty, isArchived, topicDisplayLabel } from '../lib/data'
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
 import {
   IMAGE_SCALE_DEFAULT,
@@ -84,6 +84,46 @@ function nodeText(node: ReactNode): string {
 function fileExtLabel(name: string): string {
   const ext = name.includes('.') ? name.split('.').pop() : ''
   return ext ? ext.toUpperCase() : 'ФАЙЛ'
+}
+
+function ViewerChildrenTree({
+  parentId,
+  items,
+  currentId,
+  onNavigateToTopic,
+  nested = false,
+}: {
+  parentId: number
+  items: GuideItem[]
+  currentId: number
+  onNavigateToTopic: (id: number) => void
+  nested?: boolean
+}) {
+  const children = getChildren(items, parentId)
+  if (children.length === 0) return null
+
+  return (
+    <ul className={`viewer-children${nested ? ' viewer-children--nested' : ''}`}>
+      {children.map((child) => (
+        <li key={child.id}>
+          <button
+            type="button"
+            className={`viewer-children__item${child.id === currentId ? ' is-selected' : ''}`}
+            onClick={() => onNavigateToTopic(child.id)}
+          >
+            {topicDisplayLabel(child)}
+          </button>
+          <ViewerChildrenTree
+            parentId={child.id}
+            items={items}
+            currentId={currentId}
+            onNavigateToTopic={onNavigateToTopic}
+            nested
+          />
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 export function Viewer({
@@ -875,27 +915,20 @@ export function Viewer({
         </div>
       )}
 
-      {children.length > 0 && !editing && (
-        <ul className="viewer-children">
-          {children.map((child) => (
-            <li key={child.id}>
-              <button
-                type="button"
-                className={`viewer-children__item${child.id === current.id ? ' is-selected' : ''}`}
-                onClick={() => onNavigateToTopic(child.id)}
-              >
-                {child.question || 'Без названия'}
-              </button>
-            </li>
-          ))}
-        </ul>
+      {children.length > 0 && !editing && item && (
+        <ViewerChildrenTree
+          parentId={item.id}
+          items={items}
+          currentId={current.id}
+          onNavigateToTopic={onNavigateToTopic}
+        />
       )}
 
       {editing ? (
         <div className="viewer__editor">
           {showParty && (
             <label className="field">
-              <span>Поставщик / Заказчик</span>
+              <span>Категория</span>
               <select
                 value={party}
                 onChange={(e) => {

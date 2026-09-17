@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { GuideItem } from '../types'
 import {
-  compareTopicsByTitle,
+  compareTopicsForList,
   getDescendantIds,
   isValidParent,
   topicDisplayLabel,
@@ -44,7 +44,7 @@ export function ParentTopicField({
       .filter((item) => !excluded.has(item.id))
       .filter((item) => isValidParent(items, excludeId, item.id))
       .filter((item) => topicMatchesQuery(items, item, query))
-      .sort(compareTopicsByTitle)
+      .sort(compareTopicsForList)
   }, [items, excluded, excludeId, query])
 
   const selected = parentId != null ? items.find((i) => i.id === parentId) : null

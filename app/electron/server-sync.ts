@@ -97,6 +97,9 @@ let currentStatus: SyncStatus = {
 }
 
 let pendingConflicts: SyncConflictInfo[] = []
+let pullInFlight = 0
+
+const PULL_LOADING_LABEL = 'Загрузка данных…'
 
 function hasUnsyncedLocalWork(): boolean {
   const settings = readSettings()
@@ -177,6 +180,44 @@ export async function ensureTopicMediaDownloaded(
       appendSessionLog('warn', 'sync/media', `Не удалось скачать ${rel}: ${detail}`)
     }
   }
+}
+
+function isSupportPartyValue(
+  value: unknown,
+): value is 'supplier' | 'customer' | 'errors' | 'additional' {
+  return (
+    value === 'supplier' ||
+    value === 'customer' ||
+    value === 'errors' ||
+    value === 'additional'
+  )
+}
+
+/** Keep requested support party locally if an outdated API downgraded it to supplier. */
+function ensureRequestedPartyPersisted(
+  deptId: DepartmentId,
+  topicId: number,
+  requestedParty: unknown,
+): void {
+  if (deptId !== 'support' || !isSupportPartyValue(requestedParty)) return
+
+  const dept = departmentById(deptId)
+  const filePath = path.join(getUserDataRoot(), dept.fileName)
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>
+  const list = (data[dept.listKey] as Array<Record<string, unknown>>) ?? []
+  const idx = list.findIndex((t) => t.id === topicId)
+  if (idx < 0) return
+  const serverParty = list[idx].party
+  if (serverParty === requestedParty) return
+
+  list[idx].party = requestedParty
+  data[dept.listKey] = list
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+  appendSessionLog(
+    'warn',
+    'sync/party',
+    `Сервер вернул party=${String(serverParty)} для темы #${topicId}; локально оставлено ${requestedParty}`,
+  )
 }
 
 function applyTopicToLocal(deptId: DepartmentId, topic: Record<string, unknown>): void {
@@ -292,6 +333,27 @@ function shouldSkipRemotePull(): boolean {
   return settings.hasPendingChanges || hasPendingOperations()
 }
 
+function startPullStatus(): void {
+  pullInFlight++
+  emit({ code: 'syncing', label: PULL_LOADING_LABEL })
+}
+
+function finishPullStatus(finalize: () => SyncStatus): SyncStatus {
+  pullInFlight = Math.max(0, pullInFlight - 1)
+  if (pullInFlight > 0) return getSyncStatus()
+  return finalize()
+}
+
+/** Before first background pull — avoid showing «Актуально» while data is still loading. */
+export function showSyncLoadingIfOnline(): SyncStatus {
+  const settings = readSettings()
+  if (!settings.serverUrl.trim() || !settings.authToken.trim()) {
+    return refreshStatusFromSettings()
+  }
+  if (pullInFlight > 0) return getSyncStatus()
+  return emit({ code: 'syncing', label: PULL_LOADING_LABEL })
+}
+
 export async function pullFromServer(options?: {
   force?: boolean
   silent?: boolean
@@ -325,9 +387,12 @@ export async function pullFromServer(options?: {
     }
   }
 
+  startPullStatus()
   try {
     if (!options?.silent) {
       emit({ code: 'connecting', label: 'Подключение к серверу…' })
+    } else {
+      emit({ code: 'syncing', label: PULL_LOADING_LABEL })
     }
 
     const since = settings.lastSyncAt
@@ -336,9 +401,7 @@ export async function pullFromServer(options?: {
       skipRemotePull: true,
     })
 
-    if (!options?.silent) {
-      emit({ code: 'syncing', label: 'Загрузка данных…' })
-    }
+    emit({ code: 'syncing', label: PULL_LOADING_LABEL })
 
     if (changes.full) {
       for (const dept of DEPARTMENTS) {
@@ -409,6 +472,8 @@ export async function pullFromServer(options?: {
 
     if (!options?.silent) {
       emit({ code: 'syncing', label: 'Загрузка медиа…' })
+    } else {
+      emit({ code: 'syncing', label: PULL_LOADING_LABEL })
     }
     const mediaStats = await downloadMissingMedia(changes.media ?? [])
     if (mediaStats.failed > 0) {
@@ -433,21 +498,25 @@ export async function pullFromServer(options?: {
     if (options?.force && !options?.silent) {
       appendSessionLog('info', 'sync', 'Полная синхронизация завершена')
     }
-    return emit({
-      code: 'up_to_date',
-      label: 'Актуально',
-      ...(hasContent ? { lastPulledAt: changes.syncedAt } : {}),
-    })
+    return finishPullStatus(() =>
+      emit({
+        code: 'up_to_date',
+        label: 'Актуально',
+        ...(hasContent ? { lastPulledAt: changes.syncedAt } : {}),
+      }),
+    )
   } catch (e) {
     if (options?.silent) {
-      return getSyncStatus()
+      return finishPullStatus(() => refreshStatusFromSettings())
     }
     const detail = e instanceof Error ? e.message : String(e)
-    return emit({
-      code: 'error',
-      label: 'Ошибка загрузки',
-      detail,
-    })
+    return finishPullStatus(() =>
+      emit({
+        code: 'error',
+        label: 'Ошибка загрузки',
+        detail,
+      }),
+    )
   }
 }
 
@@ -482,6 +551,15 @@ async function replayOperation(op: PendingOperation): Promise<void> {
       const deptId = op.departmentId!
       const id = op.payload.id as number
       await serverFetch(`/departments/${deptId}/topics/${id}`, { method: 'DELETE' })
+      break
+    }
+    case 'reorder_topics': {
+      const deptId = op.departmentId!
+      const items = op.payload.items as Array<{ id: number; sort_index: number }>
+      await serverFetch(`/departments/${deptId}/topic-order`, {
+        method: 'PUT',
+        body: JSON.stringify({ items }),
+      })
       break
     }
     case 'set_user_role':
@@ -708,6 +786,35 @@ async function flushPendingMedia(): Promise<void> {
   }
 }
 
+export async function tryPushReorderOnline(
+  departmentId: DepartmentId,
+  items: Array<{ id: number; sort_index: number }>,
+): Promise<{ ok: true } | { ok: false; offline: boolean }> {
+  const reachable = await isServerReachable()
+  if (!reachable) {
+    return { ok: false, offline: true }
+  }
+
+  try {
+    await serverFetch(`/departments/${departmentId}/topic-order`, {
+      method: 'PUT',
+      body: JSON.stringify({ items }),
+    })
+    return { ok: true }
+  } catch (e) {
+    if (e instanceof ServerApiError) {
+      if (e.status === 0 || e.status >= 500 || e.status === 404) {
+        return { ok: false, offline: true }
+      }
+      // Legacy API: PUT .../topics/reorder was parsed as topicId "reorder"
+      if (e.status === 400 && String(e.message).includes('Некорректные параметры')) {
+        return { ok: false, offline: true }
+      }
+    }
+    throw e
+  }
+}
+
 export async function tryPushTopicOnline(
   type: 'create' | 'update' | 'delete',
   departmentId: DepartmentId,
@@ -728,6 +835,11 @@ export async function tryPushTopicOnline(
         { method: 'POST', body: JSON.stringify({ item: payload }) },
       )
       reconcileCreatedTopic(departmentId, clientId, result.topic)
+      ensureRequestedPartyPersisted(
+        departmentId,
+        result.topic.id as number,
+        payload.party,
+      )
     } else if (type === 'update') {
       const id = payload.id as number
       const headers: Record<string, string> = {}
@@ -737,6 +849,7 @@ export async function tryPushTopicOnline(
         { method: 'PUT', headers, body: JSON.stringify({ item: payload }) },
       )
       applyTopicToLocal(departmentId, result.topic)
+      ensureRequestedPartyPersisted(departmentId, id, payload.party)
     } else {
       const id = payload.id as number
       await serverFetch(`/departments/${departmentId}/topics/${id}`, { method: 'DELETE' })
@@ -786,6 +899,9 @@ export async function discardLocalChanges(): Promise<SyncStatus> {
 }
 
 export function refreshStatusFromSettings(): SyncStatus {
+  if (pullInFlight > 0) {
+    return getSyncStatus()
+  }
   const settings = readSettings()
   if (!settings.serverUrl.trim()) {
     return emit({ code: 'no_server', label: 'URL сервера не указан' })

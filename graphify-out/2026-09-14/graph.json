@@ -24917,7 +24917,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/src/components/Viewer.tsx",
-      "source_location": "L1050",
+      "source_location": "L1049",
       "weight": 1.0
     },
     {
@@ -25013,7 +25013,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/src/components/Viewer.tsx",
-      "source_location": "L990",
+      "source_location": "L989",
       "weight": 1.0
     },
     {
@@ -25025,7 +25025,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "app/src/components/Viewer.tsx",
-      "source_location": "L993",
+      "source_location": "L992",
       "weight": 1.0
     },
     {

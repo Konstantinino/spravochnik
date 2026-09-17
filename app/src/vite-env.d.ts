@@ -298,6 +298,11 @@ export interface SpravochnikApi {
 
   deleteItem: (payload: { departmentId: DepartmentId; id: number }) => Promise<GuideFile>
 
+  reorderTopics: (payload: {
+    departmentId: DepartmentId
+    items: Array<{ id: number; sort_index: number }>
+  }) => Promise<GuideFile>
+
 }
 
 

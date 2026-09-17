@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "app/package.json": {
-    "mtime": 1789380634.8681536,
-    "seen": 1789380767.2247808,
-    "ast_hash": "18ec4e55d664cff6a1e4ed89ec9d7e58",
+    "mtime": 1789392232.9558337,
+    "seen": 1789392325.842652,
+    "ast_hash": "8051fce372fd1d6305f5089c1ac03191",
     "semantic_hash": ""
   },
   "app/resources/data/app-update.json": {
@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "app/src/App.tsx": {
-    "mtime": 1789391764.284838,
-    "seen": 1789391774.9661012,
-    "ast_hash": "36fa9bbe39a96dd8506b8f75daee0254",
+    "mtime": 1789392023.7244084,
+    "seen": 1789392325.8440292,
+    "ast_hash": "f9eea07777d76f531acd7264251fb1cf",
     "semantic_hash": ""
   },
   "app/src/components/AuthScreen.tsx": {
@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "app/src/components/Viewer.tsx": {
-    "mtime": 1789391764.7942529,
-    "seen": 1789391774.9666598,
-    "ast_hash": "766cc894b23ac5c0d08d7579b4362be5",
+    "mtime": 1789392089.0557592,
+    "seen": 1789392325.844698,
+    "ast_hash": "96ebe0bdf4bc10865394b96314e27ec9",
     "semantic_hash": ""
   },
   "app/src/lib/data.ts": {
@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "docs/testing-checklist.md": {
-    "mtime": 1789383235.6883364,
-    "seen": 1789383255.5798492,
-    "ast_hash": "dfab64f1a3f9a1fd37ebf04b8d6c8836",
+    "mtime": 1789391785.0733476,
+    "seen": 1789392325.848921,
+    "ast_hash": "b6cd8f3839591e5af063c1748ec4eb3d",
     "semantic_hash": ""
   },
   "server/README.md": {

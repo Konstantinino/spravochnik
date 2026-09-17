@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react'
-import type { GuideItem } from '../types'
-import { buildTree, getChildren } from '../lib/data'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import type { GuideItem, SupportParty } from '../types'
+import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
+import { buildTree, getChildren, getItemParty, topicDisplayLabel } from '../lib/data'
 import type { TopicSearchFilter } from '../lib/search'
 
 /** Matches default `.topic-item` horizontal margin */
@@ -72,6 +74,142 @@ interface TopicListProps {
   selectedId: number | null
   onSelect: (id: number) => void
   searchFilter: TopicSearchFilter | null
+  /** Support + «Все»: group root topics under party section headings */
+  groupRootsByParty?: boolean
+  reorderMode?: boolean
+  canReorder?: boolean
+  onEnterReorderMode?: () => void
+  onExitReorderMode?: () => void
+  onReorderSiblings?: (parentId: number | null, draggedId: number, targetId: number) => void
+}
+
+function findScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null
+  while (node) {
+    const { overflowY } = getComputedStyle(node)
+    if (
+      (overflowY === 'auto' || overflowY === 'scroll') &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node
+    }
+    node = node.parentElement
+  }
+  return null
+}
+
+function isRowVisibleInScroll(row: HTMLElement, scrollEl: HTMLElement): boolean {
+  const rowRect = row.getBoundingClientRect()
+  const scrollRect = scrollEl.getBoundingClientRect()
+  return rowRect.top >= scrollRect.top - 2 && rowRect.bottom <= scrollRect.bottom + 2
+}
+
+function waitForScrollEnd(
+  scrollEl: HTMLElement,
+  options?: { timeoutMs?: number; settleMs?: number },
+): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? 2500
+  const settleMs = options?.settleMs ?? 100
+  const startScrollTop = scrollEl.scrollTop
+
+  return new Promise((resolve) => {
+    let finished = false
+    let settledTimer: ReturnType<typeof setTimeout> | undefined
+    let sawScroll = false
+
+    function finish() {
+      if (finished) return
+      finished = true
+      scrollEl.removeEventListener('scroll', onScroll)
+      scrollEl.removeEventListener('scrollend', onScrollEnd)
+      if (settledTimer) clearTimeout(settledTimer)
+      clearTimeout(noScrollTimer)
+      clearTimeout(timeoutTimer)
+      resolve()
+    }
+
+    function onScrollEnd() {
+      finish()
+    }
+
+    function onScroll() {
+      sawScroll = true
+      if (settledTimer) clearTimeout(settledTimer)
+      settledTimer = setTimeout(finish, settleMs)
+    }
+
+    const noScrollTimer = setTimeout(() => {
+      if (!sawScroll && scrollEl.scrollTop === startScrollTop) finish()
+    }, 150)
+
+    const timeoutTimer = setTimeout(finish, timeoutMs)
+
+    scrollEl.addEventListener('scroll', onScroll, { passive: true })
+    if ('onscrollend' in window) {
+      scrollEl.addEventListener('scrollend', onScrollEnd, { once: true })
+    }
+  })
+}
+
+const REORDER_DRAG_THRESHOLD_PX = 4
+const AUTO_SCROLL_EDGE_PX = 56
+const AUTO_SCROLL_MAX_PX = 18
+const REORDER_FOCUS_FLASH_MS = 600
+
+type ReorderPending = {
+  id: number
+  x: number
+  y: number
+  offsetX: number
+  offsetY: number
+  width: number
+  label: string
+}
+
+type ReorderDragSession = {
+  offsetX: number
+  offsetY: number
+  width: number
+  label: string
+}
+
+type ReorderDragGhost = {
+  label: string
+  x: number
+  y: number
+  width: number
+}
+
+function topicIdFromPoint(x: number, y: number): number | null {
+  const el = document.elementFromPoint(x, y)?.closest('[data-topic-id]')
+  if (!el) return null
+  const id = Number(el.getAttribute('data-topic-id'))
+  return Number.isFinite(id) ? id : null
+}
+
+function autoScrollContainer(scrollEl: HTMLElement, clientY: number): void {
+  const rect = scrollEl.getBoundingClientRect()
+  if (clientY < rect.top + AUTO_SCROLL_EDGE_PX) {
+    const t = (rect.top + AUTO_SCROLL_EDGE_PX - clientY) / AUTO_SCROLL_EDGE_PX
+    scrollEl.scrollTop -= Math.ceil(t * AUTO_SCROLL_MAX_PX)
+  } else if (clientY > rect.bottom - AUTO_SCROLL_EDGE_PX) {
+    const t = (clientY - (rect.bottom - AUTO_SCROLL_EDGE_PX)) / AUTO_SCROLL_EDGE_PX
+    scrollEl.scrollTop += Math.ceil(t * AUTO_SCROLL_MAX_PX)
+  }
+}
+
+function groupRootsByPartySections(
+  roots: GuideItem[],
+): Array<{ party: SupportParty; items: GuideItem[] }> {
+  const byParty = new Map<SupportParty, GuideItem[]>()
+  for (const party of SUPPORT_PARTIES) byParty.set(party, [])
+  for (const item of roots) {
+    byParty.get(getItemParty(item))!.push(item)
+  }
+  return SUPPORT_PARTIES.map((party) => ({
+    party,
+    items: byParty.get(party) ?? [],
+  })).filter((section) => section.items.length > 0)
 }
 
 function TreeNode({
@@ -81,6 +219,11 @@ function TreeNode({
   onSelect,
   depth,
   searchFilter,
+  reorderMode,
+  draggingId,
+  onReorderMouseDown,
+  dragOverId,
+  flashFocusId,
 }: {
   item: GuideItem
   items: GuideItem[]
@@ -88,6 +231,11 @@ function TreeNode({
   onSelect: (id: number) => void
   depth: number
   searchFilter: TopicSearchFilter | null
+  reorderMode: boolean
+  draggingId: number | null
+  onReorderMouseDown?: (id: number, e: React.MouseEvent) => void
+  dragOverId: number | null
+  flashFocusId: number | null
 }) {
   const allChildren = getChildren(items, item.id)
   const children = searchFilter
@@ -95,7 +243,7 @@ function TreeNode({
     : allChildren
   const isFolder = children.length > 0
   const [manualOpen, setManualOpen] = useState(depth < 1)
-  const open = searchFilter ? children.length > 0 : manualOpen
+  const open = reorderMode ? isFolder : searchFilter ? children.length > 0 : manualOpen
   const match = searchFilter?.matchById.get(item.id)
   const title = item.question || 'Без названия'
   const label = (() => {
@@ -113,10 +261,26 @@ function TreeNode({
   return (
     <li>
       <div
-        className={`topic-item${selectedId === item.id ? ' is-selected' : ''}${isFolder ? ' is-folder' : ''}`}
+        data-topic-id={item.id}
+        className={[
+          'topic-item',
+          selectedId === item.id && !reorderMode ? 'is-selected' : '',
+          isFolder ? 'is-folder' : '',
+          reorderMode ? 'is-reorder-mode' : '',
+          dragOverId === item.id ? 'is-drag-over' : '',
+          draggingId === item.id ? 'is-dragging' : '',
+          flashFocusId === item.id ? 'is-reorder-focus-flash' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         style={{
           marginLeft: `${rowMarginLeft(depth)}px`,
           paddingLeft: depth === 0 ? `${ROOT_PAD}px` : 0,
+        }}
+        onMouseDown={(e) => {
+          if (!reorderMode || e.button !== 0) return
+          e.preventDefault()
+          onReorderMouseDown?.(item.id, e)
         }}
       >
         {isFolder ? (
@@ -125,9 +289,10 @@ function TreeNode({
             className="topic-item__toggle"
             aria-label={open ? 'Свернуть' : 'Развернуть'}
             onClick={() => {
-              if (searchFilter) return
+              if (searchFilter || reorderMode) return
               setManualOpen((v) => !v)
             }}
+            tabIndex={reorderMode ? -1 : 0}
           >
             {open ? '▾' : '▸'}
           </button>
@@ -137,7 +302,11 @@ function TreeNode({
         <button
           type="button"
           className="topic-item__label"
-          onClick={() => onSelect(item.id)}
+          onClick={() => {
+            if (reorderMode) return
+            onSelect(item.id)
+          }}
+          tabIndex={reorderMode ? -1 : 0}
         >
           {label}
         </button>
@@ -156,6 +325,11 @@ function TreeNode({
               onSelect={onSelect}
               depth={depth + 1}
               searchFilter={searchFilter}
+              reorderMode={reorderMode}
+              draggingId={draggingId}
+              onReorderMouseDown={onReorderMouseDown}
+              dragOverId={dragOverId}
+              flashFocusId={flashFocusId}
             />
           ))}
         </ul>
@@ -164,10 +338,324 @@ function TreeNode({
   )
 }
 
-export function TopicList({ items, selectedId, onSelect, searchFilter }: TopicListProps) {
+function renderTreeNode(
+  item: GuideItem,
+  props: {
+    items: GuideItem[]
+    selectedId: number | null
+    onSelect: (id: number) => void
+    searchFilter: TopicSearchFilter | null
+    reorderMode: boolean
+    onReorderSiblings?: (parentId: number | null, draggedId: number, targetId: number) => void
+    draggingId: number | null
+    onReorderMouseDown?: (id: number, e: React.MouseEvent) => void
+    dragOverId: number | null
+    flashFocusId: number | null
+  },
+) {
+  return (
+    <TreeNode
+      key={item.id}
+      item={item}
+      items={props.items}
+      selectedId={props.selectedId}
+      onSelect={props.onSelect}
+      depth={0}
+      searchFilter={props.searchFilter}
+      reorderMode={props.reorderMode}
+      draggingId={props.draggingId}
+      onReorderMouseDown={props.onReorderMouseDown}
+      dragOverId={props.dragOverId}
+      flashFocusId={props.flashFocusId}
+    />
+  )
+}
+
+export function TopicList({
+  items,
+  selectedId,
+  onSelect,
+  searchFilter,
+  groupRootsByParty = false,
+  reorderMode = false,
+  canReorder = false,
+  onEnterReorderMode,
+  onExitReorderMode,
+  onReorderSiblings,
+}: TopicListProps) {
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number
+    y: number
+    topicId: number | null
+  } | null>(null)
+  const [reorderFocusId, setReorderFocusId] = useState<number | null>(null)
+  const [flashFocusId, setFlashFocusId] = useState<number | null>(null)
+  const [draggingId, setDraggingId] = useState<number | null>(null)
+  const [dragOverId, setDragOverId] = useState<number | null>(null)
+  const [dragGhost, setDragGhost] = useState<ReorderDragGhost | null>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+  const scrollElRef = useRef<HTMLElement | null>(null)
+  const reorderPendingRef = useRef<ReorderPending | null>(null)
+  const dragSessionRef = useRef<ReorderDragSession | null>(null)
+  const draggingIdRef = useRef<number | null>(null)
+  const pendingReorderFocusRef = useRef<number | null>(null)
+  const wasReorderModeRef = useRef(false)
+
+  useEffect(() => {
+    draggingIdRef.current = draggingId
+  }, [draggingId])
+
+  useEffect(() => {
+    scrollElRef.current = findScrollParent(listRef.current)
+  })
+
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = () => setCtxMenu(null)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('keydown', close)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('keydown', close)
+    }
+  }, [ctxMenu])
+
+  useEffect(() => {
+    const wasReorderMode = wasReorderModeRef.current
+    wasReorderModeRef.current = reorderMode
+
+    if (reorderMode && !wasReorderMode) {
+      const focusId = pendingReorderFocusRef.current ?? selectedId ?? null
+      pendingReorderFocusRef.current = null
+      setReorderFocusId(focusId)
+      return
+    }
+
+    if (!reorderMode && wasReorderMode) {
+      setDraggingId(null)
+      setDragOverId(null)
+      setDragGhost(null)
+      setReorderFocusId(null)
+      setFlashFocusId(null)
+      reorderPendingRef.current = null
+      dragSessionRef.current = null
+    }
+  }, [reorderMode, selectedId])
+
+  useEffect(() => {
+    if (!reorderMode || reorderFocusId == null) return
+
+    let cancelled = false
+    let flashTimer: ReturnType<typeof setTimeout> | undefined
+
+    void (async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      })
+      if (cancelled) return
+
+      const row = listRef.current?.querySelector(
+        `[data-topic-id="${reorderFocusId}"]`,
+      ) as HTMLElement | null
+      if (!row) return
+
+      const scrollEl = scrollElRef.current ?? findScrollParent(listRef.current)
+      const needsScroll = scrollEl != null && !isRowVisibleInScroll(row, scrollEl)
+
+      if (needsScroll && scrollEl) {
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        await waitForScrollEnd(scrollEl)
+      } else {
+        row.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+      }
+
+      if (cancelled) return
+      setFlashFocusId(reorderFocusId)
+      flashTimer = setTimeout(() => setFlashFocusId(null), REORDER_FOCUS_FLASH_MS)
+    })()
+
+    return () => {
+      cancelled = true
+      if (flashTimer) clearTimeout(flashTimer)
+    }
+  }, [reorderMode, reorderFocusId])
+
+  function updateDragGhost(clientX: number, clientY: number) {
+    const session = dragSessionRef.current
+    if (!session) return
+    setDragGhost({
+      label: session.label,
+      width: session.width,
+      x: clientX - session.offsetX,
+      y: clientY - session.offsetY,
+    })
+  }
+
+  const canDropOnTarget = useCallback(
+    (draggedId: number, targetId: number): boolean => {
+      if (draggedId === targetId) return false
+      const dragged = items.find((entry) => entry.id === draggedId)
+      const target = items.find((entry) => entry.id === targetId)
+      if (!dragged || !target) return false
+      if ((dragged.parent_id ?? null) !== (target.parent_id ?? null)) return false
+      if (groupRootsByParty && (dragged.parent_id ?? null) === null) {
+        return getItemParty(dragged) === getItemParty(target)
+      }
+      return true
+    },
+    [groupRootsByParty, items],
+  )
+
+  const handleDropOnItem = useCallback(
+    (targetId: number) => {
+      const activeId = draggingIdRef.current
+      if (activeId == null || !canDropOnTarget(activeId, targetId)) return
+      const dragged = items.find((entry) => entry.id === activeId)
+      if (!dragged) return
+      onReorderSiblings?.(dragged.parent_id ?? null, activeId, targetId)
+    },
+    [canDropOnTarget, items, onReorderSiblings],
+  )
+
+  const handleReorderMouseDown = useCallback(
+    (id: number, e: React.MouseEvent) => {
+      const row = e.currentTarget as HTMLElement
+      const rect = row.getBoundingClientRect()
+      const item = items.find((entry) => entry.id === id)
+      reorderPendingRef.current = {
+        id,
+        x: e.clientX,
+        y: e.clientY,
+        offsetX: e.clientX - rect.left,
+        offsetY: e.clientY - rect.top,
+        width: rect.width,
+        label: item ? topicDisplayLabel(item) : 'Без названия',
+      }
+    },
+    [items],
+  )
+
+  /** Pointer reorder (not HTML5 drag) so wheel scroll works while moving a topic. */
+  useEffect(() => {
+    if (!reorderMode) {
+      document.body.classList.remove('topic-reorder-dragging', 'topic-reorder-drop-ok')
+      return
+    }
+
+    function clearReorderDragCursor() {
+      document.body.classList.remove('topic-reorder-dragging', 'topic-reorder-drop-ok')
+    }
+
+    function clearReorderPointer() {
+      reorderPendingRef.current = null
+      dragSessionRef.current = null
+      draggingIdRef.current = null
+      setDraggingId(null)
+      setDragOverId(null)
+      setDragGhost(null)
+      clearReorderDragCursor()
+    }
+
+    function updateHoverTarget(clientX: number, clientY: number) {
+      const activeId = draggingIdRef.current
+      if (activeId == null) {
+        clearReorderDragCursor()
+        return
+      }
+
+      document.body.classList.add('topic-reorder-dragging')
+      const targetId = topicIdFromPoint(clientX, clientY)
+      const canDrop = targetId != null && canDropOnTarget(activeId, targetId)
+
+      if (canDrop) {
+        document.body.classList.add('topic-reorder-drop-ok')
+        setDragOverId(targetId)
+      } else {
+        document.body.classList.remove('topic-reorder-drop-ok')
+        setDragOverId(null)
+      }
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      const pending = reorderPendingRef.current
+      const scrollEl = scrollElRef.current
+
+      if (pending && draggingIdRef.current == null) {
+        const dx = e.clientX - pending.x
+        const dy = e.clientY - pending.y
+        if (dx * dx + dy * dy >= REORDER_DRAG_THRESHOLD_PX * REORDER_DRAG_THRESHOLD_PX) {
+          draggingIdRef.current = pending.id
+          dragSessionRef.current = {
+            offsetX: pending.offsetX,
+            offsetY: pending.offsetY,
+            width: pending.width,
+            label: pending.label,
+          }
+          setDraggingId(pending.id)
+          updateDragGhost(e.clientX, e.clientY)
+        }
+      }
+
+      if (draggingIdRef.current != null) {
+        if (scrollEl) autoScrollContainer(scrollEl, e.clientY)
+        updateDragGhost(e.clientX, e.clientY)
+        updateHoverTarget(e.clientX, e.clientY)
+      }
+    }
+
+    function onMouseUp(e: MouseEvent) {
+      if (draggingIdRef.current != null) {
+        const targetId = topicIdFromPoint(e.clientX, e.clientY)
+        if (targetId != null) handleDropOnItem(targetId)
+      }
+      clearReorderPointer()
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      clearReorderPointer()
+    }
+  }, [reorderMode, canDropOnTarget, handleDropOnItem])
+
   const roots = buildTree(items).filter(
     (item) => !searchFilter || searchFilter.visibleIds.has(item.id),
   )
+  const showPartySections = groupRootsByParty
+  const partySections = showPartySections ? groupRootsByPartySections(roots) : []
+
+  function openContextMenu(e: React.MouseEvent) {
+    if (!canReorder && !reorderMode) return
+    e.preventDefault()
+    setCtxMenu({
+      x: e.clientX,
+      y: e.clientY,
+      topicId: topicIdFromPoint(e.clientX, e.clientY),
+    })
+  }
+
+  function beginReorderMode() {
+    pendingReorderFocusRef.current = ctxMenu?.topicId ?? selectedId ?? null
+    setCtxMenu(null)
+    onEnterReorderMode?.()
+  }
+
+  const treeNodeProps = {
+    items,
+    selectedId,
+    onSelect,
+    searchFilter,
+    reorderMode,
+    onReorderSiblings,
+    draggingId,
+    onReorderMouseDown: handleReorderMouseDown,
+    dragOverId,
+    flashFocusId,
+  }
 
   if (searchFilter && roots.length === 0) {
     return <div className="empty-hint">Ничего не найдено</div>
@@ -178,18 +666,72 @@ export function TopicList({ items, selectedId, onSelect, searchFilter }: TopicLi
   }
 
   return (
-    <ul className="topic-tree topic-list">
-      {roots.map((item) => (
-        <TreeNode
-          key={item.id}
-          item={item}
-          items={items}
-          selectedId={selectedId}
-          onSelect={onSelect}
-          depth={0}
-          searchFilter={searchFilter}
-        />
-      ))}
-    </ul>
+    <>
+      <ul
+        ref={listRef}
+        className={`topic-tree topic-list${reorderMode ? ' is-reorder-active' : ''}`}
+        onContextMenu={openContextMenu}
+      >
+        {showPartySections
+          ? partySections.map(({ party, items: sectionRoots }) => (
+              <li key={party} className="topic-party-section">
+                <div className="topic-party-section__heading">{SUPPORT_PARTY_LABELS[party]}</div>
+                <ul className="topic-party-section__list">
+                  {sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+                </ul>
+              </li>
+            ))
+          : roots.map((item) => renderTreeNode(item, treeNodeProps))}
+      </ul>
+
+      {dragGhost &&
+        createPortal(
+          <div
+            className="topic-reorder-ghost"
+            style={{
+              left: dragGhost.x,
+              top: dragGhost.y,
+              width: dragGhost.width,
+            }}
+            aria-hidden
+          >
+            <span className="topic-reorder-ghost__spacer" />
+            <span className="topic-reorder-ghost__label">{dragGhost.label}</span>
+          </div>,
+          document.body,
+        )}
+
+      {ctxMenu && (
+        <div
+          className="image-ctx-menu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          role="menu"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {reorderMode ? (
+            <button
+              type="button"
+              className="image-ctx-menu__item"
+              role="menuitem"
+              onClick={() => {
+                setCtxMenu(null)
+                onExitReorderMode?.()
+              }}
+            >
+              Завершить редактирование
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="image-ctx-menu__item"
+              role="menuitem"
+              onClick={() => beginReorderMode()}
+            >
+              Редактировать порядок
+            </button>
+          )}
+        </div>
+      )}
+    </>
   )
 }

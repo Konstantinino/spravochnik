@@ -73,8 +73,8 @@ export function isOwnerRole(role: string | undefined | null): boolean {
   return role === 'owner'
 }
 
-/** Только для отдела «Тех. поддержка»: Поставщик / Заказчик */
-export type SupportParty = 'supplier' | 'customer'
+/** Только для отдела «Тех. поддержка»: Поставщик / Заказчик / Ошибки / Дополнительно */
+export type SupportParty = 'supplier' | 'customer' | 'errors' | 'additional'
 
 /** Sidebar list filter (support has parties; all depts have archive for editors) */
 export type TopicViewFilter = SupportParty | 'all' | 'archive'
@@ -85,25 +85,40 @@ export type SupportPartyFilter = TopicViewFilter
 export const SUPPORT_PARTY_LABELS: Record<SupportParty, string> = {
   supplier: 'Поставщик',
   customer: 'Заказчик',
+  errors: 'Ошибки',
+  additional: 'Дополнительно',
 }
 
 export const TOPIC_VIEW_FILTER_LABELS: Record<TopicViewFilter, string> = {
   all: 'Все',
   supplier: 'Поставщик',
   customer: 'Заказчик',
+  errors: 'Ошибки',
+  additional: 'Дополнительно',
   archive: 'Архив',
 }
 
-export const SUPPORT_PARTIES: SupportParty[] = ['supplier', 'customer']
+export const SUPPORT_PARTIES: SupportParty[] = ['supplier', 'customer', 'errors', 'additional']
 
-/** Техподдержка: Все / Поставщик / Заказчик (+ Архив для editor/admin) */
-export const SUPPORT_VIEW_FILTERS: TopicViewFilter[] = ['all', 'supplier', 'customer']
+/** Техподдержка: Все / Поставщик / Заказчик / Ошибки / Дополнительно (+ Архив для editor/admin) */
+export const SUPPORT_VIEW_FILTERS: TopicViewFilter[] = [
+  'all',
+  'supplier',
+  'customer',
+  'errors',
+  'additional',
+]
 
 /** Остальные отделы: Все (+ Архив для editor/admin) */
 export const DEPT_VIEW_FILTERS: TopicViewFilter[] = ['all']
 
 export function isSupportParty(value: unknown): value is SupportParty {
-  return value === 'supplier' || value === 'customer'
+  return (
+    value === 'supplier' ||
+    value === 'customer' ||
+    value === 'errors' ||
+    value === 'additional'
+  )
 }
 
 export function isTopicViewFilter(value: unknown): value is TopicViewFilter {
@@ -235,10 +250,12 @@ export interface GuideItem {
   answer: string
   parent_id?: number | null
   has_children?: boolean
-  /** Техподдержка: поставщик или заказчик. Старые темы без поля = supplier */
+  /** Техподдержка: поставщик, заказчик или ошибки. Старые темы без поля = supplier */
   party?: SupportParty
   /** Archived topics hidden from «Все»; visible only in Архив for editor/admin */
   archived?: boolean
+  /** Custom order among siblings (same parent_id). Lower = higher in list. */
+  sort_index?: number
   photo?: string
   photos?: string[]
   documents?: GuideDocument[]

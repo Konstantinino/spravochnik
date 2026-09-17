@@ -81,8 +81,10 @@ import {
   pushAccountsFile,
   pushToYandex,
   refreshStatusFromSettings,
+  showSyncLoadingIfOnline,
   resolveSyncConflicts,
   tryPushTopicOnline,
+  tryPushReorderOnline,
   ensureTopicMediaDownloaded,
 } from './sync-backend'
 import { queueOperation } from './pending-operations'
@@ -135,6 +137,15 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ])
+
+const SUPPORT_PARTY_VALUES = ['supplier', 'customer', 'errors', 'additional'] as const
+type SupportPartyValue = (typeof SUPPORT_PARTY_VALUES)[number]
+
+function asSupportParty(value: unknown, fallback: SupportPartyValue = 'supplier'): SupportPartyValue {
+  return SUPPORT_PARTY_VALUES.includes(value as SupportPartyValue)
+    ? (value as SupportPartyValue)
+    : fallback
+}
 
 function ensureDataReady(): void {
   const root = getUserDataRoot()
@@ -895,7 +906,7 @@ function registerIpc(): void {
           answer: string
           parent_id?: number | null
           has_children?: boolean
-          party?: 'supplier' | 'customer'
+          party?: SupportPartyValue
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
           image_display?: Record<string, number>
@@ -933,12 +944,7 @@ function registerIpc(): void {
           ? { image_display: payload.item.image_display }
           : {}),
         ...(payload.departmentId === 'support'
-          ? {
-              party:
-                payload.item.party === 'customer' || payload.item.party === 'supplier'
-                  ? payload.item.party
-                  : 'supplier',
-            }
+          ? { party: asSupportParty(payload.item.party) }
           : {}),
       }
 
@@ -1004,7 +1010,7 @@ function registerIpc(): void {
           answer: string
           parent_id?: number | null
           has_children?: boolean
-          party?: 'supplier' | 'customer'
+          party?: SupportPartyValue
           archived?: boolean
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
@@ -1069,12 +1075,7 @@ function registerIpc(): void {
         documents: payload.item.documents ?? list[idx].documents ?? [],
         ...(payload.departmentId === 'support'
           ? {
-              party:
-                payload.item.party === 'customer' || payload.item.party === 'supplier'
-                  ? payload.item.party
-                  : list[idx].party === 'customer'
-                    ? 'customer'
-                    : 'supplier',
+              party: asSupportParty(payload.item.party, asSupportParty(list[idx].party)),
             }
           : {}),
       }
@@ -1186,6 +1187,63 @@ function registerIpc(): void {
         }
         if (result.conflict) {
           throw new Error(`Конфликт: тема уже изменена на сервере (${result.conflict.title})`)
+        }
+      } else {
+        markLocalChange()
+      }
+      return data
+    },
+  )
+
+  ipcMain.handle(
+    'reorder-topics',
+    async (
+      _event,
+      payload: {
+        departmentId: DepartmentId
+        items: Array<{ id: number; sort_index: number }>
+      },
+    ) => {
+      requireEditDepartment(payload.departmentId)
+      if (!Array.isArray(payload.items) || payload.items.length === 0) {
+        throw new Error('Некорректный порядок тем')
+      }
+
+      const dept = departmentById(payload.departmentId)
+      const data = readGuideFile(dept.fileName) as Record<string, unknown>
+      const listKey = dept.listKey
+      const list = (data[listKey] as Array<Record<string, unknown>>) || []
+      const indexById = new Map(payload.items.map((entry) => [entry.id, entry.sort_index]))
+
+      for (const item of list) {
+        const id = item.id as number
+        const sortIndex = indexById.get(id)
+        if (sortIndex === undefined) continue
+        item.sort_index = sortIndex
+      }
+
+      data[listKey] = list
+      writeGuideFile(dept.fileName, data)
+
+      const settings = readSettings()
+      if (settings.serverUrl.trim()) {
+        try {
+          const result = await tryPushReorderOnline(payload.departmentId, payload.items)
+          if (result.ok) return readGuideFile(dept.fileName)
+          queueOperation({
+            type: 'reorder_topics',
+            departmentId: payload.departmentId,
+            payload: { items: payload.items },
+          })
+          markOfflinePending()
+        } catch (err) {
+          console.error('reorder-topics push failed', err)
+          queueOperation({
+            type: 'reorder_topics',
+            departmentId: payload.departmentId,
+            payload: { items: payload.items },
+          })
+          markOfflinePending()
         }
       } else {
         markLocalChange()
@@ -1478,7 +1536,7 @@ function registerIpc(): void {
 app.whenReady().then(() => {
   ensureDataReady()
   clearEphemeralSessionOnStartup()
-  refreshStatusFromSettings()
+  showSyncLoadingIfOnline()
   appendSessionLog('info', 'app', `Запуск REST INFO ${app.getVersion()}`)
 
   protocol.handle('spravochnik', (request) => {
@@ -1508,7 +1566,7 @@ app.whenReady().then(() => {
 
   setInterval(() => {
     void peekAndPullRemoteChanges()
-  }, 30_000)
+  }, 60_000)
 
   app.on('browser-window-focus', () => {
     void peekAndPullRemoteChanges()

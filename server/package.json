@@ -8,7 +8,7 @@
     "dev:local": "tsx src/dev-local.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "migrate": "node dist/migrate.js",
+    "migrate": "tsx src/migrate-cli.ts",
     "import-json": "node dist/import-from-json.js",
     "fix-media-paths": "node dist/fix-media-paths.js"
   },

@@ -19,7 +19,7 @@
 | Docker | `docker-compose.yml` | postgres:16 + api |
 | Данные для деплоя | `REST-INFO-export/` | JSON + media (в `.gitignore`) |
 
-**Синхронизация:** клиент читает локальный кэш (`%AppData%\rest-info\REST-INFO\`), пишет на сервер онлайн, оффлайн — очередь `pending-operations.json` + `pending-media.json`. При сохранении темы фото/файлы уходят на сервер сразу (если есть сеть). Чужие правки подтягиваются автоматически: после API-запросов проверяется `GET /sync/status` (`globalVersion`), при изменении — incremental pull без перезапуска (также каждые 30 с и при фокусе окна).
+**Синхронизация:** клиент читает локальный кэш (`%AppData%\rest-info\REST-INFO\`), пишет на сервер онлайн, оффлайн — очередь `pending-operations.json` + `pending-media.json`. При сохранении темы фото/файлы уходят на сервер сразу (если есть сеть). Чужие правки подтягиваются автоматически: после API-запросов проверяется `GET /sync/status` (`globalVersion`), при изменении — incremental pull без перезапуска (также каждые 60 с и при фокусе окна). **Во время pull** в шапке: «Загрузка данных…»; после успеха — «Актуально».
 
 **Локальные настройки** (`settings.json` в том же каталоге): `serverUrl`, `authToken`, флаги sync. При установке новой версии Setup **не сбрасываются**.
 
@@ -57,7 +57,7 @@ graphify update .
 |---|---|
 | `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment`, `updates:install`, `app:focus-window`, валидация URL сервера |
 | `server-api.ts` | HTTP-клиент к REST API; `validateServerUrl()` через `GET /health` |
-| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа при save, reconcile create (без дублей id), `ensureTopicMediaDownloaded` |
+| `server-sync.ts` | pull/push, конфликты, очередь (`reorder_topics`), flush медиа при save, reconcile create (без дублей id), `ensureTopicMediaDownloaded`, `tryPushReorderOnline`, `ensureRequestedPartyPersisted`, `showSyncLoadingIfOnline` |
 | `session-log.ts` | журнал сессии (ring buffer), IPC для настроек |
 | `guide-data.ts` | reconcile `has_children` в локальном JSON |
 | `media-layout.ts` | пути `media/{отдел}/{id}/images|files`, миграция legacy → `support/` |
@@ -74,7 +74,7 @@ graphify update .
 | `index.ts` | Express app, роуты |
 | `routes/auth.ts` | login, register, JWT |
 | `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`** (owner, разовый fix legacy-путей медиа) |
-| `routes/topics.ts` | CRUD тем, блокировки |
+| `routes/topics.ts` | CRUD тем, блокировки, **`PUT /:dept/topic-order`** (`sort_index`) |
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
@@ -98,8 +98,8 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | `lib/restoreAppFocus.ts` | восстановление фокуса Electron после модалок / сброса |
 | `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | выбор родителя / ссылки «+» — полный список отдела, только название темы; родитель → авто party |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
-| `TopicList.tsx` | дерево тем (корни через `buildTree`) |
-| `lib/data.ts` | фильтры, `compareTopicsByTitle`, `canEditDepartment`, `topicDisplayLabel` |
+| `TopicList.tsx` | дерево тем, секции party (support + «Все»), **режим reorder** (pointer-drag, ghost) |
+| `lib/data.ts` | фильтры, `compareTopicsForList`, `ensureSortIndexes`, `reorderSiblingTopics`, `getItemParty`, `topicDisplayLabel` |
 | `lib/markdown.ts` | media src, ссылки тем, вложения `files/` |
 | `lib/textInsert.ts` | вставка / `+query` / обёртка выделения ссылкой |
 | `lib/textareaCaret.ts` | координаты каретки для пикера |
@@ -158,7 +158,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.4.1.exe
+# → app/release/REST-INFO-Setup-1.4.2.exe
 ```
 
 ## Владелец / bootstrap
@@ -179,6 +179,8 @@ npm run dist:ascii
 7. **Автоподгрузка с сервера** не перезаписывает локальные правки темы, пока в очереди `pending-operations` или `hasPendingChanges` (кроме force sync).
 8. **Legacy-пути медиа в БД после import:** в `media_files` могут остаться `media/images/uuid.jpg`, файлы на диске — `media/{отдел}/{id}/images/uuid.jpg` → sync 404 при «Синхронизировать». Fix: один раз `fix-media-paths.js --apply` (см. `docs/fix-media-paths.md`); файлы на диске не перемещает. **Production (9 сент.):** fix применён (107 записей).
 9. **Auto-update 1.4.0:** требует deploy сервера с `GET /app/updates/*` и публикации `latest.yml` + blockmap через `upload-release.js`.
+10. **Reorder + party categories:** на production нужны миграции **004** (`sort_index`), **005** (`errors`), **006** (`additional`); без них reorder уходит в офлайн-очередь, новые категории могут сохраняться как `supplier` на сервере.
+11. **Первый вход в reorder:** клиент проставляет `sort_index` по текущему порядку на экране (обычно = алфавит, если индексов ещё не было).
 
 ## Правила для агента
 
@@ -191,6 +193,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.4.1** (`app/package.json`)
+- Клиент: **1.4.2** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

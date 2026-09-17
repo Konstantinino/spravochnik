@@ -7,7 +7,9 @@ import { deleteTopicMediaFiles } from '../lib/media-layout.js'
 import {
   acquireTopicLock,
   DEPARTMENTS,
+  isSupportParty,
   isValidDepartment,
+  normalizeSupportParty,
   refreshHasChildren,
   releaseTopicLock,
   renewTopicLock,
@@ -142,7 +144,8 @@ topicsRouter.post(
         item.parent_id === null || item.parent_id === undefined
           ? null
           : parseInt(String(item.parent_id), 10)
-      const party = dept === 'support' ? (item.party === 'customer' ? 'customer' : 'supplier') : null
+      const party =
+        dept === 'support' ? normalizeSupportParty(item.party, 'supplier') : null
 
       const topic = await withTransaction(async (client) => {
         const idRes = await client.query<{ next_id: number }>(
@@ -152,11 +155,16 @@ topicsRouter.post(
         )
         const newId = idRes.rows[0]?.next_id ?? 1
 
+        const sortIndex =
+          item.sort_index === null || item.sort_index === undefined
+            ? null
+            : parseInt(String(item.sort_index), 10)
+
         await client.query(
           `INSERT INTO topics (
              department_id, id, question, answer, parent_id, has_children, party,
-             archived, image_display, photos, documents, version, updated_by
-           ) VALUES ($1, $2, $3, $4, $5, false, $6, false, $7, $8, $9, 1, $10)`,
+             archived, sort_index, image_display, photos, documents, version, updated_by
+           ) VALUES ($1, $2, $3, $4, $5, false, $6, false, $7, $8, $9, $10, 1, $11)`,
           [
             dept,
             newId,
@@ -164,6 +172,7 @@ topicsRouter.post(
             answer,
             parentId,
             party,
+            Number.isFinite(sortIndex) ? sortIndex : null,
             item.image_display ? JSON.stringify(item.image_display) : null,
             JSON.stringify(item.photos ?? []),
             JSON.stringify(item.documents ?? []),
@@ -185,6 +194,59 @@ topicsRouter.post(
     } catch (err) {
       console.error(err)
       res.status(500).json({ error: 'Ошибка создания темы' })
+    }
+  },
+)
+
+topicsRouter.put(
+  '/:dept/topic-order',
+  authMiddleware,
+  requireRole('editor', 'admin', 'owner'),
+  async (req: AuthRequest, res) => {
+    try {
+      const dept = param(req.params.dept)
+      if (!isValidDepartment(dept)) {
+        res.status(404).json({ error: 'Неизвестный отдел' })
+        return
+      }
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
+
+      const rawItems = req.body.items
+      if (!Array.isArray(rawItems) || rawItems.length === 0) {
+        res.status(400).json({ error: 'Некорректный список тем' })
+        return
+      }
+
+      const items: Array<{ id: number; sort_index: number }> = []
+      for (const entry of rawItems) {
+        const id = parseInt(String(entry?.id), 10)
+        const sortIndex = parseInt(String(entry?.sort_index), 10)
+        if (!Number.isFinite(id) || !Number.isFinite(sortIndex)) {
+          res.status(400).json({ error: 'Некорректный порядок тем' })
+          return
+        }
+        items.push({ id, sort_index: sortIndex })
+      }
+
+      await withTransaction(async (client) => {
+        for (const { id, sort_index } of items) {
+          await client.query(
+            `UPDATE topics SET
+               sort_index = $3,
+               version = version + 1,
+               updated_at = NOW(),
+               updated_by = $4
+             WHERE department_id = $1 AND id = $2 AND deleted_at IS NULL`,
+            [dept, id, sort_index, req.user!.id],
+          )
+        }
+        await bumpGlobalVersion(client)
+      })
+
+      res.json({ ok: true, updated: items.length })
+    } catch (err) {
+      console.error(err)
+      res.status(500).json({ error: 'Ошибка изменения порядка' })
     }
   },
 )
@@ -246,19 +308,24 @@ topicsRouter.put(
       const archived = item.archived !== undefined ? Boolean(item.archived) : current.archived
       const party =
         dept === 'support'
-          ? item.party === 'customer'
-            ? 'customer'
-            : item.party === 'supplier'
-              ? 'supplier'
-              : current.party
+          ? normalizeSupportParty(
+              item.party,
+              isSupportParty(current.party) ? current.party : 'supplier',
+            )
           : null
+      const sortIndex =
+        item.sort_index !== undefined
+          ? item.sort_index === null
+            ? null
+            : parseInt(String(item.sort_index), 10)
+          : current.sort_index
 
       const updated = await withTransaction(async (client) => {
         await client.query(
           `UPDATE topics SET
              question = $3, answer = $4, parent_id = $5, party = $6, archived = $7,
-             image_display = $8, photos = $9, documents = $10,
-             version = version + 1, updated_at = NOW(), updated_by = $11
+             sort_index = $8, image_display = $9, photos = $10, documents = $11,
+             version = version + 1, updated_at = NOW(), updated_by = $12
            WHERE department_id = $1 AND id = $2 AND deleted_at IS NULL`,
           [
             dept,
@@ -268,6 +335,7 @@ topicsRouter.put(
             parentId,
             party,
             archived,
+            Number.isFinite(sortIndex) ? sortIndex : null,
             item.image_display !== undefined
               ? JSON.stringify(item.image_display)
               : current.image_display

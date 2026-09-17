@@ -1,3 +1,22 @@
+export const SUPPORT_PARTIES = ['supplier', 'customer', 'errors', 'additional'] as const
+export type SupportParty = (typeof SUPPORT_PARTIES)[number]
+
+export function isSupportParty(value: unknown): value is SupportParty {
+  return (
+    value === 'supplier' ||
+    value === 'customer' ||
+    value === 'errors' ||
+    value === 'additional'
+  )
+}
+
+export function normalizeSupportParty(
+  value: unknown,
+  fallback: SupportParty | null = 'supplier',
+): SupportParty | null {
+  return isSupportParty(value) ? value : fallback
+}
+
 export interface TopicRow {
   department_id: string
   id: number
@@ -7,6 +26,7 @@ export interface TopicRow {
   has_children: boolean
   party: string | null
   archived: boolean
+  sort_index: number | null
   image_display: Record<string, number> | null
   photos: unknown[]
   documents: unknown[]
@@ -26,6 +46,9 @@ export function rowToGuideItem(row: TopicRow): Record<string, unknown> {
   }
   if (row.party) item.party = row.party
   if (row.archived) item.archived = true
+  if (row.sort_index != null && Number.isFinite(row.sort_index)) {
+    item.sort_index = row.sort_index
+  }
   if (row.image_display && Object.keys(row.image_display).length > 0) {
     item.image_display = row.image_display
   }

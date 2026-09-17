@@ -286,7 +286,7 @@ export function TopicEditorModal({
 
           {showParty && (
             <label className="field">
-              <span>Поставщик / Заказчик</span>
+              <span>Категория</span>
               <select
                 value={party}
                 onChange={(e) => handlePartyChange(e.target.value as SupportParty)}

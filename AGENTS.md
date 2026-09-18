@@ -74,7 +74,7 @@ graphify update .
 | `index.ts` | Express app, роуты |
 | `routes/auth.ts` | login, register, JWT |
 | `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`** (owner, разовый fix legacy-путей медиа) |
-| `routes/topics.ts` | CRUD тем, блокировки, **`PUT /:dept/topic-order`** (`sort_index`) |
+| `routes/topics.ts` | CRUD тем, блокировки, **`PUT /:dept/topic-order`**, **`POST …/topic-order/lock|unlock|renew-lock`** |
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
@@ -98,8 +98,8 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | `lib/restoreAppFocus.ts` | восстановление фокуса Electron после модалок / сброса |
 | `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | выбор родителя / ссылки «+» — полный список отдела, только название темы; родитель → авто party |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
-| `TopicList.tsx` | дерево тем, секции party (support + «Все»), **режим reorder** (pointer-drag, ghost) |
-| `lib/data.ts` | фильтры, `compareTopicsForList`, `ensureSortIndexes`, `reorderSiblingTopics`, `getItemParty`, `topicDisplayLabel` |
+| `TopicList.tsx` | дерево тем, секции party, **reorder** (save on exit, lock, search→scroll to selected) |
+| `lib/data.ts` | фильтры, `reorderSiblingTopics` + party scope, `getAncestorIds`, `getItemParty`, `topicDisplayLabel` |
 | `lib/markdown.ts` | media src, ссылки тем, вложения `files/` |
 | `lib/textInsert.ts` | вставка / `+query` / обёртка выделения ссылкой |
 | `lib/textareaCaret.ts` | координаты каретки для пикера |
@@ -158,7 +158,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.4.2.exe
+# → app/release/REST-INFO-Setup-1.4.3.exe
 ```
 
 ## Владелец / bootstrap
@@ -179,8 +179,9 @@ npm run dist:ascii
 7. **Автоподгрузка с сервера** не перезаписывает локальные правки темы, пока в очереди `pending-operations` или `hasPendingChanges` (кроме force sync).
 8. **Legacy-пути медиа в БД после import:** в `media_files` могут остаться `media/images/uuid.jpg`, файлы на диске — `media/{отдел}/{id}/images/uuid.jpg` → sync 404 при «Синхронизировать». Fix: один раз `fix-media-paths.js --apply` (см. `docs/fix-media-paths.md`); файлы на диске не перемещает. **Production (9 сент.):** fix применён (107 записей).
 9. **Auto-update 1.4.0:** требует deploy сервера с `GET /app/updates/*` и публикации `latest.yml` + blockmap через `upload-release.js`.
-10. **Reorder + party categories:** на production нужны миграции **004** (`sort_index`), **005** (`errors`), **006** (`additional`); без них reorder уходит в офлайн-очередь, новые категории могут сохраняться как `supplier` на сервере.
-11. **Первый вход в reorder:** клиент проставляет `sort_index` по текущему порядку на экране (обычно = алфавит, если индексов ещё не было).
+10. **Reorder + party categories:** на production нужны миграции **004–006**; **007** (`topic_order_locks`) — для одновременного reorder; без 007 lock API 404, без 004–006 reorder не сохраняется на сервере.
+11. **Reorder:** порядок на сервер уходит только при «Завершить редактирование»; перед входом — pull порядка + lock; unlock после успешного PUT.
+12. **Первый вход в reorder:** локально проставляет `sort_index` по текущему порядку (без push до «Завершить»).
 
 ## Правила для агента
 
@@ -193,6 +194,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.4.2** (`app/package.json`)
+- Клиент: **1.4.3** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

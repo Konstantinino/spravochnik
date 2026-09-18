@@ -215,3 +215,23 @@ export async function renewTopicLock(departmentId: string, topicId: number): Pro
     method: 'POST',
   })
 }
+
+export async function lockTopicOrder(departmentId: string): Promise<void> {
+  await serverFetch(`/departments/${departmentId}/topic-order/lock`, { method: 'POST' })
+}
+
+export async function unlockTopicOrder(departmentId: string): Promise<void> {
+  await serverFetch(`/departments/${departmentId}/topic-order/unlock`, { method: 'POST' })
+}
+
+export async function renewTopicOrderLock(departmentId: string): Promise<void> {
+  await serverFetch(`/departments/${departmentId}/topic-order/renew-lock`, { method: 'POST' })
+}
+
+export async function fetchDepartmentTopics(
+  departmentId: string,
+): Promise<Record<string, unknown>> {
+  return serverFetch<Record<string, unknown>>(`/departments/${departmentId}/topics`, {
+    skipRemotePull: true,
+  })
+}

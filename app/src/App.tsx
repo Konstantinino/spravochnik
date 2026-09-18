@@ -14,6 +14,8 @@ import {
   isArchived,
   ensureSortIndexes,
   reorderSiblingTopics,
+  resolveReorderSiblingScope,
+  rootReorderRequiresSameParty,
 } from './lib/data'
 import { buildTopicSearchFilter } from './lib/search'
 import { releaseStaleFocus, restoreAppFocus } from './lib/restoreAppFocus'
@@ -138,6 +140,11 @@ export default function App() {
   const [resettingTopic, setResettingTopic] = useState(false)
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [reorderMode, setReorderMode] = useState(false)
+  const [reorderPreparing, setReorderPreparing] = useState(false)
+  const [reorderLockBanner, setReorderLockBanner] = useState<string | null>(null)
+  /** sort_index snapshot at reorder session start; persisted only on exit. */
+  const reorderBaselineRef = useRef<GuideItem[] | null>(null)
+  const reorderLockBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -182,9 +189,11 @@ export default function App() {
     })
   }, [])
 
-  function handleDepartmentChange(id: DepartmentId) {
+  async function handleDepartmentChange(id: DepartmentId) {
     if (user && !isStaffRole(user.role) && id === 'templates') return
-    setReorderMode(false)
+    if (reorderMode) {
+      await handleExitReorderMode()
+    }
     setDepartmentId(id)
     setNavHistory([])
     if (user) {
@@ -205,8 +214,10 @@ export default function App() {
     setUser(u)
   }
 
-  function handleListFilterChange(filter: TopicViewFilter) {
-    setReorderMode(false)
+  async function handleListFilterChange(filter: TopicViewFilter) {
+    if (reorderMode) {
+      await handleExitReorderMode()
+    }
     setListFilter(filter)
     setQuery('')
     setSelectedId(null)
@@ -451,15 +462,7 @@ export default function App() {
     [visibleItems, query, searchInBody],
   )
 
-  const canReorderTopics = Boolean(
-    canEdit && !query.trim() && !searchFilter && (listFilter === 'all' || listFilter === 'archive'),
-  )
-
-  useEffect(() => {
-    if (!canReorderTopics && reorderMode) {
-      setReorderMode(false)
-    }
-  }, [canReorderTopics, reorderMode])
+  const canReorderTopics = Boolean(canEdit && !query.trim() && !searchFilter)
 
   function mergeSortIndexChanges(
     allItems: GuideItem[],
@@ -496,51 +499,119 @@ export default function App() {
     setGuide(data)
   }
 
-  async function handleEnterReorderMode() {
-    const prepared = ensureSortIndexes(visibleItems)
-    const changes = collectSortIndexChanges(visibleItems, prepared)
+  const handleExitReorderMode = useCallback(async () => {
+    const deptId = departmentId
+    const baseline = reorderBaselineRef.current
+    reorderBaselineRef.current = null
+
+    async function releaseReorderLock() {
+      await window.spravochnik.unlockTopicOrder({ departmentId: deptId }).catch(() => undefined)
+    }
+
+    if (!baseline) {
+      await releaseReorderLock()
+      setReorderMode(false)
+      return
+    }
+
+    const changes = collectSortIndexChanges(baseline, items)
     if (changes.length > 0) {
-      const merged = mergeSortIndexChanges(items, changes)
-      const listKey = DEPARTMENTS.find((d) => d.id === departmentId)?.listKey ?? 'questions'
-      setGuide((prev) => (prev ? { ...prev, [listKey]: merged } : prev))
       try {
         await persistSortIndexChanges(changes)
       } catch (e) {
+        reorderBaselineRef.current = baseline
         setError(e instanceof Error ? e.message : 'Не удалось сохранить порядок')
         return
       }
     }
-    setReorderMode(true)
-  }
 
-  function handleExitReorderMode() {
+    await releaseReorderLock()
     setReorderMode(false)
+  }, [departmentId, items])
+
+  useEffect(() => {
+    if (!canReorderTopics && reorderMode) {
+      void handleExitReorderMode()
+    }
+  }, [canReorderTopics, reorderMode, handleExitReorderMode])
+
+  useEffect(() => {
+    if (!reorderMode) return
+
+    const renew = window.setInterval(() => {
+      void window.spravochnik
+        .renewTopicOrderLock({ departmentId })
+        .catch(() => undefined)
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(renew)
+    }
+  }, [reorderMode, departmentId])
+
+  useEffect(() => {
+    return () => {
+      if (reorderLockBannerTimerRef.current) {
+        clearTimeout(reorderLockBannerTimerRef.current)
+      }
+    }
+  }, [])
+
+  function flashReorderLockBanner(message: string) {
+    if (reorderLockBannerTimerRef.current) {
+      clearTimeout(reorderLockBannerTimerRef.current)
+    }
+    setReorderLockBanner(message)
+    reorderLockBannerTimerRef.current = setTimeout(() => {
+      setReorderLockBanner(null)
+      reorderLockBannerTimerRef.current = null
+    }, 1000)
   }
 
-  async function handleReorderSiblings(
+  async function handleEnterReorderMode() {
+    if (reorderPreparing || reorderMode) return
+    setReorderPreparing(true)
+    try {
+      const result = await window.spravochnik.prepareTopicReorder(departmentId)
+      const listKey = DEPARTMENTS.find((d) => d.id === departmentId)?.listKey ?? 'questions'
+      setGuide(result.guide)
+
+      if (!result.ok) {
+        flashReorderLockBanner(
+          result.error ?? 'Порядок уже редактируется другим пользователем',
+        )
+        return
+      }
+
+      const freshItems = getItems(result.guide)
+      reorderBaselineRef.current = freshItems.map((item) => ({ ...item }))
+
+      const prepared = ensureSortIndexes(freshItems)
+      const changes = collectSortIndexChanges(freshItems, prepared)
+      if (changes.length > 0) {
+        const merged = mergeSortIndexChanges(freshItems, changes)
+        setGuide((prev) => (prev ? { ...prev, [listKey]: merged } : prev))
+      }
+      setReorderMode(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось начать редактирование порядка')
+    } finally {
+      setReorderPreparing(false)
+    }
+  }
+
+  function handleReorderSiblings(
     parentId: number | null,
     draggedId: number,
     targetId: number,
   ) {
-    const { changes } = reorderSiblingTopics(
-      visibleItems,
-      parentId,
-      draggedId,
-      targetId,
-    )
+    const scope = resolveReorderSiblingScope(listFilter, parentId, items, draggedId)
+    const { changes } = reorderSiblingTopics(items, parentId, draggedId, targetId, scope)
     if (changes.length === 0) return
 
     const merged = mergeSortIndexChanges(items, changes)
     const listKey = DEPARTMENTS.find((d) => d.id === departmentId)?.listKey ?? 'questions'
     setGuide((prev) => (prev ? { ...prev, [listKey]: merged } : prev))
-
-    try {
-      await persistSortIndexChanges(changes)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить порядок')
-      const data = await window.spravochnik.loadGuide(departmentId)
-      setGuide(data)
-    }
   }
 
   const displaySyncStatus: SyncStatus = useMemo(() => {
@@ -841,7 +912,10 @@ export default function App() {
                 onSelect={selectTopicFromSidebar}
                 searchFilter={searchFilter}
                 groupRootsByParty={departmentId === 'support' && listFilter === 'all'}
+                rootReorderSameParty={rootReorderRequiresSameParty(departmentId, listFilter)}
                 reorderMode={reorderMode}
+                reorderPreparing={reorderPreparing}
+                reorderLockBanner={reorderLockBanner}
                 canReorder={canReorderTopics}
                 onEnterReorderMode={() => void handleEnterReorderMode()}
                 onExitReorderMode={handleExitReorderMode}

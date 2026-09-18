@@ -246,6 +246,23 @@ export interface SpravochnikApi {
 
   }) => Promise<{ ok: boolean }>
 
+  lockTopicOrder: (payload: { departmentId: DepartmentId }) => Promise<{
+    ok: boolean
+    error?: string
+    lockedByName?: string
+  }>
+
+  unlockTopicOrder: (payload: { departmentId: DepartmentId }) => Promise<{ ok: boolean }>
+
+  renewTopicOrderLock: (payload: { departmentId: DepartmentId }) => Promise<{ ok: boolean }>
+
+  prepareTopicReorder: (departmentId: DepartmentId) => Promise<{
+    ok: boolean
+    guide: GuideFile
+    error?: string
+    lockedByName?: string
+  }>
+
   onSyncStatus: (callback: (status: SyncStatus) => void) => () => void
 
 

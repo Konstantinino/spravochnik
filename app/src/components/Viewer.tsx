@@ -91,24 +91,34 @@ function ViewerChildrenTree({
   items,
   currentId,
   onNavigateToTopic,
-  nested = false,
+  depth = 0,
 }: {
   parentId: number
   items: GuideItem[]
   currentId: number
   onNavigateToTopic: (id: number) => void
-  nested?: boolean
+  /** 0 = direct subtopics of the open topic; 1+ = deeper levels (dimmed). */
+  depth?: number
 }) {
   const children = getChildren(items, parentId)
   if (children.length === 0) return null
 
+  const isNestedList = depth > 0
+  const isDeepLevel = depth >= 1
+
   return (
-    <ul className={`viewer-children${nested ? ' viewer-children--nested' : ''}`}>
+    <ul className={`viewer-children${isNestedList ? ' viewer-children--nested' : ''}`}>
       {children.map((child) => (
         <li key={child.id}>
           <button
             type="button"
-            className={`viewer-children__item${child.id === currentId ? ' is-selected' : ''}`}
+            className={[
+              'viewer-children__item',
+              isDeepLevel ? 'viewer-children__item--deep' : '',
+              child.id === currentId ? 'is-selected' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
             onClick={() => onNavigateToTopic(child.id)}
           >
             {topicDisplayLabel(child)}
@@ -118,7 +128,7 @@ function ViewerChildrenTree({
             items={items}
             currentId={currentId}
             onNavigateToTopic={onNavigateToTopic}
-            nested
+            depth={depth + 1}
           />
         </li>
       ))}

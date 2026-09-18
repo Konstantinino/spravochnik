@@ -1,26 +1,27 @@
-# Graph Report - spravochnik-repo  (2026-09-17)
+# Graph Report - spravochnik-repo  (2026-09-18)
 
 ## Corpus Check
-- 118 files · ~78,533 words
+- 119 files · ~80,595 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1360 nodes · 3080 edges · 76 communities (58 shown, 6 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 40 edges (avg confidence: 0.85)
+- 1377 nodes · 3136 edges · 82 communities (63 shown, 7 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 41 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f34b0050`
+- Built from commit: `f5666988`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- yandex-sync.ts
+- TopicList.tsx
+- App.tsx
 - index.ts
 - compilerOptions
 - App
 - Viewer
-- paths.ts
+- topic-media.ts
 - devDependencies
 - compilerOptions
 - build
@@ -31,17 +32,17 @@
 - REST INFO
 - admin.ts
 - devDependencies
-- TopicEditorModal
+- isStaffRole
 - prefs.ts
 - push-yandex-restore.mjs
-- Viewer.tsx
+- useTopicLinkPicker.ts
 - REST INFO — инструкция для серверного программиста
 - REST INFO v1 — Яндекс.Диск (legacy)
 - Скрипты REST INFO
 - compilerOptions
 - Миграция с Яндекс.Диска на SQL-сервер
 - REST INFO — статус проекта (handoff)
-- App.tsx
+- SyncConflictModal.tsx
 - pull-yandex-export.mjs
 - REST INFO — развёртывание сервера (Docker)
 - REST INFO — сервер API
@@ -49,7 +50,7 @@
 - Чеклист тестирования REST INFO v2
 - REST INFO — клиент (Electron)
 - upload-release.js
-- data.ts
+- main.ts
 - legacy/README.md
 - lib/media-layout.ts
 - types.ts
@@ -61,77 +62,86 @@
 - dependencies
 - scripts
 - 001_initial.sql
-- isStaffRole
-- main.ts
+- Viewer.tsx
+- auth-store.ts
 - clone-or-update.sh
 - fix-media-paths.js
-- TopicList.tsx
+- TopicEditorModal.tsx
 - deploy.sh
 - install-git-hooks.sh
 - setup-deploy-key.sh
 - setup-rest-info-user.sh
 - Исправление путей к фото на сервере
+- paths.ts
+- imageDisplay.ts
 - План: автообновление «как Telegram Desktop»
 - lib/fix-media-paths.ts
-- TopicEditorModal.tsx
+- TopicEditorModal
 - media.ts
-- SyncConflictModal.tsx
-- electron/updates.ts
+- session-log.ts
+- sessionPath
+- writeSettings
+- yandex-sync.ts
+- SettingsErrorBoundary
 - usePreserveTextareaFocus
-- search.ts
+- export-for-server.ts
 
 ## God Nodes (most connected - your core abstractions)
-1. `registerIpc()` - 84 edges
+1. `registerIpc()` - 88 edges
 2. `getUserDataRoot()` - 49 edges
-3. `readSettings()` - 41 edges
-4. `App()` - 41 edges
+3. `App()` - 43 edges
+4. `readSettings()` - 42 edges
 5. `Viewer()` - 39 edges
 6. `readAccounts()` - 29 edges
 7. `SettingsPage()` - 28 edges
 8. `pullFromServer()` - 25 edges
-9. `serverFetch()` - 20 edges
-10. `pushToYandex()` - 19 edges
+9. `serverFetch()` - 24 edges
+10. `TopicList()` - 20 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `pushAccountsFile()` --calls--> `isServerReachable()`  [EXTRACTED]
-  app/electron/server-sync.ts → app/electron/server-api.ts
-- `AuthScreenProps` --references--> `PublicUser`  [EXTRACTED]
-  app/src/components/AuthScreen.tsx → app/src/types.ts
-- `SearchHit` --references--> `GuideItem`  [EXTRACTED]
-  app/src/lib/search.ts → app/src/types.ts
-- `accountsPath()` --calls--> `getUserDataRoot()`  [EXTRACTED]
-  app/electron/auth-store.ts → app/electron/paths.ts
-- `settingsPath()` --calls--> `getUserDataRoot()`  [EXTRACTED]
-  app/electron/auth-store.ts → app/electron/paths.ts
+- `ParentTopicField()` --indirect_call--> `compareTopicsForList()`  [INFERRED]
+  app/src/components/ParentTopicField.tsx → app/src/lib/data.ts
+- `handlePartyChange()` --calls--> `getItemParty()`  [EXTRACTED]
+  app/src/components/TopicEditorModal.tsx → app/src/lib/data.ts
+- `handleParentIdChange()` --calls--> `getItemParty()`  [EXTRACTED]
+  app/src/components/TopicEditorModal.tsx → app/src/lib/data.ts
+- `TopicLinkPicker()` --indirect_call--> `compareTopicsForList()`  [INFERRED]
+  app/src/components/TopicLinkPicker.tsx → app/src/lib/data.ts
+- `handleParentIdChange()` --calls--> `getItemParty()`  [EXTRACTED]
+  app/src/components/Viewer.tsx → app/src/lib/data.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (76 total, 6 thin omitted)
+## Communities (82 total, 7 thin omitted)
 
-### Community 1 - "yandex-sync.ts"
-Cohesion: 0.06
-Nodes (86): readSettings(), setPendingChanges(), defaultSource, manifest, copyFileSafe(), copyMediaTree(), countItems(), exportForServer() (+78 more)
+### Community 0 - "TopicList.tsx"
+Cohesion: 0.09
+Nodes (37): autoScrollContainer(), findScrollParent(), groupRootsByPartySections(), guideX(), highlightTitle(), isRowVisibleInScroll(), renderTreeNode(), ReorderDragGhost (+29 more)
+
+### Community 1 - "App.tsx"
+Cohesion: 0.13
+Nodes (27): navigateBack(), navigateToTopic(), defaultSync, resolveListFilter(), Search(), SearchProps, compareTopicsByTitle(), compareTopicsForList() (+19 more)
 
 ### Community 2 - "index.ts"
 Cohesion: 0.11
-Nodes (24): getPool(), query(), withTransaction(), dataDir, __dirname, main(), mediaDir, root (+16 more)
+Nodes (26): getPool(), query(), withTransaction(), dataDir, __dirname, main(), mediaDir, root (+18 more)
 
 ### Community 3 - "compilerOptions"
 Cohesion: 0.10
 Nodes (20): compilerOptions, allowImportingTsExtensions, isolatedModules, lib, module, moduleDetection, moduleResolution, noEmit (+12 more)
 
 ### Community 4 - "App"
-Cohesion: 0.11
-Nodes (22): App(), collectSortIndexChanges(), executeLocalReset(), handleEnterReorderMode(), handleInlineSave(), handleListFilterChange(), handlePush(), handleReorderSiblings() (+14 more)
+Cohesion: 0.10
+Nodes (22): App(), collectSortIndexChanges(), executeLocalReset(), flashReorderLockBanner(), handleEnterReorderMode(), handleInlineSave(), handleListFilterChange(), handlePush() (+14 more)
 
 ### Community 5 - "Viewer"
-Cohesion: 0.10
-Nodes (21): fileExtLabel(), nodeText(), Viewer(), cancelEditing(), closeFind(), closeScaleEditor(), downloadImage(), onKey() (+13 more)
+Cohesion: 0.11
+Nodes (19): fileExtLabel(), nodeText(), Viewer(), cancelEditing(), closeFind(), closeScaleEditor(), downloadImage(), handleParentIdChange() (+11 more)
 
-### Community 6 - "paths.ts"
-Cohesion: 0.06
-Nodes (86): resolveImageOwner(), downloadMediaImage(), IMAGE_EXTENSIONS, localPathFromSpravochnikUrl(), suggestedNameFromSrc(), absFromRoot(), canonicalizeMediaRelativePath(), DEFAULT_MEDIA_DEPARTMENT (+78 more)
+### Community 6 - "topic-media.ts"
+Cohesion: 0.07
+Nodes (71): resolveImageOwner(), downloadMediaImage(), IMAGE_EXTENSIONS, localPathFromSpravochnikUrl(), suggestedNameFromSrc(), absFromRoot(), canonicalizeMediaRelativePath(), DEFAULT_MEDIA_DEPARTMENT (+63 more)
 
 ### Community 7 - "devDependencies"
 Cohesion: 0.11
@@ -151,7 +161,7 @@ Nodes (18): graphify, Linux / production, REST INFO — инструкция д�
 
 ### Community 11 - "routes/topics.ts"
 Cohesion: 0.15
-Nodes (22): bumpGlobalVersion(), getGlobalVersion(), acquireTopicLock(), DEPARTMENTS, isSupportParty(), isValidDepartment(), isWorkDepartmentId(), normalizeSupportParty() (+14 more)
+Nodes (24): getGlobalVersion(), acquireTopicLock(), acquireTopicOrderLock(), DEPARTMENTS, isSupportParty(), isValidDepartment(), isWorkDepartmentId(), normalizeSupportParty() (+16 more)
 
 ### Community 12 - "dist-ascii.js"
 Cohesion: 0.17
@@ -167,27 +177,27 @@ Nodes (9): Legacy: Яндекс.Диск, REST INFO, Архитектура v2, 
 
 ### Community 16 - "admin.ts"
 Cohesion: 0.14
-Nodes (30): CONTENT_EDITOR_ROLES, generateSalt(), hashPassword(), isOwnerEmail(), isOwnerRole(), isUserRole(), isWorkDepartmentId(), JwtUser (+22 more)
+Nodes (29): CONTENT_EDITOR_ROLES, generateSalt(), hashPassword(), isOwnerEmail(), isOwnerRole(), isUserRole(), isWorkDepartmentId(), JwtUser (+21 more)
 
 ### Community 17 - "devDependencies"
 Cohesion: 0.05
 Nodes (42): cors, embedded-postgres, express, jsonwebtoken, multer, dependencies, cors, express (+34 more)
 
-### Community 18 - "TopicEditorModal"
-Cohesion: 0.14
-Nodes (13): navigateBack(), navigateToTopic(), newDraftId(), TopicEditorModal(), handleParentIdChange(), handlePartyChange(), groupRootsByPartySections(), handleParentIdChange() (+5 more)
+### Community 18 - "isStaffRole"
+Cohesion: 0.21
+Nodes (12): handleAuthenticated(), handleDepartmentChange(), resolveUserDepartment(), Header(), isDepartmentId(), loadSavedDepartment(), saveDepartment(), canEditContent() (+4 more)
 
 ### Community 19 - "prefs.ts"
-Cohesion: 0.15
-Nodes (17): AuthScreen(), forgetSavedLogin(), handleSubmit(), AuthScreenProps, ServerUrlForm(), findRememberedLogin(), isDepartmentId(), loadRememberedLogin() (+9 more)
+Cohesion: 0.19
+Nodes (13): AuthScreen(), forgetSavedLogin(), handleSubmit(), ServerUrlForm(), findRememberedLogin(), loadRememberedLogin(), loadRememberedLogins(), normalizeEmail() (+5 more)
 
 ### Community 20 - "push-yandex-restore.mjs"
 Cohesion: 0.18
 Nodes (17): args, countTopics(), DEFAULT_SRC, __dirname, diskPath(), dryRun, ensureDir(), JSON_FILES (+9 more)
 
-### Community 21 - "Viewer.tsx"
-Cohesion: 0.19
-Nodes (13): ImageScaleDialog(), ImageScaleDialogProps, ImgMenuState, ScaleEditorState, applyDraftScale(), ViewerProps, clampImageScale(), getImageScale() (+5 more)
+### Community 21 - "useTopicLinkPicker.ts"
+Cohesion: 0.22
+Nodes (12): copyTopicLink(), useTopicLinkPicker(), escapeMdLinkLabel(), formatFileMarkdownLink(), formatTopicMarkdownLink(), isAllowedMarkdownImageSrc(), parseCopiedTopicLink(), parseTopicLinkHref() (+4 more)
 
 ### Community 22 - "REST INFO — инструкция для серверного программиста"
 Cohesion: 0.12
@@ -213,9 +223,9 @@ Nodes (13): Миграция с Яндекс.Диска на SQL-сервер, �
 Cohesion: 0.14
 Nodes (14): REST INFO — статус проекта (handoff), Данные, Документация, Исправления в ходе dev, Клиент (`app/`), Локальная dev-среда (Windows пользователя), Сервер (`server/`), Скрипты и восстановление (+6 more)
 
-### Community 28 - "App.tsx"
-Cohesion: 0.17
-Nodes (12): defaultSync, resolveListFilter(), SettingsErrorBoundary, Search(), SearchProps, loadSavedListFilter(), DEPT_VIEW_FILTERS, isSupportParty() (+4 more)
+### Community 28 - "SyncConflictModal.tsx"
+Cohesion: 0.32
+Nodes (4): SyncConflictModal(), SyncConflictModalProps, ConflictResolution, SyncConflictInfo
 
 ### Community 29 - "pull-yandex-export.mjs"
 Cohesion: 0.32
@@ -245,29 +255,29 @@ Nodes (6): REST INFO — клиент (Electron), Запуск dev, Ключев
 Cohesion: 0.33
 Nodes (6): fileName, main(), releaseDir, serverUrl, uploadUpdateFile(), versionMatch
 
-### Community 37 - "data.ts"
-Cohesion: 0.16
-Nodes (20): ParentTopicField(), ParentTopicFieldProps, TopicLinkPicker(), TopicLinkPickerProps, TopicLinkPickerState, ViewerChildrenTree(), buildTree(), compareTopicsByTitle() (+12 more)
+### Community 37 - "main.ts"
+Cohesion: 0.10
+Nodes (44): getCurrentUser(), getWhitelist(), requireRole(), asSupportParty(), attachWindowsInputFixes(), createWindow(), fetchAdminUsersFromServer(), readGuideFile() (+36 more)
 
 ### Community 39 - "lib/media-layout.ts"
 Cohesion: 0.20
 Nodes (23): discoverMediaFilesOnDisk(), consider(), walk(), absoluteMediaCandidates(), canonicalizeMediaRelativePath(), DEFAULT_MEDIA_DEPARTMENT, deleteTopicMediaFiles(), isMediaDepartmentId() (+15 more)
 
 ### Community 40 - "types.ts"
-Cohesion: 0.13
-Nodes (31): HeaderProps, SettingsPageProps, CONTENT_EDITOR_ROLES, Department, DepartmentId, DepartmentStorageStats, ExportManifest, GuideDocument (+23 more)
+Cohesion: 0.10
+Nodes (33): AuthScreenProps, HeaderProps, SettingsPageProps, CONTENT_EDITOR_ROLES, Department, DepartmentStorageStats, ExportManifest, GuideDocument (+25 more)
 
 ### Community 41 - "server-sync.ts"
-Cohesion: 0.08
-Nodes (51): AccountsData, reconcileHasChildren(), departmentById(), PENDING_OPERATIONS_FILE, clearPendingOperations(), hasPendingOperations(), OperationType, opsPath() (+43 more)
+Cohesion: 0.06
+Nodes (76): AccountsData, normalizeServerUrl(), reconcileHasChildren(), putUser(), departmentById(), PENDING_OPERATIONS_FILE, clearPendingOperations(), hasPendingOperations() (+68 more)
 
 ### Community 42 - "Deploy keys (REST INFO)"
 Cohesion: 0.40
 Nodes (4): Deploy keys (REST INFO), GitHub, Дополнительная защита на сервере, Что здесь
 
 ### Community 43 - "SettingsPage"
-Cohesion: 0.11
-Nodes (24): assignableRoles(), coerceUsers(), coerceWhitelist(), formatBytes(), formatLogLine(), formatLogTime(), levelLabel(), SettingsPage() (+16 more)
+Cohesion: 0.14
+Nodes (23): assignableRoles(), coerceUsers(), coerceWhitelist(), formatBytes(), formatLogLine(), formatLogTime(), levelLabel(), SettingsPage() (+15 more)
 
 ### Community 44 - "app/package.json"
 Cohesion: 0.18
@@ -286,80 +296,96 @@ Cohesion: 0.25
 Nodes (8): scripts, build, dev, dist, dist:ascii, electron:dev, pack, preview
 
 ### Community 49 - "001_initial.sql"
-Cohesion: 0.25
-Nodes (10): app_releases, departments, media_files, removed_emails, sync_state, topic_id_counters, topic_locks, topics (+2 more)
+Cohesion: 0.21
+Nodes (11): app_releases, departments, media_files, removed_emails, sync_state, topic_id_counters, topic_locks, topics (+3 more)
 
-### Community 50 - "isStaffRole"
+### Community 50 - "Viewer.tsx"
 Cohesion: 0.26
-Nodes (10): handleAuthenticated(), handleDepartmentChange(), resolveUserDepartment(), Header(), saveDepartment(), canEditContent(), canEditDepartment(), canSwitchDepartment() (+2 more)
+Nodes (11): TopicEditorModalProps, ImgMenuState, ScaleEditorState, ViewerChildrenTree(), ViewerProps, getChildren(), applyFindHighlights(), clearFindHighlights() (+3 more)
 
-### Community 51 - "main.ts"
-Cohesion: 0.06
-Nodes (111): accountsPath(), addWhitelistEmail(), clearEphemeralSessionOnStartup(), clearSession(), coerceAccountsData(), defaultAccounts(), defaultSettings(), deleteUser() (+103 more)
+### Community 51 - "auth-store.ts"
+Cohesion: 0.20
+Nodes (34): accountsPath(), addWhitelistEmail(), coerceAccountsData(), defaultAccounts(), defaultSettings(), deleteUser(), ensureAuthFiles(), ensureLocalOwner() (+26 more)
 
 ### Community 54 - "fix-media-paths.js"
 Cohesion: 0.33
 Nodes (6): apply, args, main(), positional, printLine(), serverUrl
 
-### Community 56 - "TopicList.tsx"
-Cohesion: 0.12
-Nodes (26): autoScrollContainer(), findScrollParent(), guideX(), highlightTitle(), isRowVisibleInScroll(), renderTreeNode(), ReorderDragGhost, ReorderDragSession (+18 more)
+### Community 56 - "TopicEditorModal.tsx"
+Cohesion: 0.19
+Nodes (13): ParentTopicField(), ParentTopicFieldProps, TopicLinkPicker(), TopicLinkPickerProps, TopicLinkPickerState, getDescendantIds(), isValidParent(), topicDisplayLabel() (+5 more)
 
 ### Community 61 - "Исправление путей к фото на сервере"
 Cohesion: 0.20
 Nodes (10): Альтернатива — прямо на сервере (SSH), В чём проблема, Если не работает, Исправление путей к фото на сервере, Проверка, Простой способ — с вашего Windows-ПК (как установщик), Шаг 1. Один раз обновить сервер, Шаг 2. Предпросмотр (ничего не меняет) (+2 more)
+
+### Community 62 - "paths.ts"
+Cohesion: 0.11
+Nodes (26): PublicUser, StoredUser, WhitelistEntry, cacheServerUser(), publicUsersFromServer(), roleFromServerUser(), BOOTSTRAP_ADMIN_EMAIL, canEditContent() (+18 more)
+
+### Community 63 - "imageDisplay.ts"
+Cohesion: 0.22
+Nodes (9): ImageScaleDialog(), ImageScaleDialogProps, applyDraftScale(), clampImageScale(), getImageScale(), IMAGE_SCALE_DEFAULT, IMAGE_SCALE_MAX, IMAGE_SCALE_MIN (+1 more)
 
 ### Community 64 - "План: автообновление «как Telegram Desktop»"
 Cohesion: 0.07
 Nodes (30): 1.1 Зависимости и сборка (`app/`), 1.2 Клиент — `app/electron/updates.ts`, 1.3 Клиент — UI, 1.4 Клиент — IPC (`main.ts`, `preload.ts`, `vite-env.d.ts`), 1.5 Сервер — раздача артефактов, 1.6 Публикация — `upload-release.js`, 1.7 Обратная совместимость API, Edge cases (+22 more)
 
 ### Community 65 - "lib/fix-media-paths.ts"
-Cohesion: 0.29
-Nodes (9): main(), printLine(), DbRow, DiscoveredFile, fixMediaPaths(), FixMediaPathsLine, FixMediaPathsResult, indexByBasename() (+1 more)
+Cohesion: 0.27
+Nodes (10): bumpGlobalVersion(), main(), printLine(), DbRow, DiscoveredFile, fixMediaPaths(), FixMediaPathsLine, FixMediaPathsResult (+2 more)
 
-### Community 66 - "TopicEditorModal.tsx"
-Cohesion: 0.15
-Nodes (25): handleAnswerPaste(), imageOwnerPayload(), insertFile(), insertPhoto(), TopicEditorModalProps, copyTopicLink(), handleAnswerPaste(), insertFile() (+17 more)
+### Community 66 - "TopicEditorModal"
+Cohesion: 0.18
+Nodes (14): newDraftId(), TopicEditorModal(), handleAnswerPaste(), handleParentIdChange(), handlePartyChange(), imageOwnerPayload(), insertFile(), insertPhoto() (+6 more)
 
 ### Community 67 - "media.ts"
 Cohesion: 0.24
-Nodes (8): canEditContent(), canEditDepartment(), isStaffRole(), ensureMediaDir(), ensureUpdatesDir(), mediaRouter, upload, rejectForeignDepartmentEdit()
+Nodes (8): canEditContent(), canEditDepartment(), isStaffRole(), requireRole(), ensureMediaDir(), ensureUpdatesDir(), upload, rejectForeignDepartmentEdit()
 
-### Community 71 - "SyncConflictModal.tsx"
-Cohesion: 0.32
-Nodes (4): SyncConflictModal(), SyncConflictModalProps, ConflictResolution, SyncConflictInfo
+### Community 68 - "session-log.ts"
+Cohesion: 0.29
+Nodes (6): clearSessionLogs(), entries, listeners, notify(), SessionLogEntry, SessionLogLevel
 
-### Community 73 - "electron/updates.ts"
-Cohesion: 0.10
-Nodes (35): appendSessionLog(), clearSessionLogs(), entries, listeners, notify(), SessionLogEntry, SessionLogLevel, checkForUpdates() (+27 more)
+### Community 69 - "sessionPath"
+Cohesion: 0.67
+Nodes (4): clearEphemeralSessionOnStartup(), clearSession(), sessionPath(), writeSession()
+
+### Community 71 - "writeSettings"
+Cohesion: 0.33
+Nodes (6): setAuthToken(), setLastSyncAt(), setServerUrl(), settingsPath(), setYandexToken(), writeSettings()
+
+### Community 73 - "yandex-sync.ts"
+Cohesion: 0.05
+Nodes (96): readSettings(), setPendingChanges(), applyConflictResolutions(), asTopicMap(), deepEqual(), detectListKey(), GuideListKey, GuideTopic (+88 more)
 
 ### Community 80 - "usePreserveTextareaFocus"
 Cohesion: 0.46
 Nodes (7): shouldKeepExternalFocus(), usePreserveTextareaFocus(), clearBlurTimer(), onBlur(), onFocusIn(), restoreFocusIfNeeded(), saveSelection()
 
-### Community 83 - "search.ts"
-Cohesion: 0.36
-Nodes (7): getItemPath(), buildTopicSearchFilter(), SearchHit, searchItems(), splitSearchTokens(), textHasAllTokens(), TopicSearchMatch
+### Community 81 - "export-for-server.ts"
+Cohesion: 0.22
+Nodes (11): defaultSource, manifest, copyFileSafe(), copyMediaTree(), countItems(), exportForServer(), ExportManifest, GUIDE_LIST_KEY (+3 more)
 
 ## Knowledge Gaps
-- **428 isolated node(s):** `SettingsData`, `SessionData`, `ROLE_RANK`, `defaultSource`, `manifest` (+423 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 515 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **429 isolated node(s):** `SettingsData`, `SessionData`, `ROLE_RANK`, `defaultSource`, `manifest` (+424 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 518 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `electron` connect `yandex-sync.ts` to `compilerOptions`, `electron/updates.ts`, `main.ts`, `paths.ts`?**
-  _High betweenness centrality (0.011) - this node is a cross-community bridge._
-- **Why does `include` connect `compilerOptions` to `yandex-sync.ts`?**
+- **Why does `App()` connect `App` to `TopicList.tsx`, `App.tsx`, `isStaffRole`?**
+  _High betweenness centrality (0.012) - this node is a cross-community bridge._
+- **Why does `getUserDataRoot()` connect `yandex-sync.ts` to `main.ts`, `sessionPath`, `writeSettings`, `topic-media.ts`, `server-sync.ts`, `export-for-server.ts`, `auth-store.ts`, `paths.ts`?**
   _High betweenness centrality (0.010) - this node is a cross-community bridge._
+- **Why does `Viewer()` connect `Viewer` to `App.tsx`, `TopicEditorModal`, `usePreserveTextareaFocus`, `Viewer.tsx`, `useTopicLinkPicker.ts`, `imageDisplay.ts`?**
+  _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Viewer()` (e.g. with `close()` and `onKey()`) actually correct?**
   _`Viewer()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `SettingsData`, `SessionData`, `ROLE_RANK` to the rest of the system?**
-  _428 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `yandex-sync.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.055822466254861584 - nodes in this community are weakly interconnected._
-- **Should `index.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.11491935483870967 - nodes in this community are weakly interconnected._
-- **Should `compilerOptions` be split into smaller, more focused modules?**
-  _Cohesion score 0.09523809523809523 - nodes in this community are weakly interconnected._
+  _429 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `TopicList.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.08536585365853659 - nodes in this community are weakly interconnected._
+- **Should `App.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.12903225806451613 - nodes in this community are weakly interconnected._

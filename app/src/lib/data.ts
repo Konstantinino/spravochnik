@@ -91,34 +91,101 @@ export function ensureSortIndexes(items: GuideItem[]): GuideItem[] {
   })
 }
 
+export type ReorderSiblingScope = {
+  /** Reorder only among siblings matching this predicate; others keep their slots. */
+  matchSibling: (item: GuideItem) => boolean
+}
+
+/** Scope for root-level reorder in the current sidebar filter (party / archive / all). */
+export function resolveReorderSiblingScope(
+  listFilter: TopicViewFilter,
+  parentId: number | null,
+  allItems: GuideItem[],
+  draggedId: number,
+): ReorderSiblingScope | undefined {
+  if (parentId != null) return undefined
+
+  if (listFilter === 'archive') {
+    return { matchSibling: isArchived }
+  }
+  if (isSupportParty(listFilter)) {
+    const party = listFilter
+    return {
+      matchSibling: (item) => !isArchived(item) && getItemParty(item) === party,
+    }
+  }
+  if (listFilter === 'all') {
+    const dragged = allItems.find((item) => item.id === draggedId)
+    if (!dragged) return undefined
+    const party = getItemParty(dragged)
+    return {
+      matchSibling: (item) => !isArchived(item) && getItemParty(item) === party,
+    }
+  }
+  return undefined
+}
+
+/** Whether root-level drag targets must share the same party (support dept). */
+export function rootReorderRequiresSameParty(
+  departmentId: string,
+  listFilter: TopicViewFilter,
+): boolean {
+  return departmentId === 'support' && listFilter !== 'archive'
+}
+
 /** Reorder siblings after drag-and-drop; returns changed { id, sort_index } pairs. */
 export function reorderSiblingTopics(
   items: GuideItem[],
   parentId: number | null,
   draggedId: number,
   targetId: number,
+  scope?: ReorderSiblingScope,
 ): { items: GuideItem[]; changes: Array<{ id: number; sort_index: number }> } {
   const siblings = items
     .filter((item) => (item.parent_id ?? null) === parentId)
     .sort(compareTopicsForList)
-  const ids = siblings.map((item) => item.id)
-  const fromIdx = ids.indexOf(draggedId)
-  const toIdx = ids.indexOf(targetId)
-  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) {
-    return { items, changes: [] }
+
+  let nextIds: number[]
+  if (scope) {
+    const scoped = siblings.filter(scope.matchSibling)
+    const scopedIds = scoped.map((item) => item.id)
+    const fromIdx = scopedIds.indexOf(draggedId)
+    const toIdx = scopedIds.indexOf(targetId)
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) {
+      return { items, changes: [] }
+    }
+
+    const nextScopedIds = [...scopedIds]
+    nextScopedIds.splice(fromIdx, 1)
+    nextScopedIds.splice(toIdx, 0, draggedId)
+
+    const scopedIdSet = new Set(scopedIds)
+    const scopedQueue = [...nextScopedIds]
+    nextIds = siblings.map((item) => {
+      if (!scopedIdSet.has(item.id)) return item.id
+      return scopedQueue.shift()!
+    })
+  } else {
+    const ids = siblings.map((item) => item.id)
+    const fromIdx = ids.indexOf(draggedId)
+    const toIdx = ids.indexOf(targetId)
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) {
+      return { items, changes: [] }
+    }
+
+    nextIds = [...ids]
+    nextIds.splice(fromIdx, 1)
+    nextIds.splice(toIdx, 0, draggedId)
   }
 
-  const nextIds = [...ids]
-  nextIds.splice(fromIdx, 1)
-  nextIds.splice(toIdx, 0, draggedId)
-
+  const siblingIds = new Set(siblings.map((item) => item.id))
   const indexById = new Map<number, number>()
   nextIds.forEach((id, index) => indexById.set(id, index))
 
   const changes: Array<{ id: number; sort_index: number }> = []
   const nextItems = items.map((item) => {
-    const sortIndex = indexById.get(item.id)
-    if (sortIndex === undefined) return item
+    if (!siblingIds.has(item.id)) return item
+    const sortIndex = indexById.get(item.id)!
     if (item.sort_index === sortIndex) return item
     changes.push({ id: item.id, sort_index: sortIndex })
     return { ...item, sort_index: sortIndex }
@@ -150,6 +217,18 @@ export function getItemPath(items: GuideItem[], itemId: number): string[] {
     current = byId.get(current.parent_id)
   }
   return path
+}
+
+/** Folder ids that must be open to reveal itemId in the tree (root → parent). */
+export function getAncestorIds(items: GuideItem[], itemId: number): number[] {
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const ids: number[] = []
+  let current = byId.get(itemId)
+  while (current?.parent_id != null) {
+    ids.unshift(current.parent_id)
+    current = byId.get(current.parent_id)
+  }
+  return ids
 }
 
 export function getFolders(items: GuideItem[]): GuideItem[] {

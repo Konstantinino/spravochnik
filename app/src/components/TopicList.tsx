@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { GuideItem, SupportParty } from '../types'
 import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
-import { buildTree, getChildren, getItemParty, topicDisplayLabel } from '../lib/data'
+import {
+  buildTree,
+  getAncestorIds,
+  getChildren,
+  getItemParty,
+  topicDisplayLabel,
+} from '../lib/data'
 import type { TopicSearchFilter } from '../lib/search'
 
 /** Matches default `.topic-item` horizontal margin */
@@ -76,7 +82,11 @@ interface TopicListProps {
   searchFilter: TopicSearchFilter | null
   /** Support + «Все»: group root topics under party section headings */
   groupRootsByParty?: boolean
+  /** Support filters: root reorder only within the same party */
+  rootReorderSameParty?: boolean
   reorderMode?: boolean
+  reorderPreparing?: boolean
+  reorderLockBanner?: string | null
   canReorder?: boolean
   onEnterReorderMode?: () => void
   onExitReorderMode?: () => void
@@ -102,6 +112,22 @@ function isRowVisibleInScroll(row: HTMLElement, scrollEl: HTMLElement): boolean 
   const rowRect = row.getBoundingClientRect()
   const scrollRect = scrollEl.getBoundingClientRect()
   return rowRect.top >= scrollRect.top - 2 && rowRect.bottom <= scrollRect.bottom + 2
+}
+
+function scrollRowToListCenter(
+  row: HTMLElement,
+  scrollEl: HTMLElement,
+  behavior: ScrollBehavior = 'smooth',
+): void {
+  const rowRect = row.getBoundingClientRect()
+  const scrollRect = scrollEl.getBoundingClientRect()
+  const targetTop =
+    scrollEl.scrollTop + (rowRect.top - scrollRect.top) - scrollRect.height / 2 + rowRect.height / 2
+  const maxTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
+  scrollEl.scrollTo({
+    top: Math.min(maxTop, Math.max(0, targetTop)),
+    behavior,
+  })
 }
 
 function waitForScrollEnd(
@@ -224,6 +250,8 @@ function TreeNode({
   onReorderMouseDown,
   dragOverId,
   flashFocusId,
+  expandFolderIds,
+  onDismissExpandFolder,
 }: {
   item: GuideItem
   items: GuideItem[]
@@ -236,14 +264,21 @@ function TreeNode({
   onReorderMouseDown?: (id: number, e: React.MouseEvent) => void
   dragOverId: number | null
   flashFocusId: number | null
+  expandFolderIds?: Set<number>
+  onDismissExpandFolder?: (id: number) => void
 }) {
   const allChildren = getChildren(items, item.id)
   const children = searchFilter
     ? allChildren.filter((c) => searchFilter.visibleIds.has(c.id))
     : allChildren
   const isFolder = children.length > 0
-  const [manualOpen, setManualOpen] = useState(depth < 1)
-  const open = reorderMode ? isFolder : searchFilter ? children.length > 0 : manualOpen
+  const [manualOpen, setManualOpen] = useState(false)
+  const forceOpen = expandFolderIds?.has(item.id) ?? false
+  const open = reorderMode
+    ? isFolder
+    : searchFilter
+      ? children.length > 0
+      : manualOpen || forceOpen
   const match = searchFilter?.matchById.get(item.id)
   const title = item.question || 'Без названия'
   const label = (() => {
@@ -290,7 +325,12 @@ function TreeNode({
             aria-label={open ? 'Свернуть' : 'Развернуть'}
             onClick={() => {
               if (searchFilter || reorderMode) return
-              setManualOpen((v) => !v)
+              if (open) {
+                if (forceOpen) onDismissExpandFolder?.(item.id)
+                setManualOpen(false)
+              } else {
+                setManualOpen(true)
+              }
             }}
             tabIndex={reorderMode ? -1 : 0}
           >
@@ -330,6 +370,8 @@ function TreeNode({
               onReorderMouseDown={onReorderMouseDown}
               dragOverId={dragOverId}
               flashFocusId={flashFocusId}
+              expandFolderIds={expandFolderIds}
+              onDismissExpandFolder={onDismissExpandFolder}
             />
           ))}
         </ul>
@@ -351,6 +393,8 @@ function renderTreeNode(
     onReorderMouseDown?: (id: number, e: React.MouseEvent) => void
     dragOverId: number | null
     flashFocusId: number | null
+    expandFolderIds?: Set<number>
+    onDismissExpandFolder?: (id: number) => void
   },
 ) {
   return (
@@ -367,6 +411,8 @@ function renderTreeNode(
       onReorderMouseDown={props.onReorderMouseDown}
       dragOverId={props.dragOverId}
       flashFocusId={props.flashFocusId}
+      expandFolderIds={props.expandFolderIds}
+      onDismissExpandFolder={props.onDismissExpandFolder}
     />
   )
 }
@@ -377,7 +423,10 @@ export function TopicList({
   onSelect,
   searchFilter,
   groupRootsByParty = false,
+  rootReorderSameParty = false,
   reorderMode = false,
+  reorderPreparing = false,
+  reorderLockBanner = null,
   canReorder = false,
   onEnterReorderMode,
   onExitReorderMode,
@@ -400,6 +449,9 @@ export function TopicList({
   const draggingIdRef = useRef<number | null>(null)
   const pendingReorderFocusRef = useRef<number | null>(null)
   const wasReorderModeRef = useRef(false)
+  const hadSearchFilterRef = useRef(false)
+  const [expandFolderIds, setExpandFolderIds] = useState<Set<number>>(() => new Set())
+  const [scrollToTopicId, setScrollToTopicId] = useState<number | null>(null)
 
   useEffect(() => {
     draggingIdRef.current = draggingId
@@ -443,6 +495,59 @@ export function TopicList({
       dragSessionRef.current = null
     }
   }, [reorderMode, selectedId])
+
+  const dismissExpandFolder = useCallback((id: number) => {
+    setExpandFolderIds((prev) => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    const hasSearch = searchFilter != null
+    if (hadSearchFilterRef.current && !hasSearch && selectedId != null) {
+      setExpandFolderIds(new Set(getAncestorIds(items, selectedId)))
+      setScrollToTopicId(selectedId)
+    }
+    hadSearchFilterRef.current = hasSearch
+  }, [searchFilter, selectedId, items])
+
+  useEffect(() => {
+    if (scrollToTopicId == null) return
+
+    let cancelled = false
+
+    void (async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      })
+      if (cancelled) return
+
+      const row = listRef.current?.querySelector(
+        `[data-topic-id="${scrollToTopicId}"]`,
+      ) as HTMLElement | null
+      if (!row) {
+        setScrollToTopicId(null)
+        return
+      }
+
+      const scrollEl = scrollElRef.current ?? findScrollParent(listRef.current)
+      if (scrollEl) {
+        scrollRowToListCenter(row, scrollEl, 'smooth')
+        await waitForScrollEnd(scrollEl)
+      } else {
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
+
+      if (!cancelled) setScrollToTopicId(null)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [scrollToTopicId, expandFolderIds])
 
   useEffect(() => {
     if (!reorderMode || reorderFocusId == null) return
@@ -500,12 +605,12 @@ export function TopicList({
       const target = items.find((entry) => entry.id === targetId)
       if (!dragged || !target) return false
       if ((dragged.parent_id ?? null) !== (target.parent_id ?? null)) return false
-      if (groupRootsByParty && (dragged.parent_id ?? null) === null) {
+      if (rootReorderSameParty && (dragged.parent_id ?? null) === null) {
         return getItemParty(dragged) === getItemParty(target)
       }
       return true
     },
-    [groupRootsByParty, items],
+    [rootReorderSameParty, items],
   )
 
   const handleDropOnItem = useCallback(
@@ -639,6 +744,7 @@ export function TopicList({
   }
 
   function beginReorderMode() {
+    if (reorderPreparing) return
     pendingReorderFocusRef.current = ctxMenu?.topicId ?? selectedId ?? null
     setCtxMenu(null)
     onEnterReorderMode?.()
@@ -655,6 +761,8 @@ export function TopicList({
     onReorderMouseDown: handleReorderMouseDown,
     dragOverId,
     flashFocusId,
+    expandFolderIds,
+    onDismissExpandFolder: dismissExpandFolder,
   }
 
   if (searchFilter && roots.length === 0) {
@@ -667,6 +775,11 @@ export function TopicList({
 
   return (
     <>
+      {reorderLockBanner ? (
+        <div className="topic-reorder-lock-banner" role="alert">
+          {reorderLockBanner}
+        </div>
+      ) : null}
       <ul
         ref={listRef}
         className={`topic-tree topic-list${reorderMode ? ' is-reorder-active' : ''}`}
@@ -725,9 +838,10 @@ export function TopicList({
               type="button"
               className="image-ctx-menu__item"
               role="menuitem"
+              disabled={reorderPreparing}
               onClick={() => beginReorderMode()}
             >
-              Редактировать порядок
+              {reorderPreparing ? 'Загрузка порядка…' : 'Редактировать порядок'}
             </button>
           )}
         </div>

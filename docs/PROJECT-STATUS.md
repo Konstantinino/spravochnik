@@ -1,6 +1,6 @@
 # REST INFO — статус проекта (handoff)
 
-Обновлено: 2026-09-17
+Обновлено: 2026-09-18
 
 ## Текущая фаза
 
@@ -8,7 +8,7 @@
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows (17 сент.): медиа `media/{отдел}/{id}/images|files`, фото на сервер при сохранении темы, автоподгрузка чужих правок без перезапуска, **тема остаётся открытой после сохранения** (Esc закрывает / «← Назад» при переходе по ссылке; ручная смена фильтра списка — сбрасывает выбор). Setup **1.4.2** (reorder, категории, sync UI). Production: nginx `client_max_body_size` ≥120M для upload Setup (~81 МБ), иначе **413**. **Миграции 004–006** на production — перед использованием reorder и категорий «Ошибки»/«Дополнительно».
+Локально на Windows (17 сент.): медиа `media/{отдел}/{id}/images|files`, фото на сервер при сохранении темы, автоподгрузка чужих правок без перезапуска, **тема остаётся открытой после сохранения** (Esc закрывает / «← Назад» при переходе по ссылке; ручная смена фильтра списка — сбрасывает выбор). Setup **1.4.3** (reorder lock, UX списка/поиска). Production: nginx `client_max_body_size` ≥120M для upload Setup (~81 МБ), иначе **413**. **Миграции 004–007** на production — reorder, категории «Ошибки»/«Дополнительно», блокировка порядка (`topic_order_locks`).
 
 **Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
@@ -25,8 +25,9 @@
 - [x] Sync: `GET /sync/changes` (full + incremental)
 - [x] App updates: `GET /app/update`, download Setup.exe; **`GET /app/updates/*`** — static `latest.yml` + blockmap для electron-updater (1.4.0+)
 - [x] Admin: users, роли **owner / admin / editor / user**, whitelist, releases, **PUT /admin/users/:id**, **POST /admin/transfer-ownership**, **GET /admin/storage-stats** (только owner)
-- [x] Миграции `002_user_department.sql`, `003_owner_role.sql`, **`004_topic_sort_index.sql`**, **`005_topic_party_errors.sql`**, **`006_topic_party_additional.sql`**
-- [x] **`PUT /departments/:dept/topic-order`** — сохранение `sort_index` (reorder списка)
+- [x] Миграции `002_user_department.sql`, `003_owner_role.sql`, **`004_topic_sort_index.sql`**, **`005_topic_party_errors.sql`**, **`006_topic_party_additional.sql`**, **`007_topic_order_locks.sql`**
+- [x] **`PUT /departments/:dept/topic-order`** — сохранение `sort_index` (reorder списка; требует активной lock-сессии)
+- [x] **`POST /departments/:dept/topic-order/lock|unlock|renew-lock`** — одновременное редактирование порядка (как topic locks)
 - [x] `import-from-json.ts` — импорт из REST-INFO-export
 - [x] Docker Compose + nginx prod overlay (`client_max_body_size 120M`)
 - [x] Изолированный deploy: пользователь `rest-info`, read-only deploy key, сеть `restinfo_internal`, скрипты `scripts/server/`, [SERVER-USER-SETUP.md](SERVER-USER-SETUP.md)
@@ -55,8 +56,9 @@
 - [x] SettingsPage: роль + Изменить + Удалить в одну строку, модал подтверждения удаления
 - [x] Список тем и подтем — **`sort_index`** внутри группы сiblings, иначе алфавит (`compareTopicsForList` в `data.ts`)
 - [x] **Техподдержка:** фильтры **Все / Поставщик / Заказчик / Ошибки / Дополнительно** (+ Архив); при «Все» — секции-заголовки в sidebar; категория в редакторе тем
-- [x] **Редактировать порядок** (ПКМ в sidebar): pointer-drag + ghost, колёсико при перетаскивании, курсор move/⊘, секции party сохранены; офлайн → очередь `reorder_topics`
-- [x] **Viewer:** рекурсивное дерево подтем в режиме просмотра (`ViewerChildrenTree`)
+- [x] **Редактировать порядок** (ПКМ): на **любом** фильтре party; порядок общий (`sort_index`); сохранение на сервер **только при «Завершить»**; перед входом — pull порядка + lock; красная плашка 1 с, если занято
+- [x] **Viewer:** рекурсивное дерево подтем; уровень 2+ — opacity **0.7**
+- [x] Sidebar: папки **свёрнуты** при старте / Ctrl+R; после **сброса поиска** — раскрытие пути к выбранной теме + скролл в **центр** списка
 - [x] Sync UI: при pull (в т.ч. фоновом) статус **«Загрузка данных…»**, после — **«Актуально»**
 - [x] `ensureRequestedPartyPersisted` — защита категории темы, если API без миграции 005/006 вернул `supplier`
 - [x] Markdown: фон цитат `>` и блоков кода в цвет шапки (`--header-blue-soft`)
@@ -72,7 +74,7 @@
 - [x] Viewer: фиксированная верхняя панель (не скроллится с текстом); исправлен «лишний» значок папки (`has_children` без детей)
 - [x] Создание темы онлайн: исправлено **дублирование** (локальный id ≠ серверный → reconcile после POST)
 - [x] Пикеры родителя и ссылки «+»: полный список тем/подтем отдела, подпись — только название; при выборе родителя — авто-смена Поставщик/Заказчик
-- [x] Клиент **1.4.2** (`REST-INFO-Setup-1.4.2.exe`): auto-update через `electron-updater` (фоновое скачивание, «Обновить» / «Скачивание…» в профиле, версия в шапке вплотную к «REST INFO»)
+- [x] Клиент **1.4.3** (`REST-INFO-Setup-1.4.3.exe`): auto-update через `electron-updater` (фоновое скачивание, «Обновить» / «Скачивание…» в профиле, версия в шапке вплотную к «REST INFO»)
 - [x] Валидация URL сервера: `GET /health` перед сохранением → «Неверно указан URL сервера»
 - [x] Локальный **«Сбросить»** в панели темы (слева от «Изменить»): модалка подтверждения, откат к снимку до редактирования; fix фокуса input после сброса (`restoreAppFocus`, без `window.confirm`)
 - [x] Сохранение фокуса textarea при Alt+Shift (смена раскладки на Windows); fix «мёртвых» input при клике в поиск во время правки
@@ -131,7 +133,7 @@
 | Production deploy (Docker + HTTPS) | **Высокий** | Серверный программист |
 | Передать ZIP `REST-INFO-export/` программисту | **Высокий** | Администратор |
 | Импорт на production: `import-from-json.js` | **Высокий** | Программист |
-| Залить Setup **1.4.2** + `latest.yml` + blockmap на production | **Высокий** | Админ / программист |
+| Залить Setup **1.4.3** + `latest.yml` + blockmap на production | **Высокий** | Админ / программист |
 | **`npm run migrate`** на production (004 sort_index, 005 errors, 006 additional) | **Высокий** | Программист |
 | Указать production URL в клиентах | Средний | Админ |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
@@ -161,7 +163,7 @@
 
 ```
 spravochnik-repo/
-├── app/                    # Electron клиент (v1.4.2)
+├── app/                    # Electron клиент (v1.4.3)
 ├── server/                 # REST API (v1.0.0)
 ├── docker-compose.yml
 ├── docker-compose.prod.yml

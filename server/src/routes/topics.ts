@@ -6,13 +6,17 @@ import { query, withTransaction, bumpGlobalVersion } from '../db/pool.js'
 import { deleteTopicMediaFiles } from '../lib/media-layout.js'
 import {
   acquireTopicLock,
+  acquireTopicOrderLock,
   DEPARTMENTS,
   isSupportParty,
   isValidDepartment,
   normalizeSupportParty,
   refreshHasChildren,
   releaseTopicLock,
+  releaseTopicOrderLock,
   renewTopicLock,
+  renewTopicOrderLock,
+  requireTopicOrderLock,
   rowToGuideItem,
   type TopicRow,
 } from '../lib/topics.js'
@@ -198,6 +202,78 @@ topicsRouter.post(
   },
 )
 
+topicsRouter.post(
+  '/:dept/topic-order/lock',
+  authMiddleware,
+  requireRole('editor', 'admin', 'owner'),
+  async (req: AuthRequest, res) => {
+    try {
+      const dept = param(req.params.dept)
+      if (!isValidDepartment(dept)) {
+        res.status(400).json({ error: 'Некорректные параметры' })
+        return
+      }
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
+
+      const lock = await acquireTopicOrderLock(dept, req.user!.id, req.user!.name)
+      if (!lock.ok) {
+        res.status(423).json({
+          error: 'Порядок тем редактируется другим пользователем',
+          lockedBy: lock.lockedBy,
+          lockedByName: lock.lockedByName,
+        })
+        return
+      }
+      res.json({ ok: true })
+    } catch (err) {
+      console.error(err)
+      res.status(500).json({ error: 'Ошибка' })
+    }
+  },
+)
+
+topicsRouter.post(
+  '/:dept/topic-order/unlock',
+  authMiddleware,
+  requireRole('editor', 'admin', 'owner'),
+  async (req: AuthRequest, res) => {
+    try {
+      const dept = param(req.params.dept)
+      if (!isValidDepartment(dept)) {
+        res.status(400).json({ error: 'Некорректные параметры' })
+        return
+      }
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
+      await releaseTopicOrderLock(dept, req.user!.id)
+      res.json({ ok: true })
+    } catch (err) {
+      console.error(err)
+      res.status(500).json({ error: 'Ошибка' })
+    }
+  },
+)
+
+topicsRouter.post(
+  '/:dept/topic-order/renew-lock',
+  authMiddleware,
+  requireRole('editor', 'admin', 'owner'),
+  async (req: AuthRequest, res) => {
+    try {
+      const dept = param(req.params.dept)
+      if (!isValidDepartment(dept)) {
+        res.status(400).json({ error: 'Некорректные параметры' })
+        return
+      }
+      if (rejectForeignDepartmentEdit(req, dept, res)) return
+      await renewTopicOrderLock(dept, req.user!.id)
+      res.json({ ok: true })
+    } catch (err) {
+      console.error(err)
+      res.status(500).json({ error: 'Ошибка' })
+    }
+  },
+)
+
 topicsRouter.put(
   '/:dept/topic-order',
   authMiddleware,
@@ -210,6 +286,17 @@ topicsRouter.put(
         return
       }
       if (rejectForeignDepartmentEdit(req, dept, res)) return
+
+      const orderLock = await requireTopicOrderLock(dept, req.user!.id)
+      if (!orderLock.ok) {
+        res.status(423).json({
+          error: orderLock.lockedByName
+            ? `Порядок редактирует: ${orderLock.lockedByName}`
+            : 'Сначала включите режим редактирования порядка',
+          lockedByName: orderLock.lockedByName || undefined,
+        })
+        return
+      }
 
       const rawItems = req.body.items
       if (!Array.isArray(rawItems) || rawItems.length === 0) {

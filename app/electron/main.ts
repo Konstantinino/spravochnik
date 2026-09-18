@@ -93,6 +93,10 @@ import {
   lockTopic,
   unlockTopic,
   renewTopicLock,
+  lockTopicOrder,
+  unlockTopicOrder,
+  renewTopicOrderLock,
+  fetchDepartmentTopics,
   serverFetch,
   serverLogin,
   serverRegister,
@@ -267,6 +271,34 @@ function readGuideFile(fileName: string): unknown {
 function writeGuideFile(fileName: string, data: unknown): void {
   const filePath = path.join(getUserDataRoot(), fileName)
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+}
+
+async function refreshDeptTopicOrderFromServer(
+  departmentId: DepartmentId,
+): Promise<Record<string, unknown>> {
+  const dept = departmentById(departmentId)
+  const settings = readSettings()
+  const data = readGuideFile(dept.fileName) as Record<string, unknown>
+
+  if (!settings.serverUrl.trim()) {
+    return data
+  }
+
+  const remote = await fetchDepartmentTopics(departmentId)
+  const listKey = dept.listKey
+  const local = (data[listKey] as Array<Record<string, unknown>>) || []
+  const remoteList = (remote[listKey] as Array<Record<string, unknown>>) || []
+  const sortById = new Map<number, number | null | undefined>()
+  for (const item of remoteList) {
+    sortById.set(Number(item.id), item.sort_index as number | null | undefined)
+  }
+  for (const item of local) {
+    const id = Number(item.id)
+    if (!sortById.has(id)) continue
+    item.sort_index = sortById.get(id) ?? null
+  }
+  writeGuideFile(dept.fileName, data)
+  return data
 }
 
 function attachWindowsInputFixes(win: BrowserWindow): void {
@@ -872,6 +904,101 @@ function registerIpc(): void {
     },
   )
 
+  ipcMain.handle(
+    'sync:lock-topic-order',
+    async (_e, payload: { departmentId: DepartmentId }) => {
+      try {
+        requireEditDepartment(payload.departmentId)
+        const settings = readSettings()
+        if (!settings.serverUrl.trim()) return { ok: true as const }
+        await lockTopicOrder(payload.departmentId)
+        return { ok: true as const }
+      } catch (e) {
+        if (e instanceof ServerApiError && e.status === 423) {
+          const body = e.body as { lockedByName?: string }
+          const name = body?.lockedByName?.trim()
+          return {
+            ok: false as const,
+            lockedByName: name,
+            error: name
+              ? `Порядок уже редактирует: ${name}`
+              : 'Порядок уже редактируется другим пользователем',
+          }
+        }
+        return {
+          ok: false as const,
+          error: e instanceof Error ? e.message : 'Не удалось заблокировать порядок',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'sync:unlock-topic-order',
+    async (_e, payload: { departmentId: DepartmentId }) => {
+      requireEditDepartment(payload.departmentId)
+      const settings = readSettings()
+      if (!settings.serverUrl.trim()) return { ok: true }
+      await unlockTopicOrder(payload.departmentId).catch(() => undefined)
+      return { ok: true }
+    },
+  )
+
+  ipcMain.handle(
+    'sync:renew-topic-order-lock',
+    async (_e, payload: { departmentId: DepartmentId }) => {
+      requireEditDepartment(payload.departmentId)
+      const settings = readSettings()
+      if (!settings.serverUrl.trim()) return { ok: true }
+      await renewTopicOrderLock(payload.departmentId)
+      return { ok: true }
+    },
+  )
+
+  ipcMain.handle('prepare-topic-reorder', async (_e, departmentId: DepartmentId) => {
+    requireEditDepartment(departmentId)
+    let guide: Record<string, unknown>
+    try {
+      guide = await refreshDeptTopicOrderFromServer(departmentId)
+    } catch (e) {
+      const dept = departmentById(departmentId)
+      guide = readGuideFile(dept.fileName) as Record<string, unknown>
+      return {
+        ok: false as const,
+        guide,
+        error: e instanceof Error ? e.message : 'Не удалось загрузить порядок с сервера',
+      }
+    }
+
+    const settings = readSettings()
+    if (!settings.serverUrl.trim()) {
+      return { ok: true as const, guide }
+    }
+
+    try {
+      await lockTopicOrder(departmentId)
+      return { ok: true as const, guide }
+    } catch (e) {
+      if (e instanceof ServerApiError && e.status === 423) {
+        const body = e.body as { lockedByName?: string }
+        const name = body?.lockedByName?.trim()
+        return {
+          ok: false as const,
+          guide,
+          lockedByName: name,
+          error: name
+            ? `Порядок уже редактирует: ${name}`
+            : 'Порядок уже редактируется другим пользователем',
+        }
+      }
+      return {
+        ok: false as const,
+        guide,
+        error: e instanceof Error ? e.message : 'Не удалось начать редактирование порядка',
+      }
+    }
+  })
+
   ipcMain.handle('load-guide', (_event, departmentId: DepartmentId) => {
     const dept = departmentById(departmentId)
     const data = readGuideFile(dept.fileName) as Record<string, unknown>
@@ -1223,31 +1350,27 @@ function registerIpc(): void {
       }
 
       data[listKey] = list
-      writeGuideFile(dept.fileName, data)
 
       const settings = readSettings()
       if (settings.serverUrl.trim()) {
         try {
           const result = await tryPushReorderOnline(payload.departmentId, payload.items)
-          if (result.ok) return readGuideFile(dept.fileName)
-          queueOperation({
-            type: 'reorder_topics',
-            departmentId: payload.departmentId,
-            payload: { items: payload.items },
-          })
-          markOfflinePending()
+          if (!result.ok) {
+            throw new Error('Нет связи с сервером. Порядок не сохранён на сервере.')
+          }
         } catch (err) {
           console.error('reorder-topics push failed', err)
-          queueOperation({
-            type: 'reorder_topics',
-            departmentId: payload.departmentId,
-            payload: { items: payload.items },
-          })
-          markOfflinePending()
+          if (err instanceof ServerApiError && err.status === 423) {
+            throw new Error(err.message || 'Порядок тем редактируется другим пользователем')
+          }
+          if (err instanceof Error) throw err
+          throw new Error('Не удалось сохранить порядок на сервере')
         }
       } else {
         markLocalChange()
       }
+
+      writeGuideFile(dept.fileName, data)
       return data
     },
   )

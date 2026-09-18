@@ -190,3 +190,88 @@ export async function renewTopicLock(
     [departmentId, topicId, userId, expiresAt],
   )
 }
+
+export async function acquireTopicOrderLock(
+  departmentId: string,
+  userId: string,
+  userName: string,
+): Promise<{ ok: true } | { ok: false; lockedBy: string; lockedByName: string }> {
+  const { query } = await import('../db/pool.js')
+
+  await query('DELETE FROM topic_order_locks WHERE expires_at < NOW()')
+
+  const existing = await query<{
+    locked_by: string
+    locked_by_name: string
+  }>(
+    `SELECT locked_by, locked_by_name FROM topic_order_locks
+     WHERE department_id = $1 AND expires_at > NOW()`,
+    [departmentId],
+  )
+
+  const lock = existing.rows[0]
+  if (lock && lock.locked_by !== userId) {
+    return { ok: false, lockedBy: lock.locked_by, lockedByName: lock.locked_by_name }
+  }
+
+  const expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString()
+  await query(
+    `INSERT INTO topic_order_locks (department_id, locked_by, locked_by_name, expires_at)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (department_id)
+     DO UPDATE SET locked_by = $2, locked_by_name = $3, locked_at = NOW(), expires_at = $4
+     WHERE topic_order_locks.locked_by = $2 OR topic_order_locks.expires_at < NOW()`,
+    [departmentId, userId, userName, expiresAt],
+  )
+
+  const check = await query<{ locked_by: string; locked_by_name: string }>(
+    `SELECT locked_by, locked_by_name FROM topic_order_locks WHERE department_id = $1`,
+    [departmentId],
+  )
+  const current = check.rows[0]
+  if (current && current.locked_by !== userId) {
+    return { ok: false, lockedBy: current.locked_by, lockedByName: current.locked_by_name }
+  }
+
+  return { ok: true }
+}
+
+export async function releaseTopicOrderLock(departmentId: string, userId: string): Promise<void> {
+  const { query } = await import('../db/pool.js')
+  await query(
+    `DELETE FROM topic_order_locks WHERE department_id = $1 AND locked_by = $2`,
+    [departmentId, userId],
+  )
+}
+
+export async function renewTopicOrderLock(departmentId: string, userId: string): Promise<void> {
+  const { query } = await import('../db/pool.js')
+  const expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString()
+  await query(
+    `UPDATE topic_order_locks SET expires_at = $2, locked_at = NOW()
+     WHERE department_id = $1 AND locked_by = $3`,
+    [departmentId, expiresAt, userId],
+  )
+}
+
+export async function requireTopicOrderLock(
+  departmentId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; lockedByName: string }> {
+  const { query } = await import('../db/pool.js')
+  await query('DELETE FROM topic_order_locks WHERE expires_at < NOW()')
+
+  const existing = await query<{ locked_by: string; locked_by_name: string }>(
+    `SELECT locked_by, locked_by_name FROM topic_order_locks
+     WHERE department_id = $1 AND expires_at > NOW()`,
+    [departmentId],
+  )
+  const lock = existing.rows[0]
+  if (!lock) {
+    return { ok: false, lockedByName: '' }
+  }
+  if (lock.locked_by !== userId) {
+    return { ok: false, lockedByName: lock.locked_by_name }
+  }
+  return { ok: true }
+}

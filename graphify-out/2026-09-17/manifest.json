@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "app/package.json": {
-    "mtime": 1789392232.9558337,
-    "seen": 1789392325.842652,
-    "ast_hash": "8051fce372fd1d6305f5089c1ac03191",
+    "mtime": 1789649888.899719,
+    "seen": 1789649941.2604396,
+    "ast_hash": "3f55019259e43b01d07f31fe511ffce7",
     "semantic_hash": ""
   },
   "app/resources/data/app-update.json": {
@@ -288,15 +288,15 @@
     "semantic_hash": "5ab518c19a1fece2b2becb0ae07bf8a2"
   },
   "AGENTS.md": {
-    "mtime": 1789646343.133273,
-    "seen": 1789646348.5668726,
-    "ast_hash": "c8a6d8fbd81ef0617f758e5dbe095bd1",
+    "mtime": 1789649889.6896145,
+    "seen": 1789649941.2605348,
+    "ast_hash": "e3e6c58c0f9c252b60cefddd3af1e578",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789392342.7841954,
-    "seen": 1789392380.5224402,
-    "ast_hash": "5afb832cb213c13cb5ed37d997d660d1",
+    "mtime": 1789649890.9942546,
+    "seen": 1789649941.2605357,
+    "ast_hash": "7bc05cd7ddb49aa79ba8e22dcdb10bfc",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -510,9 +510,9 @@
     "semantic_hash": ""
   },
   "docs/PROJECT-STATUS.md": {
-    "mtime": 1789646343.133273,
-    "seen": 1789646348.5668826,
-    "ast_hash": "67096f346eadf2dcaff978881433c45e",
+    "mtime": 1789649890.9942546,
+    "seen": 1789649941.260545,
+    "ast_hash": "835ea93e45f9652a12d64c96cce246a6",
     "semantic_hash": ""
   },
   "docs/legacy-yandex-disk.md": {
@@ -528,9 +528,9 @@
     "semantic_hash": ""
   },
   "docs/scripts.md": {
-    "mtime": 1789392342.898015,
-    "seen": 1789392380.5224557,
-    "ast_hash": "75b15e409040ec78ed6b47e279694554",
+    "mtime": 1789649889.744114,
+    "seen": 1789649941.260552,
+    "ast_hash": "56f4cbf2090066bee84c4791c8d657df",
     "semantic_hash": ""
   },
   "docs/server-deploy.md": {
@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "docs/testing-checklist.md": {
-    "mtime": 1789392347.6725821,
-    "seen": 1789392380.5224578,
-    "ast_hash": "5c036bb89cc50d3658bd414e8e2ece45",
+    "mtime": 1789649810.2410083,
+    "seen": 1789649817.6081676,
+    "ast_hash": "226f3dd71c049fcc78d240cc3de36176",
     "semantic_hash": ""
   },
   "server/README.md": {

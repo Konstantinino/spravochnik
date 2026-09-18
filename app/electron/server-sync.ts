@@ -39,8 +39,10 @@ import {
   ServerApiError,
   downloadMediaFile,
   isServerReachable,
+  lockTopicOrder,
   serverFetch,
   setAfterServerRequest,
+  unlockTopicOrder,
   uploadMediaFile,
 } from './server-api'
 import { checkForUpdates } from './updates'
@@ -556,10 +558,15 @@ async function replayOperation(op: PendingOperation): Promise<void> {
     case 'reorder_topics': {
       const deptId = op.departmentId!
       const items = op.payload.items as Array<{ id: number; sort_index: number }>
-      await serverFetch(`/departments/${deptId}/topic-order`, {
-        method: 'PUT',
-        body: JSON.stringify({ items }),
-      })
+      await lockTopicOrder(deptId)
+      try {
+        await serverFetch(`/departments/${deptId}/topic-order`, {
+          method: 'PUT',
+          body: JSON.stringify({ items }),
+        })
+      } finally {
+        await unlockTopicOrder(deptId).catch(() => undefined)
+      }
       break
     }
     case 'set_user_role':

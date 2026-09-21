@@ -3,7 +3,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { DepartmentId, GuideItem, ImageDisplayMap, SupportParty } from '../types'
 import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
-import { getChildren, getItemParty, isArchived, topicDisplayLabel } from '../lib/data'
+import {
+  filterTopicsForLinkPicker,
+  filterTopicsForParentPicker,
+  getChildren,
+  getItemParty,
+  topicDisplayLabel,
+} from '../lib/data'
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
 import {
   IMAGE_SCALE_DEFAULT,
@@ -55,6 +61,10 @@ interface ViewerProps {
   showLocalReset?: boolean
   onLocalReset?: () => void
   resettingLocal?: boolean
+  /** Increment `seq` to open the topic editor from outside (e.g. sidebar context menu). */
+  startEditRequest?: { topicId: number; seq: number } | null
+  onStartEditRequestHandled?: () => void
+  reorderMode?: boolean
 }
 
 type ImgMenuState = {
@@ -156,6 +166,9 @@ export function Viewer({
   showLocalReset = false,
   onLocalReset,
   resettingLocal = false,
+  startEditRequest = null,
+  onStartEditRequestHandled,
+  reorderMode = false,
 }: ViewerProps) {
   const [editing, setEditing] = useState(false)
   const [question, setQuestion] = useState('')
@@ -286,6 +299,37 @@ export function Viewer({
   }, [editing, clearPicker])
 
   useEffect(() => {
+    if (reorderMode && editing) {
+      setEditing(false)
+    }
+  }, [reorderMode, editing])
+
+  useEffect(() => {
+    if (reorderMode) return
+    if (!startEditRequest || !item || item.id !== startEditRequest.topicId || !canEdit) return
+    setFindOpen(false)
+    setFindQuery('')
+    setFindIndex(0)
+    setFindCount(0)
+    setError(null)
+    setQuestion(item.question)
+    setAnswer(item.answer ?? '')
+    setParentId(item.parent_id ?? null)
+    setAttachParent(item.parent_id != null)
+    setParty(getItemParty(item))
+    onEditStart?.(structuredClone(item))
+    setEditing(true)
+    onStartEditRequestHandled?.()
+  }, [
+    startEditRequest?.seq,
+    startEditRequest?.topicId,
+    item?.id,
+    canEdit,
+    onEditStart,
+    onStartEditRequestHandled,
+  ])
+
+  useEffect(() => {
     if (!item || displayDirtyRef.current || scaleEditor) return
     setLocalDisplay(item.image_display)
   }, [item?.image_display, item, scaleEditor])
@@ -302,15 +346,20 @@ export function Viewer({
 
   const showParty = departmentId === 'support'
 
-  const pickerItems = useMemo(
-    () => allItems.filter((item) => !isArchived(item)),
+  const linkPickerItems = useMemo(
+    () => filterTopicsForLinkPicker(allItems),
     [allItems],
   )
+
+  const parentPickerItems = useMemo(() => {
+    if (!showParty) return linkPickerItems
+    return filterTopicsForParentPicker(allItems, party)
+  }, [allItems, showParty, party, linkPickerItems])
 
   function handleParentIdChange(id: number | null) {
     setParentId(id)
     if (id != null && showParty) {
-      const parent = pickerItems.find((i) => i.id === id)
+      const parent = linkPickerItems.find((i) => i.id === id)
       if (parent) setParty(getItemParty(parent))
     }
   }
@@ -477,7 +526,7 @@ export function Viewer({
         departmentId,
       })
       if (!result) return
-      const markdown = `\n\n![](${result.markdownPath})\n\n`
+      const markdown = `\n\n![](${result.markdownPath})`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
       focusCursor(textareaRef.current, cursor)
@@ -534,7 +583,7 @@ export function Viewer({
         setError('В буфере нет изображения')
         return
       }
-      const markdown = `\n\n![](${result.markdownPath})\n\n`
+      const markdown = `\n\n![](${result.markdownPath})`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
       clearPicker()
@@ -944,13 +993,8 @@ export function Viewer({
                 onChange={(e) => {
                   const next = e.target.value as SupportParty
                   setParty(next)
-                  if (parentId != null) {
-                    const parent = pickerItems.find((i) => i.id === parentId)
-                    if (parent && getItemParty(parent) !== next) {
-                      setParentId(null)
-                      setAttachParent(false)
-                    }
-                  }
+                  setAttachParent(false)
+                  setParentId(null)
                 }}
               >
                 {SUPPORT_PARTIES.map((p) => (
@@ -962,7 +1006,7 @@ export function Viewer({
             </label>
           )}
           <ParentTopicField
-            items={pickerItems}
+            items={parentPickerItems}
             excludeId={current.id}
             attach={attachParent}
             onAttachChange={setAttachParent}
@@ -983,7 +1027,7 @@ export function Viewer({
           />
           <TopicLinkPicker
             open={linkPicker}
-            items={pickerItems}
+            items={linkPickerItems}
             excludeId={current.id}
             onPick={pickTopicForLink}
             onClose={closePicker}

@@ -270,6 +270,18 @@ export function isValidParent(
   return !getDescendantIds(items, itemId).has(parentId)
 }
 
+export function filterTopicsForLinkPicker(items: GuideItem[]): GuideItem[] {
+  return items.filter((item) => !isArchived(item))
+}
+
+/** Parent picker: same party only (support dept); excludes archive. */
+export function filterTopicsForParentPicker(
+  items: GuideItem[],
+  party: SupportParty,
+): GuideItem[] {
+  return filterTopicsForLinkPicker(items).filter((item) => getItemParty(item) === party)
+}
+
 export function topicDisplayLabel(item: GuideItem): string {
   return item.question?.trim() || 'Без названия'
 }
@@ -280,12 +292,16 @@ export function topicLabelWithPath(items: GuideItem[], item: GuideItem): string 
   return path.join(' → ')
 }
 
-/** Match picker search by title or full path (path not shown in the list). */
-export function topicMatchesQuery(items: GuideItem[], item: GuideItem, query: string): boolean {
-  const q = query.trim().toLowerCase()
-  if (!q) return true
-  if (topicDisplayLabel(item).toLowerCase().includes(q)) return true
-  return topicLabelWithPath(items, item).toLowerCase().includes(q)
+/** Picker search: all query tokens must appear in the topic title only (not parent path). */
+export function topicMatchesQuery(_items: GuideItem[], item: GuideItem, query: string): boolean {
+  const tokens = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (tokens.length === 0) return true
+  const title = topicDisplayLabel(item).toLowerCase()
+  return tokens.every((token) => title.includes(token))
 }
 
 export function nextId(items: GuideItem[]): number {

@@ -72,8 +72,10 @@ class SettingsErrorBoundary extends Component<
             </button>
             <h1>Настройки</h1>
           </div>
-          <div className="settings-page__content">
-            <div className="form-error">{this.state.error}</div>
+          <div className="settings-page__scroll">
+            <div className="settings-page__content">
+              <div className="form-error">{this.state.error}</div>
+            </div>
           </div>
         </div>
       )
@@ -145,6 +147,10 @@ export default function App() {
   /** sort_index snapshot at reorder session start; persisted only on exit. */
   const reorderBaselineRef = useRef<GuideItem[] | null>(null)
   const reorderLockBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [sidebarEditRequest, setSidebarEditRequest] = useState<{
+    topicId: number
+    seq: number
+  } | null>(null)
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -402,6 +408,24 @@ export default function App() {
     setSelectedId(id)
   }
 
+  function openTopicForEditFromSidebar(id: number) {
+    if (!canEdit) return
+    const topic = items.find((i) => i.id === id)
+    if (!topic) return
+    if (!visibleItems.some((i) => i.id === id)) {
+      if (isArchived(topic)) {
+        setListFilter('archive')
+      } else if (listFilter === 'archive') {
+        setListFilter('all')
+      } else if (departmentId === 'support' && isSupportParty(listFilter)) {
+        setListFilter('all')
+      }
+    }
+    setNavHistory([])
+    setSelectedId(id)
+    setSidebarEditRequest({ topicId: id, seq: Date.now() })
+  }
+
   function navigateToTopic(id: number) {
     const topic = items.find((i) => i.id === id)
     if (!topic || id === selectedId) return
@@ -568,8 +592,13 @@ export default function App() {
     }, 1000)
   }
 
+  const handleSidebarEditRequestHandled = useCallback(() => {
+    setSidebarEditRequest(null)
+  }, [])
+
   async function handleEnterReorderMode() {
     if (reorderPreparing || reorderMode) return
+    setSidebarEditRequest(null)
     setReorderPreparing(true)
     try {
       const result = await window.spravochnik.prepareTopicReorder(departmentId)
@@ -917,8 +946,10 @@ export default function App() {
                 reorderPreparing={reorderPreparing}
                 reorderLockBanner={reorderLockBanner}
                 canReorder={canReorderTopics}
+                canEditTopic={!!canEdit}
                 onEnterReorderMode={() => void handleEnterReorderMode()}
                 onExitReorderMode={handleExitReorderMode}
+                onEditTopic={openTopicForEditFromSidebar}
                 onReorderSiblings={(parentId, draggedId, targetId) =>
                   void handleReorderSiblings(parentId, draggedId, targetId)
                 }
@@ -955,6 +986,9 @@ export default function App() {
             showLocalReset={showLocalReset}
             onLocalReset={openLocalResetConfirm}
             resettingLocal={resettingTopic}
+            startEditRequest={sidebarEditRequest}
+            onStartEditRequestHandled={handleSidebarEditRequestHandled}
+            reorderMode={reorderMode}
           />
         </main>
       </div>

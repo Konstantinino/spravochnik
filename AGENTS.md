@@ -62,7 +62,7 @@ graphify update .
 | `guide-data.ts` | reconcile `has_children` в локальном JSON |
 | `media-layout.ts` | пути `media/{отдел}/{id}/images|files`, миграция legacy → `support/` |
 | `sync-backend.ts` | server vs yandex по `STORAGE_BACKEND` |
-| `auth-store.ts` | accounts.json, settings, сессия |
+| `auth-store.ts` | accounts.json, settings, сессия, **`windowBounds`** |
 | `topic-media.ts` | фото темы + вложения файлов (до 10 МБ); диск: `media/{отдел}/{id темы}/images|files/`; cleanup с учётом `photos`/`documents` |
 | `updates.ts` | `electron-updater`: фоновая проверка/скачивание, `installUpdate()` |
 | `export-for-server.ts` | упаковка данных (CLI, не UI) |
@@ -96,9 +96,9 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; версия в шапке; профиль → «Обновить»; **«Сбросить»** (локальный откат); ⋮ → копия ссылки; ← Назад; Esc |
 | `hooks/usePreserveTextareaFocus.ts` | сохранение фокуса textarea при Alt+Shift (Windows) |
 | `lib/restoreAppFocus.ts` | восстановление фокуса Electron после модалок / сброса |
-| `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | выбор родителя / ссылки «+» — полный список отдела, только название темы; родитель → авто party |
+| `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | родитель: combobox, поиск по названию, фильтр party; «+»: весь отдел без архива |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
-| `TopicList.tsx` | дерево тем, секции party, **reorder** (save on exit, lock, search→scroll to selected) |
+| `TopicList.tsx` | дерево тем, секции party, **reorder**, ПКМ «редактировать тему/порядок» |
 | `lib/data.ts` | фильтры, `reorderSiblingTopics` + party scope, `getAncestorIds`, `getItemParty`, `topicDisplayLabel` |
 | `lib/markdown.ts` | media src, ссылки тем, вложения `files/` |
 | `lib/textInsert.ts` | вставка / `+query` / обёртка выделения ссылкой |
@@ -158,7 +158,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.4.3.exe
+# → app/release/REST-INFO-Setup-1.4.4.exe
 ```
 
 ## Владелец / bootstrap
@@ -194,6 +194,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.4.3** (`app/package.json`)
+- Клиент: **1.4.4** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

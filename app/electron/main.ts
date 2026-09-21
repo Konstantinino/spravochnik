@@ -7,6 +7,7 @@ import {
   Menu,
   protocol,
   net,
+  screen,
   shell,
 } from 'electron'
 import fs from 'node:fs'
@@ -41,6 +42,7 @@ import {
   saveNativeImageForOwner,
   type ImageOwner,
 } from './topic-media'
+import type { SavedWindowBounds } from './auth-store'
 import {
   addWhitelistEmail,
   clearSession,
@@ -52,6 +54,7 @@ import {
   loginUser,
   readSettings,
   registerUser,
+  saveWindowBounds,
   removeWhitelistEmail,
   requireRole,
   setWhitelist,
@@ -128,6 +131,11 @@ import {
   getSessionLogs,
   onSessionLog,
 } from './session-log'
+
+// Must match build.appId — same AppUserModelID as desktop shortcut (WinShell::SetLnkAUMI).
+if (process.platform === 'win32') {
+  app.setAppUserModelId('ru.rest.info')
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -301,6 +309,80 @@ async function refreshDeptTopicOrderFromServer(
   return data
 }
 
+const WINDOW_MIN_WIDTH = 1000
+const WINDOW_MIN_HEIGHT = 700
+const WINDOW_DEFAULT_WIDTH = 1200
+const WINDOW_DEFAULT_HEIGHT = 800
+
+function rectsOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  return !(
+    a.x + a.width <= b.x ||
+    a.x >= b.x + b.width ||
+    a.y + a.height <= b.y ||
+    a.y >= b.y + b.height
+  )
+}
+
+function isWindowBoundsVisible(bounds: SavedWindowBounds): boolean {
+  const rect = {
+    x: bounds.x,
+    y: bounds.y,
+    width: Math.max(WINDOW_MIN_WIDTH, bounds.width),
+    height: Math.max(WINDOW_MIN_HEIGHT, bounds.height),
+  }
+  return screen.getAllDisplays().some((display) => rectsOverlap(rect, display.workArea))
+}
+
+function loadSavedWindowBounds(): { bounds: SavedWindowBounds; place: boolean } | null {
+  const saved = readSettings().windowBounds
+  if (!saved) return null
+  const bounds: SavedWindowBounds = {
+    width: Math.max(WINDOW_MIN_WIDTH, Math.round(saved.width)),
+    height: Math.max(WINDOW_MIN_HEIGHT, Math.round(saved.height)),
+    x: Math.round(saved.x),
+    y: Math.round(saved.y),
+    isMaximized: Boolean(saved.isMaximized),
+  }
+  return { bounds, place: isWindowBoundsVisible(bounds) }
+}
+
+function persistWindowBounds(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  const isMaximized = win.isMaximized()
+  const bounds = isMaximized ? win.getNormalBounds() : win.getBounds()
+  saveWindowBounds({
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
+    isMaximized,
+  })
+}
+
+function attachWindowBoundsPersistence(win: BrowserWindow): void {
+  let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      saveTimer = null
+      persistWindowBounds(win)
+    }, 300)
+  }
+
+  win.on('resize', scheduleSave)
+  win.on('move', scheduleSave)
+  win.on('maximize', scheduleSave)
+  win.on('unmaximize', scheduleSave)
+  win.on('close', () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    persistWindowBounds(win)
+  })
+}
+
 function attachWindowsInputFixes(win: BrowserWindow): void {
   if (process.platform !== 'win32') return
   // Alt+Shift (language switch) must not activate the hidden menu bar and blur the editor.
@@ -312,11 +394,15 @@ function attachWindowsInputFixes(win: BrowserWindow): void {
 }
 
 function createWindow(): void {
+  const savedWindow = loadSavedWindowBounds()
+  const savedBounds = savedWindow?.bounds
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 1000,
-    minHeight: 700,
+    width: savedBounds?.width ?? WINDOW_DEFAULT_WIDTH,
+    height: savedBounds?.height ?? WINDOW_DEFAULT_HEIGHT,
+    x: savedWindow?.place ? savedBounds!.x : undefined,
+    y: savedWindow?.place ? savedBounds!.y : undefined,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
     title: 'REST INFO',
     show: false,
     autoHideMenuBar: true,
@@ -328,8 +414,13 @@ function createWindow(): void {
     },
   })
 
+  if (savedBounds?.isMaximized) {
+    win.maximize()
+  }
+
   win.setMenuBarVisibility(false)
   attachWindowsInputFixes(win)
+  attachWindowBoundsPersistence(win)
   win.once('ready-to-show', () => win.show())
 
   win.webContents.setWindowOpenHandler(({ url }) => {

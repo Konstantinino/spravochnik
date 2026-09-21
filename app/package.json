@@ -1,6 +1,6 @@
 {
   "name": "rest-info",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "REST INFO — корпоративный справочник",
   "main": "dist-electron/main.js",
   "author": "REST",
@@ -76,6 +76,7 @@
       }
     ],
     "nsis": {
+      "include": "installer.nsh",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,

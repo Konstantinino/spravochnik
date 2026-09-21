@@ -465,7 +465,8 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
         <h1>Настройки</h1>
       </div>
 
-      <div className="settings-page__content">
+      <div className="settings-page__scroll">
+        <div className="settings-page__content">
         {error && <div className="form-error">{error}</div>}
         {info && <div className="form-info">{info}</div>}
 
@@ -849,6 +850,7 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
             )}
           </section>
         )}
+        </div>
       </div>
 
       {deletingUser && (

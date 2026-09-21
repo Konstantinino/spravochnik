@@ -1336,6 +1336,13 @@ mark.find-hit--active {
   resize: vertical;
 }
 
+.field.is-inactive select,
+.field.is-inactive input {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-soft, #f6f8fa);
+}
+
 .password-field {
   display: flex;
   gap: 8px;
@@ -1443,34 +1450,36 @@ mark.find-hit--active {
   height: 16px;
 }
 
-.parent-topic-field__picker {
+.parent-topic-field__combobox {
+  position: relative;
   margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  margin-left: 24px;
+  max-width: 100%;
 }
 
-.parent-topic-field__picker > input[type='search'] {
+.parent-topic-field__combobox.is-inactive .parent-topic-field__input {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+  background: var(--bg-soft, #f6f8fa);
+}
+
+.parent-topic-field__input {
+  width: 100%;
+  box-sizing: border-box;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   font: inherit;
+  background: #fff;
 }
 
-.parent-topic-field__selected {
-  font-size: 0.92rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.parent-topic-field__clear {
-  padding: 2px 8px;
-  font-size: 0.85rem;
-}
-
-.parent-topic-field__list {
+.parent-topic-field__dropdown {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1479,14 +1488,15 @@ mark.find-hit--active {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
-.parent-topic-field__list li {
+.parent-topic-field__dropdown li {
   margin: 0;
   border-bottom: 1px solid var(--border);
 }
 
-.parent-topic-field__list li:last-child {
+.parent-topic-field__dropdown li:last-child {
   border-bottom: 0;
 }
 
@@ -1510,8 +1520,7 @@ mark.find-hit--active {
   font-weight: 600;
 }
 
-.parent-topic-field__empty,
-.parent-topic-field__hint {
+.parent-topic-field__empty {
   padding: 8px 10px;
   margin: 0;
 }
@@ -1913,6 +1922,13 @@ mark.find-hit--active {
   display: flex;
   flex-direction: column;
   background: var(--bg);
+  overflow: hidden;
+}
+
+.settings-page__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .settings-page__bar {
@@ -1930,7 +1946,6 @@ mark.find-hit--active {
 }
 
 .settings-page__content {
-  overflow: auto;
   padding: 20px 24px 40px;
   max-width: 900px;
   width: 100%;

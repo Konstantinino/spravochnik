@@ -39,6 +39,14 @@ export interface AccountsData {
   removedEmails?: string[]
 }
 
+export interface SavedWindowBounds {
+  width: number
+  height: number
+  x: number
+  y: number
+  isMaximized?: boolean
+}
+
 export interface SettingsData {
   /** @deprecated Yandex Disk OAuth token — use authToken + serverUrl */
   yandexToken?: string
@@ -48,6 +56,7 @@ export interface SettingsData {
   lastGlobalVersion?: number | null
   hasPendingChanges: boolean
   offlineWarningShown?: boolean
+  windowBounds?: SavedWindowBounds
 }
 
 export interface PublicUser {
@@ -250,10 +259,36 @@ export function readSettings(): SettingsData {
           : null,
       hasPendingChanges: Boolean(raw.hasPendingChanges),
       offlineWarningShown: Boolean(raw.offlineWarningShown),
+      windowBounds: parseWindowBounds(raw.windowBounds),
     }
   } catch {
     return defaultSettings()
   }
+}
+
+function parseWindowBounds(raw: unknown): SavedWindowBounds | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const b = raw as Partial<SavedWindowBounds>
+  const width = Number(b.width)
+  const height = Number(b.height)
+  const x = Number(b.x)
+  const y = Number(b.y)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return undefined
+  }
+  return {
+    width,
+    height,
+    x: Number.isFinite(x) ? x : 0,
+    y: Number.isFinite(y) ? y : 0,
+    isMaximized: Boolean(b.isMaximized),
+  }
+}
+
+export function saveWindowBounds(bounds: SavedWindowBounds): void {
+  const settings = readSettings()
+  settings.windowBounds = bounds
+  writeSettings(settings)
 }
 
 export function writeSettings(data: SettingsData): void {

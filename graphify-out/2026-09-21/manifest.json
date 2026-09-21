@@ -12,9 +12,9 @@
     "semantic_hash": "48f62e0638397bef54e632b24f954c7d"
   },
   "app/electron/main.ts": {
-    "mtime": 1789971824.6919878,
-    "seen": 1789972023.6071458,
-    "ast_hash": "86e1b9f6e1fc5b8694e641bf527bfc38",
+    "mtime": 1789971593.1356206,
+    "seen": 1789971613.659091,
+    "ast_hash": "34429e292fbfcaed48db30dd1c44053e",
     "semantic_hash": ""
   },
   "app/electron/paths.ts": {
@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "app/package.json": {
-    "mtime": 1789971923.131007,
-    "seen": 1789972023.6071675,
-    "ast_hash": "0597f986a856e576e496ab854849d6aa",
+    "mtime": 1789708702.251256,
+    "seen": 1789708903.7447278,
+    "ast_hash": "d7013ab625f6b413374611202186971f",
     "semantic_hash": ""
   },
   "app/resources/data/app-update.json": {

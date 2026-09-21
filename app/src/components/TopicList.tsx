@@ -88,8 +88,10 @@ interface TopicListProps {
   reorderPreparing?: boolean
   reorderLockBanner?: string | null
   canReorder?: boolean
+  canEditTopic?: boolean
   onEnterReorderMode?: () => void
   onExitReorderMode?: () => void
+  onEditTopic?: (id: number) => void
   onReorderSiblings?: (parentId: number | null, draggedId: number, targetId: number) => void
 }
 
@@ -428,8 +430,10 @@ export function TopicList({
   reorderPreparing = false,
   reorderLockBanner = null,
   canReorder = false,
+  canEditTopic = false,
   onEnterReorderMode,
   onExitReorderMode,
+  onEditTopic,
   onReorderSiblings,
 }: TopicListProps) {
   const [ctxMenu, setCtxMenu] = useState<{
@@ -437,6 +441,7 @@ export function TopicList({
     y: number
     topicId: number | null
   } | null>(null)
+  const ctxMenuRef = useRef<HTMLDivElement>(null)
   const [reorderFocusId, setReorderFocusId] = useState<number | null>(null)
   const [flashFocusId, setFlashFocusId] = useState<number | null>(null)
   const [draggingId, setDraggingId] = useState<number | null>(null)
@@ -463,7 +468,15 @@ export function TopicList({
 
   useEffect(() => {
     if (!ctxMenu) return
-    const close = () => setCtxMenu(null)
+    function close(e: Event) {
+      if (e.type === 'keydown') {
+        setCtxMenu(null)
+        return
+      }
+      const target = e.target
+      if (target instanceof Node && ctxMenuRef.current?.contains(target)) return
+      setCtxMenu(null)
+    }
     window.addEventListener('mousedown', close)
     window.addEventListener('scroll', close, true)
     window.addEventListener('keydown', close)
@@ -734,20 +747,29 @@ export function TopicList({
   const partySections = showPartySections ? groupRootsByPartySections(roots) : []
 
   function openContextMenu(e: React.MouseEvent) {
-    if (!canReorder && !reorderMode) return
     e.preventDefault()
-    setCtxMenu({
-      x: e.clientX,
-      y: e.clientY,
-      topicId: topicIdFromPoint(e.clientX, e.clientY),
-    })
+    const topicId = topicIdFromPoint(e.clientX, e.clientY)
+    if (reorderMode) {
+      setCtxMenu({ x: e.clientX, y: e.clientY, topicId })
+      return
+    }
+    if (topicId == null) return
+    if (!canReorder && !canEditTopic) return
+    setCtxMenu({ x: e.clientX, y: e.clientY, topicId })
   }
 
   function beginReorderMode() {
-    if (reorderPreparing) return
-    pendingReorderFocusRef.current = ctxMenu?.topicId ?? selectedId ?? null
+    if (reorderPreparing || ctxMenu?.topicId == null) return
+    pendingReorderFocusRef.current = ctxMenu.topicId
     setCtxMenu(null)
     onEnterReorderMode?.()
+  }
+
+  function beginEditTopic() {
+    if (ctxMenu?.topicId == null) return
+    const topicId = ctxMenu.topicId
+    setCtxMenu(null)
+    onEditTopic?.(topicId)
   }
 
   const treeNodeProps = {
@@ -816,10 +838,10 @@ export function TopicList({
 
       {ctxMenu && (
         <div
+          ref={ctxMenuRef}
           className="image-ctx-menu"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
           role="menu"
-          onMouseDown={(e) => e.stopPropagation()}
         >
           {reorderMode ? (
             <button
@@ -834,15 +856,30 @@ export function TopicList({
               Завершить редактирование
             </button>
           ) : (
-            <button
-              type="button"
-              className="image-ctx-menu__item"
-              role="menuitem"
-              disabled={reorderPreparing}
-              onClick={() => beginReorderMode()}
-            >
-              {reorderPreparing ? 'Загрузка порядка…' : 'Редактировать порядок'}
-            </button>
+            <>
+              {canReorder ? (
+                <button
+                  type="button"
+                  className="image-ctx-menu__item"
+                  role="menuitem"
+                  disabled={reorderPreparing || ctxMenu.topicId == null}
+                  onClick={() => beginReorderMode()}
+                >
+                  {reorderPreparing ? 'Загрузка порядка…' : 'Редактировать порядок'}
+                </button>
+              ) : null}
+              {canEditTopic ? (
+                <button
+                  type="button"
+                  className="image-ctx-menu__item"
+                  role="menuitem"
+                  disabled={ctxMenu.topicId == null}
+                  onClick={() => beginEditTopic()}
+                >
+                  Редактировать тему
+                </button>
+              ) : null}
+            </>
           )}
         </div>
       )}

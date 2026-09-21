@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DepartmentId, GuideItem, SupportParty } from '../types'
 import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
-import { getItemParty, isArchived } from '../lib/data'
+import {
+  filterTopicsForLinkPicker,
+  filterTopicsForParentPicker,
+  getItemParty,
+} from '../lib/data'
 import { formatFileMarkdownLink } from '../lib/markdown'
 import {
   focusCursor,
@@ -78,11 +82,12 @@ export function TopicEditorModal({
 
   const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
 
-  /** Full dept list for parent/link pickers (same pool as «+» links). */
-  const pickerItems = useMemo(
-    () => items.filter((item) => !isArchived(item)),
-    [items],
-  )
+  const linkPickerItems = useMemo(() => filterTopicsForLinkPicker(items), [items])
+
+  const parentPickerItems = useMemo(() => {
+    if (!showParty) return linkPickerItems
+    return filterTopicsForParentPicker(items, party)
+  }, [items, showParty, party, linkPickerItems])
 
   useEffect(() => {
     if (!open) return
@@ -126,19 +131,14 @@ export function TopicEditorModal({
 
   function handlePartyChange(next: SupportParty) {
     setParty(next)
-    if (selectedParentId != null) {
-      const parent = pickerItems.find((i) => i.id === selectedParentId)
-      if (parent && getItemParty(parent) !== next) {
-        setSelectedParentId(null)
-        setAttachParent(false)
-      }
-    }
+    setAttachParent(false)
+    setSelectedParentId(null)
   }
 
   function handleParentIdChange(id: number | null) {
     setSelectedParentId(id)
     if (id != null && showParty) {
-      const parent = pickerItems.find((i) => i.id === id)
+      const parent = linkPickerItems.find((i) => i.id === id)
       if (parent) setParty(getItemParty(parent))
     }
   }
@@ -148,7 +148,7 @@ export function TopicEditorModal({
     try {
       const result = await window.spravochnik.saveTopicImage(imageOwnerPayload())
       if (!result) return
-      const markdown = `\n\n![](${result.markdownPath})\n\n`
+      const markdown = `\n\n![](${result.markdownPath})`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
       focusCursor(textareaRef.current, cursor)
@@ -199,7 +199,7 @@ export function TopicEditorModal({
         setError('В буфере нет изображения')
         return
       }
-      const markdown = `\n\n![](${result.markdownPath})\n\n`
+      const markdown = `\n\n![](${result.markdownPath})`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
       clearPicker()
@@ -261,11 +261,12 @@ export function TopicEditorModal({
           </button>
         </div>
         <form className="modal__body" onSubmit={(e) => void handleSubmit(e)}>
-          {mode === 'add' && !attachParent && (
-            <label className="field">
+          {mode === 'add' && (
+            <label className={`field${attachParent ? ' is-inactive' : ''}`}>
               <span>Отдел</span>
               <select
                 value={targetDept}
+                disabled={attachParent}
                 onChange={(e) => {
                   const next = e.target.value as DepartmentId
                   setTargetDept(next)
@@ -311,7 +312,7 @@ export function TopicEditorModal({
           </label>
 
           <ParentTopicField
-            items={pickerItems}
+            items={parentPickerItems}
             excludeId={mode === 'edit' ? initial?.id ?? null : null}
             attach={attachParent}
             onAttachChange={setAttachParent}
@@ -335,7 +336,7 @@ export function TopicEditorModal({
           </label>
           <TopicLinkPicker
             open={linkPicker}
-            items={pickerItems}
+            items={linkPickerItems}
             excludeId={mode === 'edit' ? initial?.id ?? null : null}
             onPick={pickTopicForLink}
             onClose={closePicker}

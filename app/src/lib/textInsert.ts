@@ -69,3 +69,27 @@ export function focusCursor(el: HTMLTextAreaElement | null, cursor: number): voi
     el.setSelectionRange(cursor, cursor)
   })
 }
+
+/** HTML-сущность неразрывного пробела для Markdown (рендер через HTML). */
+export const NBSP_MARKDOWN_ENTITY = '&#160;'
+
+export function insertNbspEntityAtCursor(
+  value: string,
+  el: HTMLTextAreaElement | null,
+): { next: string; selectStart: number; selectEnd: number } {
+  const { next, cursor } = insertAtCursor(value, NBSP_MARKDOWN_ENTITY, el)
+  const selectStart = cursor - NBSP_MARKDOWN_ENTITY.length
+  return { next, selectStart, selectEnd: cursor }
+}
+
+export function focusSelection(
+  el: HTMLTextAreaElement | null,
+  start: number,
+  end: number,
+): void {
+  if (!el) return
+  requestAnimationFrame(() => {
+    el.focus()
+    el.setSelectionRange(start, end)
+  })
+}

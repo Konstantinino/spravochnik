@@ -1,5 +1,10 @@
 import type { DepartmentId } from '../types'
 
+/** В исходнике темы — `&#160;`, при просмотре — символ NBSP. */
+export function markdownForDisplay(source: string): string {
+  return source.replace(/&#160;/g, '\u00A0')
+}
+
 /** Telegram file_id typically looks like AgACAg... or BQACAg... (long alphanumeric). */
 export function isTelegramFileId(value: string): boolean {
   if (!value) return false

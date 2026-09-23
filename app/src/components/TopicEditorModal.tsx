@@ -15,6 +15,7 @@ import {
 import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ParentTopicField } from './ParentTopicField'
+import { TextareaWithNbspButton } from './TextareaWithNbspButton'
 import { TopicLinkPicker } from './TopicLinkPicker'
 
 interface TopicEditorModalProps {
@@ -322,17 +323,24 @@ export function TopicEditorModal({
 
           <label className="field">
             <span>Текст ответа (Markdown)</span>
-            <textarea
-              ref={textareaRef}
+            <TextareaWithNbspButton
               value={answer}
-              onChange={handleAnswerChange}
-              onKeyDown={handleAnswerKeyDown}
-              onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
-              onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
-              onPaste={(e) => void handleAnswerPaste(e)}
-              rows={10}
-              placeholder="Текст ответа. «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
-            />
+              onValueChange={setAnswer}
+              textareaRef={textareaRef}
+            >
+              <textarea
+                ref={textareaRef}
+                className="viewer__textarea"
+                value={answer}
+                onChange={handleAnswerChange}
+                onKeyDown={handleAnswerKeyDown}
+                onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+                onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+                onPaste={(e) => void handleAnswerPaste(e)}
+                rows={10}
+                placeholder="Текст ответа. «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
+              />
+            </TextareaWithNbspButton>
           </label>
           <TopicLinkPicker
             open={linkPicker}

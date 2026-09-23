@@ -20,6 +20,7 @@ import {
 import {
   formatFileMarkdownLink,
   formatTopicMarkdownLink,
+  markdownForDisplay,
   mediaSrcFromMarkdownUrl,
   isAllowedMarkdownImageSrc,
   parseFileAttachmentHref,
@@ -34,6 +35,7 @@ import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ImageScaleDialog } from './ImageScaleDialog'
 import { ParentTopicField } from './ParentTopicField'
+import { TextareaWithNbspButton } from './TextareaWithNbspButton'
 import { TopicLinkPicker } from './TopicLinkPicker'
 
 interface ViewerProps {
@@ -1013,18 +1015,24 @@ export function Viewer({
             parentId={parentId}
             onParentIdChange={handleParentIdChange}
           />
-          <textarea
-            ref={textareaRef}
-            className="viewer__textarea"
+          <TextareaWithNbspButton
             value={answer}
-            onChange={handleAnswerChange}
-            onKeyDown={handleAnswerKeyDown}
-            onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
-            onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
-            onPaste={(e) => void handleAnswerPaste(e)}
-            rows={16}
-            placeholder="Текст ответа (Markdown). «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
-          />
+            onValueChange={setAnswer}
+            textareaRef={textareaRef}
+          >
+            <textarea
+              ref={textareaRef}
+              className="viewer__textarea"
+              value={answer}
+              onChange={handleAnswerChange}
+              onKeyDown={handleAnswerKeyDown}
+              onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+              onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+              onPaste={(e) => void handleAnswerPaste(e)}
+              rows={16}
+              placeholder="Текст ответа (Markdown). «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
+            />
+          </TextareaWithNbspButton>
           <TopicLinkPicker
             open={linkPicker}
             items={linkPickerItems}
@@ -1084,7 +1092,7 @@ export function Viewer({
                 a: ({ href, children: linkChildren }) => renderTopicLink(href, linkChildren),
               }}
             >
-              {current.answer}
+              {markdownForDisplay(current.answer)}
             </ReactMarkdown>
           ) : (
             <p className="muted">Нет текста в теме</p>

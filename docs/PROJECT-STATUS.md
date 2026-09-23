@@ -1,10 +1,14 @@
 # REST INFO — статус проекта (handoff)
 
-Обновлено: 2026-09-21
+Обновлено: 2026-09-23
 
 ## Текущая фаза
 
-**v2 реализована.** Яндекс.Диск выведен из основного потока (sync + updates). Ожидается production-deploy серверным программистом.
+**v2 реализована.** Яндекс.Диск выведен из основного потока (sync + updates).
+
+**Веб-клиент (beta в репо):** каталог `web/` — SPA с общим UI (`app/src`), сессия **httpOnly cookie** (`/auth/login-web`). Десктоп по-прежнему Bearer JWT. Production: обновить API + `CORS_ORIGIN` + выложить `web/dist` — см. [web/README.md](../web/README.md), [WEB-VERSION-PLAN.md](WEB-VERSION-PLAN.md).
+
+**Редактор (десктоп + веб):** кнопка «типограф» — вставка `&#160;` с подсветкой в тексте темы.
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
@@ -20,6 +24,7 @@
 
 - [x] Express REST API + PostgreSQL миграции (`migrations/001_initial.sql`)
 - [x] Auth: JWT, register/login, whitelist, bootstrap admin
+- [x] **Веб-сессия:** `POST /auth/login-web`, `/auth/register-web`, `/auth/logout-web` (cookie `rest_info_session`); middleware читает **cookie или Bearer**; `credentials` при заданном `CORS_ORIGIN`
 - [x] Topics CRUD + optimistic locking + topic locks
 - [x] Media upload/download (лимит **120 МБ**; пути `updates/*` → `UPDATES_DIR`)
 - [x] Sync: `GET /sync/changes` (full + incremental)
@@ -169,6 +174,7 @@
 ```
 spravochnik-repo/
 ├── app/                    # Electron клиент (v1.4.4)
+├── web/                    # Браузерный клиент (Vite SPA, beta)
 ├── server/                 # REST API (v1.0.0)
 ├── docker-compose.yml
 ├── docker-compose.prod.yml

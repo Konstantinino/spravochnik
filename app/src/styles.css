@@ -895,15 +895,108 @@ mark.find-hit--active {
   gap: 10px;
 }
 
-.viewer__textarea {
+.viewer__textarea-wrap {
+  position: relative;
+}
+
+.viewer__nbsp-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.viewer__nbsp-btn-icon {
+  display: block;
+  transform: rotate(180deg);
+}
+
+.viewer__nbsp-btn:hover {
+  opacity: 0.85;
+  color: var(--text);
+}
+
+.viewer__textarea-stack {
+  position: relative;
+  width: 100%;
+}
+
+.viewer__textarea-stack > textarea {
   width: 100%;
   min-height: 320px;
+  margin: 0;
   padding: 12px 14px;
+  padding-right: 52px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
-  resize: vertical;
   line-height: 1.5;
+  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  box-sizing: border-box;
+  display: block;
+}
+
+.viewer__textarea-highlight {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 12px 14px;
+  padding-right: 52px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  line-height: 1.5;
+  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  background: #fff;
+  color: var(--text);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.viewer__textarea {
+  resize: vertical;
+}
+
+.viewer__textarea--edit-overlay {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+
+.viewer__textarea--edit-overlay::selection {
+  background: rgba(134, 239, 172, 0.55);
+  color: transparent;
+}
+
+mark.nbsp-entity-mark {
+  background: rgba(134, 239, 172, 0.55);
+  color: var(--text);
+  padding: 0;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .viewer__editor-toolbar {

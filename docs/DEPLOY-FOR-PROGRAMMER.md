@@ -51,7 +51,17 @@ nano .env
 | `DB_PASSWORD` | длинная случайная строка | Пароль PostgreSQL |
 | `JWT_SECRET` | длинная случайная строка | Секрет для JWT-токенов |
 | `BOOTSTRAP_ADMIN_EMAIL` | kostya.alone18@yandex.ru | Email первого владельца (роль `owner` + whitelist) |
-| `CORS_ORIGIN` | `*` или `https://...` | CORS для клиента |
+| `CORS_ORIGIN` | `https://ваш-домен` | **Веб:** точный origin SPA (не `*`), иначе cookie-сессия не работает |
+| `COOKIE_SECURE` | `true` (production HTTPS) | `false` только для локального dev веба |
+
+Десктоп Electron **не** использует cookie — только Bearer; смена `CORS_ORIGIN` на URL веба десктоп не ломает.
+
+### Веб-клиент (опционально)
+
+1. `cd web && npm ci && npm run build` → каталог `web/dist/`
+2. nginx: статика SPA + прокси `/auth`, `/api`, … на контейнер `api` **или** один host для SPA и API
+3. Env: `CORS_ORIGIN=https://тот-же-host-что-у-браузера`, `COOKIE_SECURE=true`
+4. Вход в браузере: URL сервера на экране входа (как в десктопе)
 
 ---
 

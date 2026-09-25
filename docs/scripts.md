@@ -25,7 +25,7 @@ cd app
 npm run dist:ascii
 .\scripts\publish-release.ps1
 # или явный путь:
-.\scripts\publish-release.ps1 release\REST-INFO-Setup-1.4.4.exe
+.\scripts\publish-release.ps1 release\REST-INFO-Setup-1.4.5.exe
 ```
 
 ### `scripts/server-deploy-remote.ps1`

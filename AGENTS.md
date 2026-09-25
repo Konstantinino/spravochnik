@@ -78,7 +78,8 @@ graphify update .
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
-| `routes/updates.ts` | GET /app/update (legacy), GET /app/updates/* (latest.yml, blockmap, Setup) |
+| `routes/updates.ts` | GET /app/update (legacy), GET /app/updates/*, **GET /app/support-phones** |
+| `lib/support-phones.ts` | sync_state, normalize + format display from tel |
 | `import-from-json.ts` | импорт из REST-INFO-export |
 | `lib/fix-media-paths.ts` | reconcile `media_files.relative_path` с файлами на диске (по basename) |
 | `fix-media-paths.ts` | CLI на сервере: `node dist/fix-media-paths.js [--apply]` |
@@ -93,7 +94,9 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
 | `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
-| `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; версия в шапке; профиль → «Обновить»; **«Сбросить»** (локальный откат); ⋮ → копия ссылки; ← Назад; Esc |
+| `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; версия в шапке; **телефоны support в шапке** (эксперимент); профиль → «Обновить»; **«Сбросить»**; ⋮ → копия ссылки; ← Назад; Esc |
+| `SupportPhonesBar.tsx`, `lib/supportPhones.ts`, `lib/supportPhonesUi.ts` | телефоны техподдержки: формат из цифр, копирование, placement header/strip |
+| `TopicMarkdownImage.tsx` | resolve shared image paths, retry download |
 | `hooks/usePreserveTextareaFocus.ts` | сохранение фокуса textarea при Alt+Shift (Windows) |
 | `lib/restoreAppFocus.ts` | восстановление фокуса Electron после модалок / сброса |
 | `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | родитель: combobox, поиск по названию, фильтр party; «+»: весь отдел без архива |
@@ -158,7 +161,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.4.4.exe
+# → app/release/REST-INFO-Setup-1.4.5.exe
 ```
 
 ## Владелец / bootstrap
@@ -194,6 +197,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.4.4** (`app/package.json`)
+- Клиент: **1.4.5** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

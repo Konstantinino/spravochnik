@@ -1,7 +1,7 @@
 # Graph Report - spravochnik-repo  (2026-09-25)
 
 ## Corpus Check
-- 125 files · ~85,586 words
+- 125 files · ~85,809 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `466709db`
+- Built from commit: `ad332f2f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -73,7 +73,7 @@
 - setup-rest-info-user.sh
 - Исправление путей к фото на сервере
 - SupportPhonesBar.tsx
-- useTopicLinkPicker.ts
+- textInsert.ts
 - План: автообновление «как Telegram Desktop»
 - lib/fix-media-paths.ts
 - Viewer.tsx
@@ -81,7 +81,7 @@
 - focusCursor
 - TopicEditorModal.tsx
 - registerIpc
-- textInsert.ts
+- useTopicLinkPicker.ts
 - electron/updates.ts
 - cacheServerUser
 - session-log.ts
@@ -326,9 +326,9 @@ Nodes (10): Альтернатива — прямо на сервере (SSH), �
 Cohesion: 0.32
 Nodes (10): saveSupportPhones(), copyText(), SupportPhonesBar(), handleCopy(), SupportPhonesBarProps, DEFAULT_SUPPORT_PHONES, formatSupportPhoneDisplay(), normalizeSupportPhones() (+2 more)
 
-### Community 63 - "useTopicLinkPicker.ts"
-Cohesion: 0.57
-Nodes (5): useTopicLinkPicker(), clampPickerPosition(), getTextareaCaretRect(), getActivePlusQuery(), replaceRangeWithTopicLink()
+### Community 63 - "textInsert.ts"
+Cohesion: 0.31
+Nodes (9): highlightNbspEntities(), TextareaWithNbspButton(), handleTextareaScroll(), insertNbsp(), syncScrollFromTextarea(), TextareaWithNbspButtonProps, focusSelection(), insertNbspEntityAtCursor() (+1 more)
 
 ### Community 64 - "План: автообновление «как Telegram Desktop»"
 Cohesion: 0.07
@@ -358,9 +358,9 @@ Nodes (10): newDraftId(), TopicEditorModal(), handleParentIdChange(), TopicEdito
 Cohesion: 0.10
 Nodes (45): normalizeServerUrl(), parseWindowBounds(), readSettings(), saveWindowBounds(), setAuthToken(), setLastSyncAt(), setServerUrl(), settingsPath() (+37 more)
 
-### Community 72 - "textInsert.ts"
-Cohesion: 0.31
-Nodes (9): highlightNbspEntities(), TextareaWithNbspButton(), handleTextareaScroll(), insertNbsp(), syncScrollFromTextarea(), TextareaWithNbspButtonProps, focusSelection(), insertNbspEntityAtCursor() (+1 more)
+### Community 72 - "useTopicLinkPicker.ts"
+Cohesion: 0.57
+Nodes (5): useTopicLinkPicker(), clampPickerPosition(), getTextareaCaretRect(), getActivePlusQuery(), replaceRangeWithTopicLink()
 
 ### Community 73 - "electron/updates.ts"
 Cohesion: 0.11
@@ -396,7 +396,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `normalizeSupportPhones()` connect `SupportPhonesBar.tsx` to `SettingsPage`, `types.ts`, `main.ts`, `registerIpc`?**
   _High betweenness centrality (0.076) - this node is a cross-community bridge._
-- **Why does `Viewer()` connect `Viewer` to `data.ts`, `Viewer.tsx`, `focusCursor`, `TopicEditorModal.tsx`, `markdown.ts`, `usePreserveTextareaFocus`, `App.tsx`, `useTopicLinkPicker.ts`?**
+- **Why does `Viewer()` connect `Viewer` to `data.ts`, `Viewer.tsx`, `focusCursor`, `TopicEditorModal.tsx`, `useTopicLinkPicker.ts`, `markdown.ts`, `usePreserveTextareaFocus`, `App.tsx`?**
   _High betweenness centrality (0.034) - this node is a cross-community bridge._
 - **Why does `App()` connect `App` to `data.ts`, `GuideItem`, `TopicEditorModal.tsx`, `Header.tsx`, `App.tsx`?**
   _High betweenness centrality (0.029) - this node is a cross-community bridge._

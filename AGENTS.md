@@ -15,7 +15,6 @@
 | Компонент | Путь | Стек |
 |---|---|---|
 | PC-клиент | `app/` | Electron 35, React 19, Vite, TypeScript |
-| Веб-клиент | `web/` | Vite SPA, общий UI `@app` → `app/src`, cookie-сессия |
 | Сервер API | `server/` | Node 20, Express, PostgreSQL, JWT |
 | Docker | `docker-compose.yml` | postgres:16 + api |
 | Данные для деплоя | `REST-INFO-export/` | JSON + media (в `.gitignore`) |
@@ -73,8 +72,7 @@ graphify update .
 | Файл | Назначение |
 |---|---|
 | `index.ts` | Express app, роуты |
-| `routes/auth.ts` | login, register, JWT; **login-web / register-web / logout-web** (cookie для браузера) |
-| `lib/web-session.ts` | httpOnly cookie `rest_info_session` |
+| `routes/auth.ts` | login, register, JWT |
 | `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`** (owner, разовый fix legacy-путей медиа) |
 | `routes/topics.ts` | CRUD тем, блокировки, **`PUT /:dept/topic-order`**, **`POST …/topic-order/lock|unlock|renew-lock`** |
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status |

@@ -9,7 +9,6 @@ Windows-приложение — корпоративный справочник
 ## Архитектура v2
 
 - **PC-клиент** — Electron + React (`app/`), оффлайн-чтение из локального кэша
-- **Веб-клиент (beta)** — React SPA (`web/`), данные только с сервера, без Setup
 - **Сервер** — Node.js REST API + PostgreSQL (`server/`), Docker Compose
 - **Синхронизация** — инкрементальный pull + прямая запись правок на **сервер** (не Яндекс.Диск)
 - **Владелец** — роль `owner`, настройки: пользователи, whitelist, место на сервере по отделам
@@ -26,8 +25,6 @@ Windows-приложение — корпоративный справочник
 | [docs/migration-from-yandex.md](docs/migration-from-yandex.md) | Миграция данных |
 | [docs/legacy-yandex-disk.md](docs/legacy-yandex-disk.md) | Откат на v1 (Яндекс.Диск) |
 | [docs/scripts.md](docs/scripts.md) | Описание всех скриптов |
-| [web/README.md](web/README.md) | Сборка и dev веб-клиента |
-| [docs/WEB-VERSION-PLAN.md](docs/WEB-VERSION-PLAN.md) | План и решения по вебу |
 
 ## Данные для production
 

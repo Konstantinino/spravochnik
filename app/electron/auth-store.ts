@@ -57,6 +57,8 @@ export interface SettingsData {
   hasPendingChanges: boolean
   offlineWarningShown?: boolean
   windowBounds?: SavedWindowBounds
+  /** Cached support dept phone bar (synced from server when online). */
+  supportPhones?: Array<{ label: string; display: string; tel: string }>
 }
 
 export interface PublicUser {

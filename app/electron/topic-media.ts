@@ -14,6 +14,10 @@ import {
   type DepartmentId,
 } from './paths'
 import { queueMediaRemoteDelete, queueMediaUpload, rewritePendingMediaPaths } from './pending-media'
+import {
+  canonicalizeMediaRelativePath,
+  resolveExistingMediaAbsolutePath,
+} from './media-layout'
 
 const IMAGE_MD_RE = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 
@@ -47,6 +51,73 @@ export function imagesBasename(ref: string): string | null {
 
 export function sanitizeDraftId(draftId: string): string {
   return draftId.replace(/[^a-zA-Z0-9_-]/g, '') || 'draft'
+}
+
+function tryTopicImagePath(
+  departmentId: DepartmentId,
+  topicId: number,
+  base: string,
+): string | null {
+  const rel = topicImageRelativePath(departmentId, topicId, base)
+  if (resolveExistingMediaAbsolutePath(rel, departmentId)) return rel
+  const legacy = `media/${topicId}/images/${base}`
+  if (resolveExistingMediaAbsolutePath(legacy, departmentId)) return legacy
+  return null
+}
+
+/** Find on-disk / guide path for an image ref (incl. images/foo copied from another topic). */
+export function resolveImageStorageRef(
+  departmentId: DepartmentId,
+  ref: string,
+  contextTopicId: number,
+  guideTopics: TopicMediaRow[],
+): string {
+  const cleaned = stripSpravochnikPrefix(ref).split(/[?#]/)[0]
+  if (!cleaned) return ref
+
+  if (cleaned.startsWith('media/')) {
+    const canon = canonicalizeMediaRelativePath(cleaned, departmentId)
+    if (resolveExistingMediaAbsolutePath(canon, departmentId)) return canon
+    return canon
+  }
+
+  const base = imagesBasename(cleaned)
+  if (!base) return cleaned
+
+  let fallbackFromGuide: string | null = null
+  for (const topic of guideTopics) {
+    if (!Number.isFinite(topic.id)) continue
+    const answer = String(topic.answer ?? '')
+    const photos = Array.isArray(topic.photos) ? topic.photos : undefined
+    for (const p of mediaImagePathsFromTopic(departmentId, topic.id, answer, photos)) {
+      if (!p.endsWith(`/images/${base}`)) continue
+      if (topic.id === contextTopicId) return p
+      fallbackFromGuide = p
+    }
+  }
+  if (fallbackFromGuide) return fallbackFromGuide
+
+  const own = tryTopicImagePath(departmentId, contextTopicId, base)
+  if (own) return own
+
+  for (const topic of guideTopics) {
+    if (!Number.isFinite(topic.id) || topic.id === contextTopicId) continue
+    const hit = tryTopicImagePath(departmentId, topic.id, base)
+    if (hit) return hit
+  }
+
+  const mediaDir = path.join(getMediaDir(), departmentId)
+  if (fs.existsSync(mediaDir)) {
+    for (const entry of fs.readdirSync(mediaDir)) {
+      if (!/^\d+$/.test(entry)) continue
+      const tid = parseInt(entry, 10)
+      if (tid === contextTopicId) continue
+      const hit = tryTopicImagePath(departmentId, tid, base)
+      if (hit) return hit
+    }
+  }
+
+  return topicImageRelativePath(departmentId, contextTopicId, base)
 }
 
 function topicImageDirs(departmentId: DepartmentId, topicId: number): string[] {
@@ -107,20 +178,75 @@ export function mediaImagePathsFromTopic(
   return [...paths]
 }
 
+export type TopicMediaRow = { id: number; answer?: unknown; photos?: unknown[]; documents?: unknown[] }
+
+export function collectAllReferencedImageStoragePaths(
+  departmentId: DepartmentId,
+  topics: TopicMediaRow[],
+): Set<string> {
+  const paths = new Set<string>()
+  for (const topic of topics) {
+    if (!Number.isFinite(topic.id)) continue
+    const answer = String(topic.answer ?? '')
+    const photos = Array.isArray(topic.photos) ? topic.photos : undefined
+    for (const rel of mediaImagePathsFromTopic(departmentId, topic.id, answer, photos)) {
+      paths.add(rel.replace(/\\/g, '/').replace(/^\/+/, ''))
+    }
+  }
+  return paths
+}
+
+export function collectAllReferencedFileStoragePaths(
+  departmentId: DepartmentId,
+  topics: TopicMediaRow[],
+): Set<string> {
+  const paths = new Set<string>()
+  for (const topic of topics) {
+    if (!Number.isFinite(topic.id)) continue
+    const answer = String(topic.answer ?? '')
+    const documents = Array.isArray(topic.documents) ? topic.documents : undefined
+    for (const rel of mediaFilePathsFromTopic(departmentId, topic.id, answer, documents)) {
+      paths.add(rel.replace(/\\/g, '/').replace(/^\/+/, ''))
+    }
+  }
+  return paths
+}
+
+function isReferencedImageOnDisk(
+  departmentId: DepartmentId,
+  topicId: number,
+  fileName: string,
+  globalPaths: Set<string> | null,
+  localBasenames: Set<string>,
+): boolean {
+  if (globalPaths) {
+    const canonical = topicImageRelativePath(departmentId, topicId, fileName)
+    if (globalPaths.has(canonical)) return true
+    const legacy = `media/${topicId}/images/${fileName}`
+    if (globalPaths.has(legacy)) return true
+    return false
+  }
+  return localBasenames.has(fileName)
+}
+
 export function cleanupTopicImageOrphans(
   departmentId: DepartmentId,
   topicId: number,
   answerMarkdown: string,
   extraRefs?: unknown[],
+  allTopicsInDept?: TopicMediaRow[],
 ): void {
-  const referenced = collectReferencedImageBasenames(answerMarkdown, extraRefs)
+  const localBasenames = collectReferencedImageBasenames(answerMarkdown, extraRefs)
+  const globalPaths = allTopicsInDept
+    ? collectAllReferencedImageStoragePaths(departmentId, allTopicsInDept)
+    : null
 
   for (const dir of topicImageDirs(departmentId, topicId)) {
     if (!fs.existsSync(dir)) continue
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name)
       if (!fs.statSync(full).isFile()) continue
-      if (referenced.has(name)) continue
+      if (isReferencedImageOnDisk(departmentId, topicId, name, globalPaths, localBasenames)) continue
       try {
         fs.unlinkSync(full)
         queueMediaRemoteDelete(topicImageRelativePath(departmentId, topicId, name))
@@ -370,21 +496,42 @@ function topicFileDirs(departmentId: DepartmentId, topicId: number): string[] {
   ]
 }
 
+function isReferencedFileOnDisk(
+  departmentId: DepartmentId,
+  topicId: number,
+  fileName: string,
+  globalPaths: Set<string> | null,
+  localBasenames: Set<string>,
+): boolean {
+  if (globalPaths) {
+    const canonical = topicFileRelativePath(departmentId, topicId, fileName)
+    if (globalPaths.has(canonical)) return true
+    const legacy = `media/${topicId}/files/${fileName}`
+    if (globalPaths.has(legacy)) return true
+    return false
+  }
+  return localBasenames.has(fileName)
+}
+
 export function cleanupTopicFileOrphans(
   departmentId: DepartmentId,
   topicId: number,
   answerMarkdown: string,
   extraRefs?: unknown[],
+  allTopicsInDept?: TopicMediaRow[],
 ): void {
   try {
-    const referenced = collectReferencedFileBasenames(answerMarkdown, extraRefs)
+    const localBasenames = collectReferencedFileBasenames(answerMarkdown, extraRefs)
+    const globalPaths = allTopicsInDept
+      ? collectAllReferencedFileStoragePaths(departmentId, allTopicsInDept)
+      : null
 
     for (const dir of topicFileDirs(departmentId, topicId)) {
       if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue
       for (const name of fs.readdirSync(dir)) {
         const full = path.join(dir, name)
         if (!fs.statSync(full).isFile()) continue
-        if (referenced.has(name)) continue
+        if (isReferencedFileOnDisk(departmentId, topicId, name, globalPaths, localBasenames)) continue
         try {
           fs.unlinkSync(full)
           queueMediaRemoteDelete(topicFileRelativePath(departmentId, topicId, name))

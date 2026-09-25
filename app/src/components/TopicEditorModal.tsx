@@ -6,10 +6,15 @@ import {
   filterTopicsForParentPicker,
   getItemParty,
 } from '../lib/data'
-import { formatFileMarkdownLink } from '../lib/markdown'
+import {
+  formatFileMarkdownLink,
+  formatSharedImageMarkdown,
+  parseImageRefFromClipboard,
+} from '../lib/markdown'
 import {
   focusCursor,
   insertAtCursor,
+  insertPastedImageReferenceAsync,
   wrapSelectionWithTopicLink,
 } from '../lib/textInsert'
 import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
@@ -172,6 +177,37 @@ export function TopicEditorModal({
     }
   }
 
+  function handleAnswerCopy(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const ta = e.currentTarget
+    const selected = ta.value.slice(ta.selectionStart, ta.selectionEnd)
+    if (!selected.trim()) return
+    const raw = parseImageRefFromClipboard(selected)
+    if (!raw) return
+    e.preventDefault()
+    const topicIdForCopy = mode === 'edit' && initial?.id != null ? initial.id : 0
+    const deptForCopy = mode === 'edit' ? departmentId : targetDept
+    void (async () => {
+      const canonical = /^https?:\/\//i.test(raw)
+        ? raw
+        : await window.spravochnik.resolveImageStorageRef({
+            departmentId: deptForCopy,
+            ref: raw,
+            contextTopicId: topicIdForCopy,
+          })
+      const snippet = formatSharedImageMarkdown(canonical)
+      try {
+        await navigator.clipboard.writeText(snippet)
+      } catch {
+        const el = document.createElement('textarea')
+        el.value = snippet
+        document.body.appendChild(el)
+        el.select()
+        document.execCommand('copy')
+        el.remove()
+      }
+    })()
+  }
+
   async function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const pastedText = e.clipboardData?.getData('text/plain') ?? ''
     const wrapped = wrapSelectionWithTopicLink(answer, pastedText, textareaRef.current)
@@ -180,6 +216,22 @@ export function TopicEditorModal({
       setAnswer(wrapped.next)
       clearPicker()
       focusCursor(textareaRef.current, wrapped.cursor)
+      return
+    }
+    const topicIdForPaste = mode === 'edit' && initial?.id != null ? initial.id : 0
+    const deptForPaste = mode === 'edit' ? departmentId : targetDept
+    const pastedImage = await insertPastedImageReferenceAsync(
+      answer,
+      pastedText,
+      topicIdForPaste,
+      deptForPaste,
+      textareaRef.current,
+    )
+    if (pastedImage) {
+      e.preventDefault()
+      setAnswer(pastedImage.next)
+      clearPicker()
+      focusCursor(textareaRef.current, pastedImage.cursor)
       return
     }
     const pasteItems = e.clipboardData?.items
@@ -337,6 +389,7 @@ export function TopicEditorModal({
                 onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
                 onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
                 onPaste={(e) => void handleAnswerPaste(e)}
+                onCopy={handleAnswerCopy}
                 rows={10}
                 placeholder="Текст ответа. «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
               />

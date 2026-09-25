@@ -1,4 +1,5 @@
-import type { ImageDisplayMap } from '../types'
+import type { DepartmentId, ImageDisplayMap } from '../types'
+import { canonicalImageStoragePath, topicIdFromImageStoragePath } from './markdown'
 
 export const IMAGE_SCALE_MIN = 10
 export const IMAGE_SCALE_MAX = 200
@@ -29,5 +30,31 @@ export function withImageScale(
 }
 
 export function normalizeImageDisplayKey(src: string): string {
-  return src.replace(/\\/g, '/').replace(/^\/+/, '')
+  return src.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^spravochnik:\/\//, '')
+}
+
+/** Scale for an image in a topic; cross-topic refs ignore unrelated local keys. */
+export function getImageScaleForTopicImage(
+  map: ImageDisplayMap | undefined,
+  rawSrc: string,
+  topicId: number,
+  departmentId: DepartmentId,
+): number {
+  const key = normalizeImageDisplayKey(rawSrc)
+  const canonical = canonicalImageStoragePath(key, topicId, departmentId)
+  const ownerTopicId =
+    (canonical ? topicIdFromImageStoragePath(canonical) : null) ??
+    topicIdFromImageStoragePath(key)
+
+  if (ownerTopicId != null && ownerTopicId !== topicId) {
+    if (canonical && map?.[canonical] != null) return getImageScale(map, canonical)
+    if (map?.[key] != null && key.startsWith('media/')) return getImageScale(map, key)
+    return IMAGE_SCALE_DEFAULT
+  }
+
+  if (map?.[key] != null) return getImageScale(map, key)
+  if (canonical && map?.[canonical] != null) return getImageScale(map, canonical)
+  const tail = canonical?.match(/\/images\/([^/?#\s]+)$/i)?.[1]
+  if (tail && map?.[`images/${tail}`] != null) return getImageScale(map, `images/${tail}`)
+  return IMAGE_SCALE_DEFAULT
 }

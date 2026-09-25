@@ -152,6 +152,29 @@ function reconcileCreatedTopic(
   applyTopicToLocal(deptId, serverTopic)
 }
 
+export async function ensureMediaFilesDownloaded(
+  deptId: DepartmentId,
+  relativePaths: string[],
+): Promise<void> {
+  const settings = readSettings()
+  if (!settings.serverUrl.trim() || !settings.authToken.trim()) return
+  if (!(await isServerReachable())) return
+
+  const root = getUserDataRoot()
+  for (const rel of relativePaths) {
+    const normalized = rel.replace(/\\/g, '/').replace(/^\/+/, '')
+    if (!normalized.startsWith('media/')) continue
+    if (resolveExistingMediaAbsolutePath(normalized, deptId)) continue
+    const localPath = path.join(root, ...normalized.split('/'))
+    try {
+      await downloadMediaFile(normalized, localPath)
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e)
+      appendSessionLog('warn', 'sync/media', `Не удалось скачать ${normalized}: ${detail}`)
+    }
+  }
+}
+
 export async function ensureTopicMediaDownloaded(
   deptId: DepartmentId,
   topic: Record<string, unknown>,

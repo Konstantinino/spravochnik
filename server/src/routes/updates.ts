@@ -2,6 +2,8 @@ import express, { Router } from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import { query } from '../db/pool.js'
+import { authMiddleware } from '../middleware/auth.js'
+import { readSupportPhonesFromDb } from '../lib/support-phones.js'
 
 const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 'updates')
 
@@ -32,6 +34,16 @@ function compareVersions(a: string, b: string): number {
   }
   return 0
 }
+
+updatesRouter.get('/support-phones', authMiddleware, async (_req, res) => {
+  try {
+    const phones = await readSupportPhonesFromDb()
+    res.json({ phones })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка чтения телефонов' })
+  }
+})
 
 updatesRouter.get('/update', async (req, res) => {
   try {

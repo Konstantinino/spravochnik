@@ -1,5 +1,70 @@
 import type { DepartmentId } from '../types'
 
+const IMAGE_STORAGE_PATH_RE =
+  /^media\/(?:(support|lawyers|managers|spp|templates)\/)?(\d+)\/images\/([^/?#\s]+)$/i
+
+function stripMediaRefPrefix(ref: string): string {
+  return ref.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^spravochnik:\/\//, '')
+}
+
+export function topicIdFromImageStoragePath(ref: string): number | null {
+  const cleaned = stripMediaRefPrefix(ref)
+  const m = cleaned.match(
+    /^media\/(?:support|lawyers|managers|spp|templates)\/(\d+)\/images\//i,
+  )
+  if (!m) return null
+  const id = Number(m[1])
+  return Number.isFinite(id) ? id : null
+}
+
+/** Canonical on-disk path media/{dept}/{topicId}/images/{file} for any image src in markdown. */
+export function canonicalImageStoragePath(
+  ref: string,
+  topicId?: number | null,
+  departmentId?: DepartmentId | null,
+): string | null {
+  const cleaned = stripMediaRefPrefix(ref)
+  const nested = cleaned.match(IMAGE_STORAGE_PATH_RE)
+  if (nested) {
+    const dept = (nested[1] as DepartmentId | undefined) || departmentId || 'support'
+    return `media/${dept}/${nested[2]}/images/${nested[3]}`
+  }
+  if (cleaned.startsWith('images/') && topicId != null) {
+    const name = cleaned.slice('images/'.length).split(/[?#]/)[0]
+    if (name && !name.includes('..') && !name.includes('/')) {
+      const dept = departmentId || 'support'
+      return `media/${dept}/${topicId}/images/${name}`
+    }
+  }
+  return null
+}
+
+/** Markdown `![](…)` or bare media / spravochnik image path from clipboard. */
+export function parsePastedImageMarkdown(text: string): string | null {
+  const trimmed = text.trim()
+  const mdMatch = trimmed.match(/^!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)$/)
+  if (mdMatch) return mdMatch[1].trim()
+  const cleaned = stripMediaRefPrefix(trimmed)
+  if (IMAGE_STORAGE_PATH_RE.test(cleaned)) return cleaned
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return null
+}
+
+/** Image ref from editor selection or clipboard (`![](…)`, `images/…`, `media/…`). */
+export function parseImageRefFromClipboard(text: string): string | null {
+  const fromMd = parsePastedImageMarkdown(text)
+  if (fromMd) return fromMd
+  const cleaned = stripMediaRefPrefix(text.trim())
+  if (cleaned.startsWith('images/') || cleaned.startsWith('media/')) return cleaned
+  return null
+}
+
+/** Share image across topics: stable path in markdown (no copy in storage). */
+export function formatSharedImageMarkdown(canonicalMediaPath: string): string {
+  const path = stripMediaRefPrefix(canonicalMediaPath)
+  return `![](${path})`
+}
+
 /** В исходнике темы — `&#160;`, при просмотре — символ NBSP. */
 export function markdownForDisplay(source: string): string {
   return source.replace(/&#160;/g, '\u00A0')

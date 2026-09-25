@@ -25,6 +25,7 @@ export const showSyncLoadingIfOnline = serverSync.showSyncLoadingIfOnline
 export const tryPushTopicOnline = serverSync.tryPushTopicOnline
 export const tryPushReorderOnline = serverSync.tryPushReorderOnline
 export const ensureTopicMediaDownloaded = serverSync.ensureTopicMediaDownloaded
+export const ensureMediaFilesDownloaded = serverSync.ensureMediaFilesDownloaded
 export const peekAndPullRemoteChanges = serverSync.peekAndPullRemoteChanges
 export const scheduleRemoteChangePeek = serverSync.scheduleRemoteChangePeek
 

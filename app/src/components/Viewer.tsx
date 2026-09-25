@@ -13,13 +13,15 @@ import {
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
 import {
   IMAGE_SCALE_DEFAULT,
-  getImageScale,
+  getImageScaleForTopicImage,
   normalizeImageDisplayKey,
   withImageScale,
 } from '../lib/imageDisplay'
 import {
   formatFileMarkdownLink,
+  formatSharedImageMarkdown,
   formatTopicMarkdownLink,
+  parseImageRefFromClipboard,
   markdownForDisplay,
   mediaSrcFromMarkdownUrl,
   isAllowedMarkdownImageSrc,
@@ -29,11 +31,13 @@ import {
 import {
   focusCursor,
   insertAtCursor,
+  insertPastedImageReferenceAsync,
   wrapSelectionWithTopicLink,
 } from '../lib/textInsert'
 import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ImageScaleDialog } from './ImageScaleDialog'
+import { TopicMarkdownImage } from './TopicMarkdownImage'
 import { ParentTopicField } from './ParentTopicField'
 import { TextareaWithNbspButton } from './TextareaWithNbspButton'
 import { TopicLinkPicker } from './TopicLinkPicker'
@@ -565,6 +569,20 @@ export function Viewer({
       focusCursor(textareaRef.current, wrapped.cursor)
       return
     }
+    const pastedImage = await insertPastedImageReferenceAsync(
+      answer,
+      pastedText,
+      current.id,
+      departmentId,
+      textareaRef.current,
+    )
+    if (pastedImage) {
+      e.preventDefault()
+      setAnswer(pastedImage.next)
+      clearPicker()
+      focusCursor(textareaRef.current, pastedImage.cursor)
+      return
+    }
     if (!pasteItems) return
     let hasImage = false
     for (const pasteItem of Array.from(pasteItems)) {
@@ -640,6 +658,57 @@ export function Viewer({
             y: rect.bottom + 4,
           },
     )
+  }
+
+  function handleAnswerCopy(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const ta = e.currentTarget
+    const selected = ta.value.slice(ta.selectionStart, ta.selectionEnd)
+    if (!selected.trim()) return
+    const raw = parseImageRefFromClipboard(selected)
+    if (!raw) return
+    e.preventDefault()
+    void (async () => {
+      const canonical = /^https?:\/\//i.test(raw)
+        ? raw
+        : await window.spravochnik.resolveImageStorageRef({
+            departmentId,
+            ref: raw,
+            contextTopicId: current.id,
+          })
+      const snippet = formatSharedImageMarkdown(canonical)
+      try {
+        await navigator.clipboard.writeText(snippet)
+      } catch {
+        const el = document.createElement('textarea')
+        el.value = snippet
+        document.body.appendChild(el)
+        el.select()
+        document.execCommand('copy')
+        el.remove()
+      }
+    })()
+  }
+
+  async function copyImageLink(rawSrc: string) {
+    setImgMenu(null)
+    const canonical = /^https?:\/\//i.test(rawSrc.trim())
+      ? rawSrc.trim()
+      : await window.spravochnik.resolveImageStorageRef({
+          departmentId,
+          ref: rawSrc,
+          contextTopicId: current.id,
+        })
+    const snippet = formatSharedImageMarkdown(canonical)
+    try {
+      await navigator.clipboard.writeText(snippet)
+    } catch {
+      const el = document.createElement('textarea')
+      el.value = snippet
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      el.remove()
+    }
   }
 
   async function copyTopicLink() {
@@ -787,23 +856,15 @@ export function Viewer({
   }
 
   function renderTopicImage(rawSrc: string, alt: string) {
-    const key = normalizeImageDisplayKey(rawSrc)
-    const resolved = mediaSrcFromMarkdownUrl(rawSrc, current.id, departmentId)
-    const scale = getImageScale(localDisplay, key)
-    const scaled = scale !== IMAGE_SCALE_DEFAULT
     return (
-      <img
-        src={resolved}
+      <TopicMarkdownImage
+        rawSrc={rawSrc}
         alt={alt}
-        className="viewer__image"
-        loading="lazy"
-        style={
-          scaled
-            ? { width: `${scale}%`, maxWidth: 'none', height: 'auto' }
-            : undefined
-        }
-        onClick={() => openLightbox(resolved)}
-        onContextMenu={(e) => openImageMenu(e, key, resolved)}
+        topicId={current.id}
+        departmentId={departmentId}
+        displayMap={localDisplay}
+        onOpenLightbox={openLightbox}
+        onContextMenu={openImageMenu}
       />
     )
   }
@@ -1029,6 +1090,7 @@ export function Viewer({
               onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
               onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
               onPaste={(e) => void handleAnswerPaste(e)}
+              onCopy={handleAnswerCopy}
               rows={16}
               placeholder="Текст ответа (Markdown). «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
             />
@@ -1141,7 +1203,12 @@ export function Viewer({
               className="image-ctx-menu__item"
               role="menuitem"
               onClick={() => {
-                const scale = getImageScale(localDisplay, imgMenu.markdownKey)
+                const scale = getImageScaleForTopicImage(
+                  localDisplay,
+                  imgMenu.markdownKey,
+                  current.id,
+                  departmentId,
+                )
                 setScaleEditor({
                   markdownKey: imgMenu.markdownKey,
                   left: Math.min(imgMenu.x, window.innerWidth - 280),
@@ -1154,6 +1221,14 @@ export function Viewer({
               Регулировка размера
             </button>
           )}
+          <button
+            type="button"
+            className="image-ctx-menu__item"
+            role="menuitem"
+            onClick={() => void copyImageLink(imgMenu.markdownKey)}
+          >
+            Скопировать ссылку на фото
+          </button>
           <button
             type="button"
             className="image-ctx-menu__item"

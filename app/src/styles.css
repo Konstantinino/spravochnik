@@ -78,11 +78,115 @@ option {
 }
 
 .app-shell--sync-busy .app-header,
+.app-shell--sync-busy .support-phones-bar,
 .app-shell--sync-busy .app-body {
   pointer-events: none;
   user-select: none;
   filter: brightness(1.12);
   opacity: 0.72;
+}
+
+.support-phones-bar--strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 18px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(28, 36, 48, 0.62);
+  background: rgba(28, 36, 48, 0.045);
+  border-bottom: 1px solid rgba(28, 36, 48, 0.06);
+}
+
+.support-phones-bar--header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  flex-shrink: 0;
+  margin: 0 4px 0 10px;
+  padding: 0;
+  max-width: min(320px, 36vw);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(245, 241, 232, 0.82);
+  background: none;
+  border: none;
+}
+
+.app-header:has(.support-phones-bar--header) {
+  align-items: center;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.app-header:has(.support-phones-bar--header) .app-header__sync {
+  margin-right: 0;
+}
+
+.app-header:has(.support-phones-bar--header) .app-header__dept {
+  margin-left: auto;
+}
+
+.support-phones-bar__item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35em;
+  white-space: nowrap;
+}
+
+.support-phones-bar__label {
+  color: rgba(28, 36, 48, 0.52);
+  font-weight: 600;
+}
+
+.support-phones-bar__number {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--header-blue);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.support-phones-bar__number:hover {
+  color: #163040;
+}
+
+.support-phones-bar--header .support-phones-bar__item {
+  width: 100%;
+  min-width: 0;
+  gap: 0.45em;
+}
+
+.support-phones-bar--header .support-phones-bar__label {
+  color: rgba(245, 241, 232, 0.65);
+}
+
+.support-phones-bar--header .support-phones-bar__number {
+  color: #fff;
+  font-size: 0.78rem;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
+.support-phones-bar--header .support-phones-bar__number:hover {
+  color: #fff;
+  text-decoration-color: rgba(255, 255, 255, 0.85);
 }
 
 .app-header--locked {
@@ -986,7 +1090,12 @@ mark.find-hit--active {
 }
 
 .viewer__textarea--edit-overlay::selection {
-  background: rgba(134, 239, 172, 0.55);
+  background: rgba(51, 144, 255, 0.45);
+  color: transparent;
+}
+
+.viewer__textarea--edit-overlay::-moz-selection {
+  background: rgba(51, 144, 255, 0.45);
   color: transparent;
 }
 
@@ -1091,11 +1200,19 @@ mark.nbsp-entity-mark {
 .viewer__image {
   display: block;
   max-width: 100%;
+  width: auto;
   height: auto;
   margin: 12px 0;
   border-radius: 6px;
   border: 1px solid var(--border);
   cursor: pointer;
+}
+
+.viewer__image--broken {
+  min-width: 120px;
+  min-height: 72px;
+  object-fit: contain;
+  background: rgba(28, 36, 48, 0.04);
 }
 
 .topic-file {
@@ -2252,6 +2369,71 @@ mark.nbsp-entity-mark {
   column-gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.support-phones-settings {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.support-phones-settings__row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.support-phones-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.support-phones-settings__field input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.support-phones-settings__label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.support-phones-settings__preview {
+  font-size: 0.82rem;
+  color: var(--header-blue);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.support-phones-settings__remove {
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.support-phones-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .support-phones-settings__row {
+    grid-template-columns: 1fr;
+  }
+
+  .support-phones-settings__remove {
+    justify-self: start;
+  }
 }
 
 .session-log-toolbar {

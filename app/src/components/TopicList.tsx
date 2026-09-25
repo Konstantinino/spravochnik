@@ -276,11 +276,9 @@ function TreeNode({
   const isFolder = children.length > 0
   const [manualOpen, setManualOpen] = useState(false)
   const forceOpen = expandFolderIds?.has(item.id) ?? false
-  const open = reorderMode
-    ? isFolder
-    : searchFilter
-      ? children.length > 0
-      : manualOpen || forceOpen
+  const open = searchFilter
+    ? children.length > 0
+    : manualOpen || forceOpen
   const match = searchFilter?.matchById.get(item.id)
   const title = item.question || 'Без названия'
   const label = (() => {

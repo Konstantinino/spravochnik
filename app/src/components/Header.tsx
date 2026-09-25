@@ -6,6 +6,8 @@ import {
   departmentsForUser,
   isStaffRole,
 } from '../types'
+import { SupportPhonesBar } from './SupportPhonesBar'
+import { SUPPORT_PHONES_PLACEMENT } from '../lib/supportPhonesUi'
 
 interface HeaderProps {
   departmentId: DepartmentId
@@ -109,6 +111,10 @@ export function Header({
           </button>
         )}
       </div>
+
+      {departmentId === 'support' && SUPPORT_PHONES_PLACEMENT === 'header' ? (
+        <SupportPhonesBar placement="header" />
+      ) : null}
 
       <label className="app-header__dept">
         <span className="visually-hidden">Отдел</span>

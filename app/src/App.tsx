@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Component, type ReactNode } from 'react'
 import { Header } from './components/Header'
+import { SupportPhonesBar } from './components/SupportPhonesBar'
+import { SUPPORT_PHONES_PLACEMENT } from './lib/supportPhonesUi'
 import { Search } from './components/Search'
 import { TopicList } from './components/TopicList'
 import { Viewer } from './components/Viewer'
@@ -383,6 +385,14 @@ export default function App() {
     if (selectedId == null) return null
     return items.find((i) => Number(i.id) === Number(selectedId)) ?? null
   }, [items, selectedId])
+
+  useEffect(() => {
+    if (!selected) return
+    void window.spravochnik.ensureTopicMedia({
+      departmentId,
+      topic: selected as unknown as Record<string, unknown>,
+    })
+  }, [selected, departmentId])
 
   const showLocalReset = Boolean(
     canEdit &&
@@ -909,6 +919,10 @@ export default function App() {
         pushing={pushing || busyLeft != null}
         interactionLocked={syncBlocking}
       />
+
+      {departmentId === 'support' && SUPPORT_PHONES_PLACEMENT === 'strip' ? (
+        <SupportPhonesBar placement="strip" />
+      ) : null}
 
       <div className="app-body">
         <aside className="sidebar">

@@ -11,7 +11,20 @@ import type {
   WhitelistEntry,
   WorkDepartmentId,
 } from '../types'
-import { ROLE_LABELS, WORK_DEPARTMENTS, normalizeWorkDepartmentId, isOwnerRole } from '../types'
+import {
+  ROLE_LABELS,
+  WORK_DEPARTMENTS,
+  normalizeWorkDepartmentId,
+  isOwnerRole,
+  isStaffRole,
+} from '../types'
+import {
+  DEFAULT_SUPPORT_PHONES,
+  formatSupportPhoneDisplay,
+  normalizeSupportPhones,
+  normalizeTelDigits,
+  type SupportPhoneLine,
+} from '../lib/supportPhones'
 
 function assignableRoles(actorIsOwner: boolean): UserRole[] {
   return actorIsOwner ? ['user', 'editor', 'admin'] : ['user', 'editor']
@@ -128,9 +141,12 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   const [sessionLogs, setSessionLogs] = useState<SessionLogEntry[]>([])
   const [copyLogHint, setCopyLogHint] = useState<string | null>(null)
   const [pullingFull, setPullingFull] = useState(false)
+  const [supportPhones, setSupportPhones] = useState<SupportPhoneLine[]>(DEFAULT_SUPPORT_PHONES)
+  const [savingSupportPhones, setSavingSupportPhones] = useState(false)
   const sessionLogRef = useRef<HTMLDivElement>(null)
 
   const actorIsOwner = userIsOwner(currentUser)
+  const actorIsStaff = isStaffRole(currentUser.role)
 
   async function reloadSessionLogs() {
     const logs = await window.spravochnik.getSessionLogs()
@@ -152,6 +168,10 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
     setWhitelist(coerceWhitelist(w))
     setOwnerEmail(s.ownerEmail)
     setSyncStatus(sync)
+    if (actorIsStaff) {
+      const phones = await window.spravochnik.getSupportPhones()
+      setSupportPhones(normalizeSupportPhones(phones))
+    }
     if (actorIsOwner) {
       setStorageLoading(true)
       setStorageError(null)
@@ -424,6 +444,47 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
     setCopyLogHint(null)
     const logs = await window.spravochnik.clearSessionLogs()
     setSessionLogs(logs)
+  }
+
+  function updateSupportPhone(index: number, patch: Partial<SupportPhoneLine>) {
+    setSupportPhones((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    )
+  }
+
+  function addSupportPhoneRow() {
+    setSupportPhones((prev) =>
+      prev.length >= 8
+        ? prev
+        : [...prev, { label: 'Новый', display: '', tel: '' } satisfies SupportPhoneLine],
+    )
+  }
+
+  function removeSupportPhoneRow(index: number) {
+    setSupportPhones((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
+  }
+
+  async function saveSupportPhones() {
+    setSavingSupportPhones(true)
+    setError(null)
+    setInfo(null)
+    try {
+      const prepared = normalizeSupportPhones(
+        supportPhones.map((row) => ({
+          label: row.label,
+          tel: normalizeTelDigits(row.tel),
+        })),
+      )
+      const saved = await window.spravochnik.setSupportPhones({ phones: prepared })
+      setSupportPhones(saved)
+      setInfo('Телефоны техподдержки сохранены.')
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : ''
+      const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
+      setError(cleaned || 'Не удалось сохранить телефоны')
+    } finally {
+      setSavingSupportPhones(false)
+    }
   }
 
   async function handleCopySessionLogs() {
@@ -704,6 +765,77 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
             })}
           </ul>
         </section>
+
+        {actorIsStaff && (
+          <section className="settings-section">
+            <h2>Телефоны техподдержки</h2>
+            <p className="muted">
+              Полоска над списком тем в отделе «Техподдержка». Введите только цифры номера — формат
+              для показа и копирования подставится автоматически.
+            </p>
+            <ul className="support-phones-settings">
+              {supportPhones.map((row, index) => (
+                <li key={index} className="support-phones-settings__row">
+                  <label className="support-phones-settings__field">
+                    <span className="support-phones-settings__label">Название</span>
+                    <input
+                      type="text"
+                      value={row.label}
+                      onChange={(e) => updateSupportPhone(index, { label: e.target.value })}
+                    />
+                  </label>
+                  <label className="support-phones-settings__field">
+                    <span className="support-phones-settings__label">Номер (цифры)</span>
+                    <input
+                      type="text"
+                      value={row.tel}
+                      onChange={(e) =>
+                        updateSupportPhone(index, {
+                          tel: normalizeTelDigits(e.target.value),
+                          display: formatSupportPhoneDisplay(e.target.value),
+                        })
+                      }
+                      inputMode="numeric"
+                      placeholder="83472468072"
+                    />
+                    {row.tel ? (
+                      <span className="support-phones-settings__preview">
+                        {formatSupportPhoneDisplay(row.tel)}
+                      </span>
+                    ) : null}
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-ghost support-phones-settings__remove"
+                    onClick={() => removeSupportPhoneRow(index)}
+                    disabled={supportPhones.length <= 1}
+                    title="Удалить строку"
+                  >
+                    Удалить
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="support-phones-settings__actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={addSupportPhoneRow}
+                disabled={supportPhones.length >= 8}
+              >
+                Добавить номер
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void saveSupportPhones()}
+                disabled={savingSupportPhones}
+              >
+                {savingSupportPhones ? 'Сохранение…' : 'Сохранить телефоны'}
+              </button>
+            </div>
+          </section>
+        )}
 
         <section className="settings-section">
           <h2>Журнал сессии</h2>

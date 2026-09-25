@@ -1,4 +1,10 @@
-import { formatTopicMarkdownLink, parseCopiedTopicLink } from './markdown'
+import type { DepartmentId } from '../types'
+import {
+  formatSharedImageMarkdown,
+  formatTopicMarkdownLink,
+  parseCopiedTopicLink,
+  parseImageRefFromClipboard,
+} from './markdown'
 
 /** Insert markdown snippet into textarea value at cursor (or append). */
 export function insertAtCursor(
@@ -13,6 +19,28 @@ export function insertAtCursor(
     return { next, cursor: start + snippet.length }
   }
   return { next: value + snippet, cursor: value.length + snippet.length }
+}
+
+/** Paste copied image markdown / media path without re-uploading bytes. */
+export async function insertPastedImageReferenceAsync(
+  value: string,
+  clipboardText: string,
+  topicId: number,
+  departmentId: DepartmentId,
+  el: HTMLTextAreaElement | null,
+): Promise<{ next: string; cursor: number } | null> {
+  const raw = parseImageRefFromClipboard(clipboardText)
+  if (!raw) return null
+  let markdownPath = raw
+  if (!/^https?:\/\//i.test(raw)) {
+    markdownPath = await window.spravochnik.resolveImageStorageRef({
+      departmentId,
+      ref: raw,
+      contextTopicId: topicId,
+    })
+  }
+  const snippet = `\n\n${formatSharedImageMarkdown(markdownPath)}\n\n`
+  return insertAtCursor(value, snippet, el)
 }
 
 /** If text is selected and clipboard is a topic link, wrap the selection. */

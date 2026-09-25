@@ -102,6 +102,22 @@ export interface SpravochnikApi {
 
   resolveMediaUrl: (relativePath: string, topicId?: number, departmentId?: DepartmentId) => Promise<string>
 
+  resolveImageStorageRef: (payload: {
+    departmentId: DepartmentId
+    ref: string
+    contextTopicId: number
+  }) => Promise<string>
+
+  ensureTopicMedia: (payload: {
+    departmentId: DepartmentId
+    topic: Record<string, unknown>
+  }) => Promise<void>
+
+  ensureMediaFiles: (payload: {
+    departmentId: DepartmentId
+    relativePaths: string[]
+  }) => Promise<void>
+
   downloadMediaImage: (
 
     resolvedSrc: string,
@@ -184,6 +200,16 @@ export interface SpravochnikApi {
   getRegistrationDepartment: (
     email: string,
   ) => Promise<{ departmentId: WorkDepartmentId; label: string } | null>
+
+  getSupportPhones: () => Promise<
+    Array<{ label: string; display: string; tel: string }>
+  >
+
+  setSupportPhones: (payload: {
+    phones: Array<{ label: string; display: string; tel: string }>
+  }) => Promise<Array<{ label: string; display: string; tel: string }>>
+
+  onSupportPhonesChanged: (callback: () => void) => () => void
 
   getAdminSettings: () => Promise<{
 

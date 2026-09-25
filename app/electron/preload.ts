@@ -25,6 +25,13 @@ contextBridge.exposeInMainWorld('spravochnik', {
   resolveMediaUrl: (relativePath: string, topicId?: number, departmentId?: string) =>
     ipcRenderer.invoke('resolve-media-url', relativePath, topicId, departmentId),
 
+  resolveImageStorageRef: (payload: unknown) =>
+    ipcRenderer.invoke('resolve-image-storage-ref', payload),
+
+  ensureTopicMedia: (payload: unknown) => ipcRenderer.invoke('ensure-topic-media', payload),
+
+  ensureMediaFiles: (payload: unknown) => ipcRenderer.invoke('ensure-media-files', payload),
+
   downloadMediaImage: (resolvedSrc: string, suggestedName?: string) =>
 
     ipcRenderer.invoke('media:download', resolvedSrc, suggestedName),
@@ -155,6 +162,16 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
 
   focusAppWindow: () => ipcRenderer.invoke('app:focus-window'),
+
+  getSupportPhones: () => ipcRenderer.invoke('support-phones:get'),
+
+  setSupportPhones: (payload: unknown) => ipcRenderer.invoke('support-phones:set', payload),
+
+  onSupportPhonesChanged: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('support-phones:changed', listener)
+    return () => ipcRenderer.removeListener('support-phones:changed', listener)
+  },
 
   getSessionLogs: () => ipcRenderer.invoke('session-log:get'),
 

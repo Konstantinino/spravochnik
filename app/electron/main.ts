@@ -41,6 +41,8 @@ import {
   saveImageFileForOwner,
   saveNativeImageForOwner,
   type ImageOwner,
+  type TopicMediaRow,
+  resolveImageStorageRef,
 } from './topic-media'
 import type { SavedWindowBounds } from './auth-store'
 import {
@@ -53,6 +55,7 @@ import {
   listUsersPublic,
   loginUser,
   readSettings,
+  writeSettings,
   registerUser,
   saveWindowBounds,
   removeWhitelistEmail,
@@ -89,6 +92,7 @@ import {
   tryPushTopicOnline,
   tryPushReorderOnline,
   ensureTopicMediaDownloaded,
+  ensureMediaFilesDownloaded,
 } from './sync-backend'
 import { queueOperation } from './pending-operations'
 import {
@@ -100,6 +104,8 @@ import {
   unlockTopicOrder,
   renewTopicOrderLock,
   fetchDepartmentTopics,
+  fetchSupportPhones,
+  saveSupportPhonesOnServer,
   serverFetch,
   serverLogin,
   serverRegister,
@@ -118,6 +124,7 @@ import {
   startUpdateCheckInterval,
 } from './updates'
 import { downloadMediaImage } from './media-download'
+import { normalizeSupportPhones } from '../src/lib/supportPhones'
 import {
   migrateLegacyLocalMedia,
   normalizeMediaDepartmentId,
@@ -1179,12 +1186,14 @@ function registerIpc(): void {
           newId,
           String(newItem.answer ?? ''),
           Array.isArray(newItem.photos) ? newItem.photos : undefined,
+          list as TopicMediaRow[],
         )
         cleanupTopicFileOrphans(
           payload.departmentId,
           newId,
           String(newItem.answer ?? ''),
           Array.isArray(newItem.documents) ? newItem.documents : undefined,
+          list as TopicMediaRow[],
         )
       } catch (err) {
         console.error('media orphan cleanup failed', err)
@@ -1373,12 +1382,14 @@ function registerIpc(): void {
           payload.item.id,
           String(savedItem.answer ?? ''),
           Array.isArray(savedItem.photos) ? savedItem.photos : undefined,
+          list as TopicMediaRow[],
         )
         cleanupTopicFileOrphans(
           payload.departmentId,
           payload.item.id,
           String(savedItem.answer ?? ''),
           Array.isArray(savedItem.documents) ? savedItem.documents : undefined,
+          list as TopicMediaRow[],
         )
       } catch (err) {
         console.error('media orphan cleanup failed', err)
@@ -1650,6 +1661,44 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(
+    'resolve-image-storage-ref',
+    (
+      _event,
+      payload: { departmentId: DepartmentId; ref: string; contextTopicId: number },
+    ) => {
+      const dept = departmentById(payload.departmentId)
+      const data = readGuideFile(dept.fileName) as Record<string, unknown>
+      const list = (data[dept.listKey] as TopicMediaRow[]) ?? []
+      return resolveImageStorageRef(
+        payload.departmentId,
+        payload.ref,
+        payload.contextTopicId,
+        list,
+      )
+    },
+  )
+
+  ipcMain.handle(
+    'ensure-topic-media',
+    async (
+      _event,
+      payload: { departmentId: DepartmentId; topic: Record<string, unknown> },
+    ) => {
+      await ensureTopicMediaDownloaded(payload.departmentId, payload.topic)
+    },
+  )
+
+  ipcMain.handle(
+    'ensure-media-files',
+    async (
+      _event,
+      payload: { departmentId: DepartmentId; relativePaths: string[] },
+    ) => {
+      await ensureMediaFilesDownloaded(payload.departmentId, payload.relativePaths ?? [])
+    },
+  )
+
+  ipcMain.handle(
     'resolve-media-url',
     (_event, relativePath: string, topicId?: number, departmentId?: DepartmentId) => {
     const cleaned = relativePath.replace(/^\/+/, '').replace(/\\/g, '/')
@@ -1732,6 +1781,48 @@ function registerIpc(): void {
     win.focus()
     win.webContents.focus()
     return true
+  })
+
+  function cacheSupportPhones(phones: unknown) {
+    const normalized = normalizeSupportPhones(phones)
+    const s = readSettings()
+    writeSettings({ ...s, supportPhones: normalized })
+    return normalized
+  }
+
+  function broadcastSupportPhonesChanged(): void {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('support-phones:changed')
+    }
+  }
+
+  ipcMain.handle('support-phones:get', async () => {
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim() && (await isServerReachable())) {
+      try {
+        const phones = await fetchSupportPhones()
+        return cacheSupportPhones(phones)
+      } catch {
+        /* use local cache */
+      }
+    }
+    return normalizeSupportPhones(settings.supportPhones)
+  })
+
+  ipcMain.handle('support-phones:set', async (_event, payload: { phones: unknown }) => {
+    requireRole(getCurrentUser(), STAFF_ROLES)
+    let phones = normalizeSupportPhones(payload.phones)
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim()) {
+      const online = await isServerReachable()
+      if (!online) {
+        throw new Error('Нет связи с сервером — телефоны не сохранены')
+      }
+      phones = await saveSupportPhonesOnServer(phones)
+    }
+    cacheSupportPhones(phones)
+    broadcastSupportPhonesChanged()
+    return phones
   })
 
   ipcMain.handle('session-log:get', () => getSessionLogs())

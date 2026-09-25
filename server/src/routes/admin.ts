@@ -16,6 +16,11 @@ import {
 } from '../lib/auth-utils.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
 import { DEPARTMENTS } from '../lib/topics.js'
+import {
+  normalizeSupportPhones,
+  readSupportPhonesFromDb,
+  writeSupportPhonesToDb,
+} from '../lib/support-phones.js'
 
 const BOOTSTRAP_ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'kostya.alone18@yandex.ru'
 
@@ -580,6 +585,27 @@ adminRouter.get('/storage-stats', requireRole('owner'), async (_req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка расчёта места' })
+  }
+})
+
+adminRouter.get('/support-phones', async (_req, res) => {
+  try {
+    const phones = await readSupportPhonesFromDb()
+    res.json({ phones })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка чтения телефонов' })
+  }
+})
+
+adminRouter.put('/support-phones', async (req: AuthRequest, res) => {
+  try {
+    const phones = normalizeSupportPhones(req.body?.phones)
+    const saved = await writeSupportPhonesToDb(phones)
+    res.json({ phones: saved })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка сохранения телефонов' })
   }
 })
 

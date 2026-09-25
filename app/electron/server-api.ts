@@ -235,3 +235,27 @@ export async function fetchDepartmentTopics(
     skipRemotePull: true,
   })
 }
+
+export interface SupportPhoneLineDto {
+  label: string
+  display: string
+  tel: string
+}
+
+export async function fetchSupportPhones(): Promise<SupportPhoneLineDto[]> {
+  const data = await serverFetch<{ phones: SupportPhoneLineDto[] }>('/app/support-phones', {
+    skipRemotePull: true,
+  })
+  return data.phones ?? []
+}
+
+export async function saveSupportPhonesOnServer(
+  phones: SupportPhoneLineDto[],
+): Promise<SupportPhoneLineDto[]> {
+  const data = await serverFetch<{ phones: SupportPhoneLineDto[] }>('/admin/support-phones', {
+    method: 'PUT',
+    body: JSON.stringify({ phones }),
+    skipRemotePull: true,
+  })
+  return data.phones ?? []
+}

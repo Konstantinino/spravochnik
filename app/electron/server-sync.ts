@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
-  DEPARTMENTS,
+  getDepartments,
   departmentById,
   getUserDataRoot,
   normalizeWorkDepartmentId,
@@ -11,6 +11,8 @@ import {
   departmentIdFromMediaPath,
   resolveExistingMediaAbsolutePath,
 } from './media-layout'
+import { applyDepartmentsFromSync } from './departments-store'
+import { applySubsectionsFromSync } from './subsections-store'
 import {
   readSettings,
   setPendingChanges,
@@ -429,6 +431,19 @@ interface SyncChangesResponse {
   full: boolean
   globalVersion: number
   syncedAt: string
+  departments?: Array<{
+    id: string
+    label: string
+    listKey: 'questions' | 'templates'
+    sortOrder: number
+    systemLocked?: boolean
+  }>
+  subsections?: Array<{
+    id: string
+    departmentId: string
+    label: string
+    sortOrder: number
+  }>
   topicsByDept: Record<string, Record<string, unknown>[]>
   deletedTopics: Array<{ department_id: string; id: number; deleted_at: string }>
   media: Array<{ relative_path: string; deleted_at?: string | null }>
@@ -511,16 +526,25 @@ export async function pullFromServer(options?: {
 
     emit({ code: 'syncing', label: PULL_LOADING_LABEL })
 
+    if (changes.departments?.length) {
+      applyDepartmentsFromSync(changes.departments)
+    }
+    if (changes.subsections?.length) {
+      applySubsectionsFromSync(changes.subsections)
+    }
+
+    const departments = getDepartments()
+
     if (changes.full) {
-      for (const dept of DEPARTMENTS) {
+      for (const dept of departments) {
         const topics = changes.topicsByDept[dept.id] ?? []
         writeFullDeptTopics(dept.id, topics)
       }
     } else {
-      for (const dept of DEPARTMENTS) {
-        const topics = changes.topicsByDept[dept.id] ?? []
+      for (const deptId of Object.keys(changes.topicsByDept ?? {})) {
+        const topics = changes.topicsByDept[deptId] ?? []
         for (const topic of topics) {
-          applyTopicToLocal(dept.id, topic)
+          applyTopicToLocal(deptId as DepartmentId, topic)
         }
       }
       const deptsWithDeletes = new Set<DepartmentId>()
@@ -574,7 +598,7 @@ export async function pullFromServer(options?: {
 
     const hasContent =
       changes.full ||
-      DEPARTMENTS.some((dept) => (changes.topicsByDept[dept.id] ?? []).length > 0) ||
+      Object.values(changes.topicsByDept ?? {}).some((topics) => topics.length > 0) ||
       (changes.deletedTopics?.length ?? 0) > 0 ||
       (changes.media ?? []).some((m) => !m.deleted_at)
 
@@ -742,6 +766,7 @@ function syncErrorFromClientOutdated(e: ServerApiError): SyncStatus | null {
     code: 'error',
     label: 'Нужно обновить приложение',
     detail: body?.error ?? `Установите последнюю версию REST INFO${min}`,
+    hasPendingChanges: readSettings().hasPendingChanges,
   }
 }
 
@@ -837,7 +862,7 @@ export async function resolveSyncConflicts(
     const conflict = pendingConflicts.find((c) => c.id === res.id && c.fileName === res.fileName)
     if (!conflict) continue
 
-    const dept = DEPARTMENTS.find((d) => d.fileName === res.fileName)
+    const dept = getDepartments().find((d) => d.fileName === res.fileName)
     if (!dept) continue
 
     if (res.choice === 'local' && conflict.localFull) {

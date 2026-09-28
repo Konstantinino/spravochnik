@@ -37,7 +37,11 @@ async function main(): Promise<void> {
   app.use(express.json({ limit: '10mb' }))
 
   app.get('/health', (_req, res) => {
-    res.json({ ok: true, time: new Date().toISOString() })
+    res.json({
+      ok: true,
+      time: new Date().toISOString(),
+      features: { adminDepartments: true },
+    })
   })
 
   app.use('/auth', authRouter)

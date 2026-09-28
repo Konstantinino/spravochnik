@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DepartmentId, GuideItem, SupportParty } from '../types'
-import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
+import type {
+  Department,
+  DepartmentId,
+  DepartmentSubsection,
+  GuideItem,
+  SupportParty,
+} from '../types'
+import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS, workDepartmentsFrom } from '../types'
 import {
   filterTopicsForClientLinkPicker,
   filterTopicsForLinkPicker,
@@ -28,6 +34,8 @@ interface TopicEditorModalProps {
   open: boolean
   mode: 'add' | 'edit'
   departmentId: DepartmentId
+  departments?: Department[]
+  subsections?: DepartmentSubsection[]
   /** When adding a subtopic — parent id; null for root */
   parentId: number | null
   items: GuideItem[]
@@ -42,6 +50,7 @@ interface TopicEditorModalProps {
     parent_id: number | null
     client_topic_id?: number | null
     party?: SupportParty
+    subsection_id?: string | null
     id?: number
     draftId?: string
   }) => Promise<void>
@@ -58,6 +67,8 @@ export function TopicEditorModal({
   open,
   mode,
   departmentId,
+  departments = workDepartmentsFrom(DEPARTMENTS),
+  subsections = [],
   parentId,
   items,
   defaultParty = 'supplier',
@@ -68,6 +79,7 @@ export function TopicEditorModal({
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
   const [targetDept, setTargetDept] = useState<DepartmentId>(departmentId)
+  const [targetSubsectionId, setTargetSubsectionId] = useState('')
   const [party, setParty] = useState<SupportParty>(defaultParty)
   const [attachParent, setAttachParent] = useState(false)
   const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
@@ -92,6 +104,18 @@ export function TopicEditorModal({
 
   const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
 
+  const targetDeptSubsections = useMemo(
+    () =>
+      subsections
+        .filter((s) => s.departmentId === targetDept)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru')),
+    [subsections, targetDept],
+  )
+
+  const showSubsectionPicker =
+    targetDeptSubsections.length > 0 &&
+    (mode === 'add' ? !attachParent : initial?.parent_id == null)
+
   const linkPickerItems = useMemo(() => filterTopicsForLinkPicker(items), [items])
 
   const parentPickerItems = useMemo(() => {
@@ -110,6 +134,12 @@ export function TopicEditorModal({
     setQuestion(initial?.question ?? '')
     setAnswer(initial?.answer ?? '')
     setTargetDept(departmentId)
+    const subsForDept = subsections.filter((s) => s.departmentId === departmentId)
+    const initialSub =
+      mode === 'edit' && initial?.subsection_id
+        ? initial.subsection_id
+        : subsForDept[0]?.id ?? ''
+    setTargetSubsectionId(initialSub)
     const initialParent =
       mode === 'edit' ? (initial?.parent_id ?? null) : parentId
     setSelectedParentId(initialParent)
@@ -127,7 +157,7 @@ export function TopicEditorModal({
     setError(null)
     clearPicker()
     setSaving(false)
-  }, [open, initial, departmentId, parentId, mode, defaultParty, clearPicker])
+  }, [open, initial, departmentId, parentId, mode, defaultParty, clearPicker, subsections])
 
   if (!open) return null
 
@@ -294,6 +324,10 @@ export function TopicEditorModal({
       setError('Выберите клиентскую тему или снимите галочку')
       return
     }
+    if (showSubsectionPicker && !targetSubsectionId) {
+      setError('Выберите подраздел')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -302,6 +336,7 @@ export function TopicEditorModal({
         question: question.trim(),
         answer,
         parent_id: attachParent ? selectedParentId : null,
+        ...(showSubsectionPicker ? { subsection_id: targetSubsectionId } : {}),
         client_topic_id:
           showParty && party === 'additional'
             ? attachClientLink
@@ -351,15 +386,34 @@ export function TopicEditorModal({
                 onChange={(e) => {
                   const next = e.target.value as DepartmentId
                   setTargetDept(next)
+                  const nextSubs = subsections.filter((s) => s.departmentId === next)
+                  setTargetSubsectionId(nextSubs[0]?.id ?? '')
                   if (next !== 'support') {
                     setSelectedParentId(null)
                     setAttachParent(false)
                   }
                 }}
               >
-                {DEPARTMENTS.map((d) => (
+                {departments.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {showSubsectionPicker && (
+            <label className="field">
+              <span>Подраздел</span>
+              <select
+                value={targetSubsectionId}
+                required
+                onChange={(e) => setTargetSubsectionId(e.target.value)}
+              >
+                {targetDeptSubsections.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
                   </option>
                 ))}
               </select>

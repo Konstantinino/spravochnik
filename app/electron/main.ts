@@ -16,7 +16,7 @@ import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import {
   DATA_FILES,
-  DEPARTMENTS,
+  getDepartments,
   departmentById,
   getMediaDir,
   getSeedDataDir,
@@ -111,7 +111,21 @@ import {
   serverRegister,
   ServerApiError,
   validateServerUrl,
+  createDepartmentOnServer,
+  createSubsectionOnServer,
+  deleteDepartmentOnServer,
+  deleteSubsectionOnServer,
+  fetchAdminDepartments,
+  updateDepartmentOnServer,
+  updateSubsectionOnServer,
 } from './server-api'
+import { mergeDepartmentPatch } from './departments-store'
+import {
+  getSubsectionsForDepartment,
+  mergeSubsectionPatch,
+  readStoredSubsections,
+  removeSubsectionLocal,
+} from './subsections-store'
 import {
   checkForUpdates,
   downloadLatestRelease,
@@ -487,8 +501,15 @@ function createWindow(): void {
 
 function registerIpc(): void {
   ipcMain.handle('get-departments', () =>
-    DEPARTMENTS.map(({ id, label, fileName }) => ({ id, label, fileName })),
+    getDepartments().map(({ id, label, fileName, listKey }) => ({
+      id,
+      label,
+      fileName,
+      listKey,
+    })),
   )
+
+  ipcMain.handle('get-subsections', () => readStoredSubsections())
 
   ipcMain.handle('get-data-path', () => getUserDataRoot())
 
@@ -950,6 +971,129 @@ function registerIpc(): void {
     return serverFetch('/admin/storage-stats')
   })
 
+  ipcMain.handle('admin:list-departments', async () => {
+    requireRole(getCurrentUser(), STAFF_ROLES)
+    const localList = () =>
+      getDepartments()
+        .filter((d) => d.id !== 'lost')
+        .map((d, index) => ({
+          id: d.id,
+          label: d.label,
+          listKey: d.listKey,
+          sortOrder: (index + 1) * 10,
+          systemLocked: d.id === 'templates',
+        }))
+
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim()) {
+      try {
+        const online = await isServerReachable()
+        if (online) {
+          const fromServer = await fetchAdminDepartments()
+          if (fromServer.length > 0) return fromServer
+        }
+      } catch (err) {
+        appendSessionLog(
+          'warn',
+          'admin/departments',
+          err instanceof Error ? err.message : 'Не удалось загрузить разделы с сервера',
+        )
+      }
+    }
+    return localList()
+  })
+
+  ipcMain.handle(
+    'admin:create-department',
+    async (_e, payload: { id: string; label: string }) => {
+      requireRole(getCurrentUser(), STAFF_ROLES)
+      const settings = readSettings()
+      if (!settings.serverUrl.trim() || !settings.authToken.trim()) {
+        throw new Error('Нужен вход на сервер с URL и токеном (не только локальный режим)')
+      }
+      const created = await createDepartmentOnServer(payload)
+      mergeDepartmentPatch(created)
+      try {
+        await pullFromYandex({ force: true })
+      } catch (err) {
+        appendSessionLog(
+          'warn',
+          'admin/departments',
+          `Раздел создан на сервере, но синхронизация не завершилась: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
+      }
+      return created
+    },
+  )
+
+  ipcMain.handle(
+    'admin:update-department',
+    async (_e, payload: { id: string; label: string }) => {
+      requireRole(getCurrentUser(), STAFF_ROLES)
+      const updated = await updateDepartmentOnServer(payload.id, { label: payload.label })
+      mergeDepartmentPatch(updated)
+      return updated
+    },
+  )
+
+  ipcMain.handle(
+    'admin:create-subsection',
+    async (_e, payload: { departmentId: string; label: string }) => {
+      requireRole(getCurrentUser(), STAFF_ROLES)
+      const created = await createSubsectionOnServer(payload.departmentId, {
+        label: payload.label,
+      })
+      mergeSubsectionPatch(created)
+      try {
+        await pullFromYandex({ force: true })
+      } catch {
+        /* subsection already local */
+      }
+      return created
+    },
+  )
+
+  ipcMain.handle(
+    'admin:update-subsection',
+    async (_e, payload: { id: string; label: string }) => {
+      requireRole(getCurrentUser(), STAFF_ROLES)
+      const updated = await updateSubsectionOnServer(payload.id, { label: payload.label })
+      mergeSubsectionPatch(updated)
+      return updated
+    },
+  )
+
+  ipcMain.handle('admin:delete-subsection', async (_e, id: string) => {
+    requireRole(getCurrentUser(), STAFF_ROLES)
+    await deleteSubsectionOnServer(id)
+    removeSubsectionLocal(id)
+    try {
+      await pullFromYandex({ force: true })
+    } catch {
+      /* ok */
+    }
+    return { ok: true }
+  })
+
+  ipcMain.handle('admin:delete-department', async (_e, id: string) => {
+    requireRole(getCurrentUser(), STAFF_ROLES)
+    const result = await deleteDepartmentOnServer(id)
+    try {
+      await pullFromYandex({ force: true })
+    } catch (err) {
+      appendSessionLog(
+        'warn',
+        'admin/departments',
+        `Раздел удалён на сервере, но синхронизация не завершилась: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+    }
+    return result
+  })
+
   // Token is set before login so whitelist/accounts can sync from Disk first
   ipcMain.handle('sync:set-token', (_e, token: string) => {
     const s = setYandexToken(token)
@@ -1154,6 +1298,7 @@ function registerIpc(): void {
           client_topic_id?: number | null
           has_children?: boolean
           party?: SupportPartyValue
+          subsection_id?: string | null
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
           image_display?: Record<string, number>
@@ -1200,6 +1345,19 @@ function registerIpc(): void {
           asSupportParty(payload.item.party),
           payload.item.client_topic_id,
         )
+      }
+
+      const deptSubs = getSubsectionsForDepartment(payload.departmentId)
+      if (deptSubs.length > 0 && newItem.parent_id == null) {
+        const subId =
+          typeof payload.item.subsection_id === 'string' ? payload.item.subsection_id.trim() : ''
+        if (!subId || !deptSubs.some((s) => s.id === subId)) {
+          throw new Error('Выберите подраздел')
+        }
+        newItem.subsection_id = subId
+      } else if (newItem.parent_id != null && deptSubs.length > 0) {
+        const parent = list.find((item) => item.id === newItem.parent_id)
+        if (parent?.subsection_id) newItem.subsection_id = parent.subsection_id
       }
 
       list.push(newItem)
@@ -1268,6 +1426,7 @@ function registerIpc(): void {
           client_topic_id?: number | null
           has_children?: boolean
           party?: SupportPartyValue
+          subsection_id?: string | null
           archived?: boolean
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
@@ -1322,6 +1481,28 @@ function registerIpc(): void {
         }
       }
 
+      const deptSubs = getSubsectionsForDepartment(payload.departmentId)
+      let nextSubsectionId: string | undefined
+      if (deptSubs.length > 0) {
+        if (newParentId == null) {
+          const subId =
+            payload.item.subsection_id !== undefined
+              ? String(payload.item.subsection_id ?? '').trim()
+              : String(list[idx].subsection_id ?? '').trim()
+          if (!subId || !deptSubs.some((s) => s.id === subId)) {
+            throw new Error('Выберите подраздел')
+          }
+          nextSubsectionId = subId
+        } else {
+          const parent = list.find((item) => item.id === newParentId)
+          if (typeof parent?.subsection_id === 'string' && parent.subsection_id.trim()) {
+            nextSubsectionId = parent.subsection_id.trim()
+          }
+        }
+      } else if (payload.item.subsection_id) {
+        nextSubsectionId = String(payload.item.subsection_id).trim()
+      }
+
       list[idx] = {
         ...list[idx],
         question: payload.item.question,
@@ -1335,6 +1516,10 @@ function registerIpc(): void {
               party: asSupportParty(payload.item.party, asSupportParty(list[idx].party)),
             }
           : {}),
+      }
+      if (nextSubsectionId) list[idx].subsection_id = nextSubsectionId
+      else if (deptSubs.length > 0 && newParentId != null && !list[idx].subsection_id) {
+        delete list[idx].subsection_id
       }
       if (payload.departmentId === 'support') {
         applyClientTopicLink(

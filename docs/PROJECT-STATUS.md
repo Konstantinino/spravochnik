@@ -8,7 +8,7 @@
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows (28 сент.): медиа `media/{отдел}/{id}/images|files`, автоподгрузка чужих правок, **тема остаётся открытой после сохранения**. Setup **1.4.5** + сессия: оформление фото в теме (тень, нижняя синяя полоска); категория **«Администратор»** (party `additional`); связка admin↔client (`client_topic_id`, миграция **008**); кнопки **«Клиент»/«Админ»** в topbar. Production: nginx `client_max_body_size` ≥120M; **миграции 004–008**. **Минимальная версия клиента для записи:** `X-Rest-Info-Client-Version`, порог = последний `app_releases` (иначе **426**); чтение/sync pull без ограничений. Env: `SKIP_MIN_CLIENT_VERSION`, `MIN_CLIENT_VERSION`. Пока production без **008** — связь admin↔client сохраняется локально после push (`server-sync`), на сервер не реплицируется.
+Локально на Windows (28 сент.): медиа `media/{отдел}/{id}/images|files`, автоподгрузка чужих правок, **тема остаётся открытой после сохранения**. Setup **1.4.5** собран (`npm run dist:ascii`). Сессия: **управление разделами** (миграция **009**, «Потерялись»), **подразделы** (**010**), телефоны support в шапке **справа**; admin↔client (**008**); min client version (**426**). Production: nginx `client_max_body_size` ≥120M; нужны **миграции 004–010** и API с `/admin/departments` + подразделами. Без деплоя нового API — 404 при добавлении раздела/подраздела.
 
 **Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
@@ -41,6 +41,10 @@
 - [x] **`lib/fix-media-paths.ts`** + `POST /admin/fix-media-paths` (owner) — разовое исправление legacy-путей в `media_files` (`media/images/uuid.jpg` → `media/{отдел}/{id}/images/…`); файлы на диске не перемещает, только БД
 - [x] CLI: `node dist/fix-media-paths.js [--apply]` (на сервере в контейнере api)
 - [x] **`lib/support-phones.ts`** — телефоны техподдержки в `sync_state`; **`GET /app/support-phones`** (авторизованные), **`GET/PUT /admin/support-phones`** (admin/owner)
+- [x] Миграция **`009_departments_lost.sql`** — динамические разделы, `lost`, `sort_order`; **`GET/POST/PUT/DELETE /admin/departments`**; sync отдаёт `departments`
+- [x] Миграция **`010_department_subsections.sql`** — `department_subsections`, `topics.subsection_id`; admin CRUD подразделов; sync `subsections`; `resolveTopicSubsectionId` при создании тем
+- [x] **`lib/move-topics-to-lost.ts`** — темы удалённого раздела → «Потерялись»
+- [x] **`GET /health`** — флаг `features.adminDepartments` (диагностика деплоя)
 
 ### Клиент (`app/`)
 
@@ -82,7 +86,10 @@
 - [x] **Настройки:** скролл по всей ширине страницы (не только по блоку контента)
 - [x] **Окно:** размер/позиция в `settings.json` (`windowBounds`); **NSIS** `build/installer.nsh` — не пересоздавать ярлык на рабочем столе при update (pin на панели задач)
 - [x] Вставка фото: одна пустая строка **сверху**, без отступа снизу
-- [x] **Телефоны техподдержки:** полоска в отделе support — по умолчанию в **синей шапке столбиком** (`SUPPORT_PHONES_PLACEMENT` в `supportPhonesUi.ts`, откат → `'strip'`); клик копирует форматированный номер; admin/owner — блок в настройках
+- [x] **Телефоны техподдержки:** в **синей шапке справа** столбиком (`SUPPORT_PHONES_PLACEMENT` → `'header'`); клик копирует форматированный номер; admin/owner — настройки (название + цифры, без дубля preview)
+- [x] **Разделы и подразделы:** настройки — добавить/переименовать/удалить раздел; **Добавить** подраздел с отступом; список тем — секции подразделов с табуляцией; новая корневая тема — обязательный select подраздела
+- [x] **«Потерялись»:** вкладка в шапке только если есть темы; только просмотр
+- [x] **`departments-store.ts`**, **`subsections-store.ts`** — локальный кэш + sync
 - [x] **Общие фото:** ссылка на файл другой темы (`resolve-image-storage-ref`), вставка из буфера, копирование из редактора; orphan cleanup по всем темам
 - [x] Reorder: не раскрывает все папки — только ручное раскрытие, как в обычном режиме
 - [x] Клиент **1.4.5** (`REST-INFO-Setup-1.4.5.exe`): auto-update через `electron-updater` (фоновое скачивание, «Обновить» / «Скачивание…» в профиле, версия в шапке вплотную к «REST INFO»)
@@ -146,7 +153,8 @@
 | Импорт на production: `import-from-json.js` | **Высокий** | Программист |
 | Залить Setup **1.4.5** + `latest.yml` + blockmap на production | **Высокий** | Админ / программист |
 | Деплой API с support-phones (если ещё не на production) | **Высокий** | Программист |
-| **`npm run migrate`** на production (004 sort_index, 005 errors, 006 additional) | **Высокий** | Программист |
+| **`npm run migrate`** на production (**004–010**, incl. departments + subsections) | **Высокий** | Программист |
+| Деплой API **`/admin/departments`** и подразделов | **Высокий** | Программист |
 | Указать production URL в клиентах | Средний | Админ |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |

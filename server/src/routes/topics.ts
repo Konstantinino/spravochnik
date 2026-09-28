@@ -5,11 +5,15 @@ import type pg from 'pg'
 import { query, withTransaction, bumpGlobalVersion } from '../db/pool.js'
 import { deleteTopicMediaFiles } from '../lib/media-layout.js'
 import {
+  getDepartmentById,
+  isLostDepartmentId,
+  isValidDepartmentId,
+} from '../lib/departments.js'
+import { resolveTopicSubsectionId } from '../lib/subsections.js'
+import {
   acquireTopicLock,
   acquireTopicOrderLock,
-  DEPARTMENTS,
   isSupportParty,
-  isValidDepartment,
   normalizeSupportParty,
   refreshHasChildren,
   releaseTopicLock,
@@ -54,10 +58,19 @@ function rejectForeignDepartmentEdit(req: AuthRequest, dept: string, res: Respon
   return false
 }
 
+function rejectLostDepartmentWrite(dept: string, res: Response): boolean {
+  if (isLostDepartmentId(dept)) {
+    res.status(403).json({ error: 'Раздел «Потерялись» только для просмотра' })
+    return true
+  }
+  return false
+}
+
 topicsRouter.get('/:dept/topics', async (req, res) => {
   try {
     const dept = param(req.params.dept)
-    if (!isValidDepartment(dept)) {
+    const deptMeta = await getDepartmentById(dept)
+    if (!deptMeta) {
       res.status(404).json({ error: 'Неизвестный отдел' })
       return
     }
@@ -67,7 +80,7 @@ topicsRouter.get('/:dept/topics', async (req, res) => {
       [dept],
     )
 
-    const listKey = DEPARTMENTS[dept].listKey
+    const listKey = deptMeta.listKey
     const items = result.rows.map(rowToGuideItem)
     res.json({ [listKey]: items, listKey, departmentId: dept })
   } catch (err) {
@@ -84,10 +97,11 @@ topicsRouter.post(
     try {
       const dept = param(req.params.dept)
       const topicId = parseInt(param(req.params.topicId), 10)
-      if (!isValidDepartment(dept) || !Number.isFinite(topicId)) {
+      if (!(await isValidDepartmentId(dept)) || !Number.isFinite(topicId)) {
         res.status(400).json({ error: 'Некорректные параметры' })
         return
       }
+      if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
 
       const lock = await acquireTopicLock(dept, topicId, req.user!.id, req.user!.name)
@@ -150,10 +164,11 @@ topicsRouter.post(
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
-      if (!isValidDepartment(dept)) {
+      if (!(await isValidDepartmentId(dept))) {
         res.status(404).json({ error: 'Неизвестный отдел' })
         return
       }
+      if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
 
       const item = req.body.item ?? req.body
@@ -168,6 +183,13 @@ topicsRouter.post(
       const clientTopicId = resolveClientTopicId(dept, party, item.client_topic_id, null)
 
       const topic = await withTransaction(async (client) => {
+        const subsectionId = await resolveTopicSubsectionId(
+          dept,
+          parentId,
+          item.subsection_id ?? item.subsectionId,
+          client,
+        )
+
         const idRes = await client.query<{ next_id: number }>(
           `UPDATE topic_id_counters SET next_id = next_id + 1
            WHERE department_id = $1 RETURNING next_id - 1 AS next_id`,
@@ -183,8 +205,8 @@ topicsRouter.post(
         await client.query(
           `INSERT INTO topics (
              department_id, id, question, answer, parent_id, client_topic_id, has_children, party,
-             archived, sort_index, image_display, photos, documents, version, updated_by
-           ) VALUES ($1, $2, $3, $4, $5, $6, false, $7, false, $8, $9, $10, $11, 1, $12)`,
+             archived, sort_index, subsection_id, image_display, photos, documents, version, updated_by
+           ) VALUES ($1, $2, $3, $4, $5, $6, false, $7, false, $8, $9, $10, $11, $12, 1, $13)`,
           [
             dept,
             newId,
@@ -194,6 +216,7 @@ topicsRouter.post(
             clientTopicId,
             party,
             Number.isFinite(sortIndex) ? sortIndex : null,
+            subsectionId,
             item.image_display ? JSON.stringify(item.image_display) : null,
             JSON.stringify(item.photos ?? []),
             JSON.stringify(item.documents ?? []),
@@ -213,6 +236,11 @@ topicsRouter.post(
 
       res.status(201).json({ topic: rowToGuideItem(topic) })
     } catch (err) {
+      const status = (err as { status?: number }).status
+      if (status === 400) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'Некорректные данные' })
+        return
+      }
       console.error(err)
       res.status(500).json({ error: 'Ошибка создания темы' })
     }
@@ -226,10 +254,11 @@ topicsRouter.post(
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
-      if (!isValidDepartment(dept)) {
+      if (!(await isValidDepartmentId(dept))) {
         res.status(400).json({ error: 'Некорректные параметры' })
         return
       }
+      if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
 
       const lock = await acquireTopicOrderLock(dept, req.user!.id, req.user!.name)
@@ -256,10 +285,11 @@ topicsRouter.post(
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
-      if (!isValidDepartment(dept)) {
+      if (!(await isValidDepartmentId(dept))) {
         res.status(400).json({ error: 'Некорректные параметры' })
         return
       }
+      if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
       await releaseTopicOrderLock(dept, req.user!.id)
       res.json({ ok: true })
@@ -277,10 +307,11 @@ topicsRouter.post(
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
-      if (!isValidDepartment(dept)) {
+      if (!(await isValidDepartmentId(dept))) {
         res.status(400).json({ error: 'Некорректные параметры' })
         return
       }
+      if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
       await renewTopicOrderLock(dept, req.user!.id)
       res.json({ ok: true })
@@ -298,10 +329,11 @@ topicsRouter.put(
   async (req: AuthRequest, res) => {
     try {
       const dept = param(req.params.dept)
-      if (!isValidDepartment(dept)) {
+      if (!(await isValidDepartmentId(dept))) {
         res.status(404).json({ error: 'Неизвестный отдел' })
         return
       }
+      if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
 
       const orderLock = await requireTopicOrderLock(dept, req.user!.id)
@@ -363,10 +395,11 @@ topicsRouter.put(
     try {
       const dept = param(req.params.dept)
       const topicId = parseInt(param(req.params.topicId), 10)
-      if (!isValidDepartment(dept) || !Number.isFinite(topicId)) {
+      if (!(await isValidDepartmentId(dept)) || !Number.isFinite(topicId)) {
         res.status(400).json({ error: 'Некорректные параметры' })
         return
       }
+      if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
 
       const expectedVersion = parseInt(String(req.headers['if-match'] ?? req.body.version ?? '0'), 10)
@@ -431,11 +464,18 @@ topicsRouter.put(
           : current.sort_index
 
       const updated = await withTransaction(async (client) => {
+        const subsectionId = await resolveTopicSubsectionId(
+          dept,
+          parentId,
+          item.subsection_id ?? item.subsectionId ?? current.subsection_id,
+          client,
+        )
+
         await client.query(
           `UPDATE topics SET
              question = $3, answer = $4, parent_id = $5, client_topic_id = $6, party = $7,
-             archived = $8, sort_index = $9, image_display = $10, photos = $11, documents = $12,
-             version = version + 1, updated_at = NOW(), updated_by = $13
+             archived = $8, sort_index = $9, subsection_id = $10, image_display = $11, photos = $12,
+             documents = $13, version = version + 1, updated_at = NOW(), updated_by = $14
            WHERE department_id = $1 AND id = $2 AND deleted_at IS NULL`,
           [
             dept,
@@ -447,6 +487,7 @@ topicsRouter.put(
             party,
             archived,
             Number.isFinite(sortIndex) ? sortIndex : null,
+            subsectionId,
             item.image_display !== undefined
               ? JSON.stringify(item.image_display)
               : current.image_display
@@ -492,6 +533,11 @@ topicsRouter.delete(
     try {
       const dept = param(req.params.dept)
       const topicId = parseInt(param(req.params.topicId), 10)
+      if (!(await isValidDepartmentId(dept)) || !Number.isFinite(topicId)) {
+        res.status(400).json({ error: 'Некорректные параметры' })
+        return
+      }
+      if (rejectLostDepartmentWrite(dept, res)) return
 
       await withTransaction(async (client) => {
         const toDelete = await collectDescendantIds(client, dept, topicId)

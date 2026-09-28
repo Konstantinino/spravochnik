@@ -28,6 +28,7 @@ export interface TopicRow {
   party: string | null
   archived: boolean
   sort_index: number | null
+  subsection_id: string | null
   image_display: Record<string, number> | null
   photos: unknown[]
   documents: unknown[]
@@ -51,6 +52,7 @@ export function rowToGuideItem(row: TopicRow): Record<string, unknown> {
   if (row.sort_index != null && Number.isFinite(row.sort_index)) {
     item.sort_index = row.sort_index
   }
+  if (row.subsection_id) item.subsection_id = row.subsection_id
   if (row.image_display && Object.keys(row.image_display).length > 0) {
     item.image_display = row.image_display
   }
@@ -61,42 +63,20 @@ export function rowToGuideItem(row: TopicRow): Record<string, unknown> {
   return item
 }
 
-export const DEPARTMENTS: Record<
-  string,
-  { label: string; listKey: 'questions' | 'templates' }
-> = {
-  support: { label: 'Тех. поддержка', listKey: 'questions' },
-  lawyers: { label: 'Юристы', listKey: 'questions' },
-  managers: { label: 'Менеджеры', listKey: 'questions' },
-  spp: { label: 'СПП', listKey: 'questions' },
-  templates: { label: 'Шаблоны', listKey: 'templates' },
-}
+export {
+  listDepartments,
+  getDepartmentById,
+  isValidDepartmentId,
+  LOST_DEPARTMENT_ID,
+  TEMPLATES_DEPARTMENT_ID,
+  isLostDepartmentId,
+} from './departments.js'
 
-export type WorkDepartmentId = 'support' | 'lawyers' | 'managers' | 'spp'
-
-export const WORK_DEPARTMENT_IDS: WorkDepartmentId[] = [
-  'support',
-  'lawyers',
-  'managers',
-  'spp',
-]
-
-export function isValidDepartment(id: string): boolean {
-  return id in DEPARTMENTS
-}
-
-export function isWorkDepartmentId(value: unknown): value is WorkDepartmentId {
-  return (
-    value === 'support' ||
-    value === 'lawyers' ||
-    value === 'managers' ||
-    value === 'spp'
-  )
-}
-
-export function normalizeWorkDepartmentId(value: unknown): WorkDepartmentId {
-  return isWorkDepartmentId(value) ? value : 'support'
-}
+export {
+  isWorkDepartmentId,
+  normalizeWorkDepartmentId,
+  type WorkDepartmentId,
+} from './auth-utils.js'
 
 export async function refreshHasChildren(
   departmentId: string,

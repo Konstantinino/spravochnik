@@ -12,7 +12,7 @@ import {
   type UserRole,
   type WorkDepartmentId,
 } from '../lib/auth-utils.js'
-import { DEPARTMENTS } from '../lib/topics.js'
+import { getDepartmentById } from '../lib/departments.js'
 import { authMiddleware, signToken, type AuthRequest } from '../middleware/auth.js'
 
 const BOOTSTRAP_ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'kostya.alone18@yandex.ru'
@@ -181,7 +181,8 @@ authRouter.get('/registration-department', async (req, res) => {
     }
 
     const departmentId = normalizeWorkDepartmentId(wl.rows[0].department_id)
-    const label = DEPARTMENTS[departmentId]?.label ?? departmentId
+    const deptMeta = await getDepartmentById(departmentId)
+    const label = deptMeta?.label ?? departmentId
     res.json({ departmentId, label })
   } catch (err) {
     console.error(err)

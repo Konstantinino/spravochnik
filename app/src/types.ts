@@ -1,9 +1,7 @@
-export type DepartmentId =
-  | 'support'
-  | 'lawyers'
-  | 'managers'
-  | 'spp'
-  | 'templates'
+export type DepartmentId = string
+
+export const LOST_DEPARTMENT_ID = 'lost'
+export const TEMPLATES_DEPARTMENT_ID = 'templates'
 
 export interface StorageKindBytes {
   photoBytes: number
@@ -26,8 +24,8 @@ export interface StorageStats {
   unassigned?: StorageKindBytes
 }
 
-/** Home department for users / whitelist — excludes «Шаблоны» */
-export type WorkDepartmentId = Exclude<DepartmentId, 'templates'>
+/** Home department for users / whitelist — excludes «Шаблоны» and «Потерялись» */
+export type WorkDepartmentId = string
 
 export type UserRole = 'user' | 'editor' | 'admin' | 'owner'
 
@@ -55,8 +53,34 @@ export function canSwitchDepartment(role: string | undefined | null): boolean {
   return role === 'user' || role === 'editor' || isStaffRole(role)
 }
 
-export function departmentsForUser(role: string | undefined | null): Department[] {
-  return isStaffRole(role) ? DEPARTMENTS : [...WORK_DEPARTMENTS]
+export function isLostDepartmentId(id: string): boolean {
+  return id === LOST_DEPARTMENT_ID
+}
+
+export function departmentsForUser(
+  role: string | undefined | null,
+  departments: Department[] = DEPARTMENTS,
+  options?: { showLost?: boolean },
+): Department[] {
+  const showLost = options?.showLost ?? false
+  const base = isStaffRole(role)
+    ? departments.filter((d) => d.id !== LOST_DEPARTMENT_ID || showLost)
+    : departments.filter(
+        (d) => d.id !== TEMPLATES_DEPARTMENT_ID && (d.id !== LOST_DEPARTMENT_ID || showLost),
+      )
+  if (!showLost) {
+    return base.filter((d) => d.id !== LOST_DEPARTMENT_ID)
+  }
+  return base
+}
+
+export function workDepartmentsFrom(departments: Department[]): Department[] {
+  return departments.filter(
+    (d) =>
+      d.listKey === 'questions' &&
+      d.id !== TEMPLATES_DEPARTMENT_ID &&
+      d.id !== LOST_DEPARTMENT_ID,
+  )
 }
 
 export function canEditDepartment(
@@ -65,6 +89,7 @@ export function canEditDepartment(
   targetDepartmentId: DepartmentId,
 ): boolean {
   if (!canEditContent(role)) return false
+  if (isLostDepartmentId(targetDepartmentId)) return false
   if (isStaffRole(role)) return true
   return normalizeWorkDepartmentId(userDepartmentId) === normalizeWorkDepartmentId(targetDepartmentId)
 }
@@ -252,6 +277,8 @@ export interface GuideItem {
   has_children?: boolean
   /** Техподдержка: поставщик, заказчик или ошибки. Старые темы без поля = supplier */
   party?: SupportParty
+  /** Корневые темы в разделе с подразделами */
+  subsection_id?: string | null
   /** Archived topics hidden from «Все»; visible only in Архив for editor/admin */
   archived?: boolean
   /** Custom order among siblings (same parent_id). Lower = higher in list. */
@@ -275,6 +302,22 @@ export interface Department {
   label: string
   fileName: string
   listKey: 'questions' | 'templates'
+}
+
+export interface DepartmentSubsection {
+  id: string
+  departmentId: string
+  label: string
+  sortOrder: number
+}
+
+export interface AdminDepartment {
+  id: string
+  label: string
+  listKey: 'questions' | 'templates'
+  sortOrder: number
+  systemLocked?: boolean
+  subsections?: DepartmentSubsection[]
 }
 
 export const DEPARTMENTS: Department[] = [
@@ -310,24 +353,12 @@ export const DEPARTMENTS: Department[] = [
   },
 ]
 
-export const WORK_DEPARTMENTS = DEPARTMENTS.filter(
-  (d): d is Department & { id: WorkDepartmentId } => d.id !== 'templates',
-)
-
-export const WORK_DEPARTMENT_IDS: WorkDepartmentId[] = [
-  'support',
-  'lawyers',
-  'managers',
-  'spp',
-]
+export const WORK_DEPARTMENTS = workDepartmentsFrom(DEPARTMENTS)
 
 export function isWorkDepartmentId(value: unknown): value is WorkDepartmentId {
-  return (
-    value === 'support' ||
-    value === 'lawyers' ||
-    value === 'managers' ||
-    value === 'spp'
-  )
+  if (typeof value !== 'string') return false
+  if (value === TEMPLATES_DEPARTMENT_ID || value === LOST_DEPARTMENT_ID) return false
+  return /^[a-z][a-z0-9_-]{0,47}$/.test(value)
 }
 
 export function normalizeWorkDepartmentId(value: unknown): WorkDepartmentId {

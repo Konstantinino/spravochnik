@@ -1,6 +1,12 @@
 import path from 'node:path'
 import os from 'node:os'
 import { createRequire } from 'node:module'
+import {
+  getActiveDepartments,
+  departmentById as lookupDepartmentById,
+  LOST_DEPARTMENT_ID as LOST_ID,
+  TEMPLATES_DEPARTMENT_ID as TEMPLATES_ID,
+} from './departments-store.js'
 
 const require = createRequire(import.meta.url)
 
@@ -22,14 +28,12 @@ export const APP_UPDATE_FILE = 'app-update.json'
 export const YANDEX_FOLDER = 'REST INFO'
 export const BOOTSTRAP_ADMIN_EMAIL = 'kostya.alone18@yandex.ru'
 
-export type DepartmentId =
-  | 'support'
-  | 'lawyers'
-  | 'managers'
-  | 'spp'
-  | 'templates'
+export type DepartmentId = string
 
-export type WorkDepartmentId = Exclude<DepartmentId, 'templates'>
+export type WorkDepartmentId = string
+
+export const LOST_DEPARTMENT_ID = 'lost'
+export const TEMPLATES_DEPARTMENT_ID = 'templates'
 
 export type UserRole = 'user' | 'editor' | 'admin' | 'owner'
 
@@ -58,6 +62,7 @@ export function canEditDepartment(
   targetDepartmentId: DepartmentId,
 ): boolean {
   if (!role || role === 'user') return false
+  if (targetDepartmentId === LOST_ID) return false
   if (isStaffRole(role)) return true
   return normalizeWorkDepartmentId(userDepartmentId) === normalizeWorkDepartmentId(targetDepartmentId)
 }
@@ -73,25 +78,27 @@ export interface Department {
   listKey: 'questions' | 'templates'
 }
 
-export const DEPARTMENTS: Department[] = [
-  { id: 'support', label: 'Тех. поддержка', fileName: 'guide.json', listKey: 'questions' },
-  { id: 'lawyers', label: 'Юристы', fileName: 'guide_lawyers.json', listKey: 'questions' },
-  { id: 'managers', label: 'Менеджеры', fileName: 'guide_managers.json', listKey: 'questions' },
-  { id: 'spp', label: 'СПП', fileName: 'guide_spp.json', listKey: 'questions' },
-  { id: 'templates', label: 'Шаблоны', fileName: 'templates.json', listKey: 'templates' },
-]
+export function getDepartments(): Department[] {
+  return getActiveDepartments()
+}
 
-export const WORK_DEPARTMENTS: Department[] = DEPARTMENTS.filter(
-  (d): d is Department & { id: WorkDepartmentId } => d.id !== 'templates',
-)
+/** @deprecated use getDepartments() — kept for legacy imports */
+export const DEPARTMENTS: Department[] = getActiveDepartments()
+
+export function getWorkDepartments(): Department[] {
+  return getActiveDepartments().filter(
+    (d) => d.id !== TEMPLATES_ID && d.id !== LOST_ID && d.listKey === 'questions',
+  )
+}
+
+export const WORK_DEPARTMENTS: Department[] = getWorkDepartments()
+
+const WORK_DEPT_ID_PATTERN = /^[a-z][a-z0-9_-]{0,47}$/
 
 export function isWorkDepartmentId(value: unknown): value is WorkDepartmentId {
-  return (
-    value === 'support' ||
-    value === 'lawyers' ||
-    value === 'managers' ||
-    value === 'spp'
-  )
+  if (typeof value !== 'string') return false
+  if (value === TEMPLATES_ID || value === LOST_ID) return false
+  return WORK_DEPT_ID_PATTERN.test(value)
 }
 
 export function normalizeWorkDepartmentId(value: unknown): WorkDepartmentId {
@@ -183,7 +190,5 @@ export function getSeedDataDir(): string {
 }
 
 export function departmentById(id: DepartmentId): Department {
-  const dept = DEPARTMENTS.find((d) => d.id === id)
-  if (!dept) throw new Error(`Неизвестный отдел: ${id}`)
-  return dept
+  return lookupDepartmentById(id)
 }

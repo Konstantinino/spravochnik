@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type {
+  AdminDepartment,
+  Department,
+  DepartmentSubsection,
   LatestReleaseInfo,
   PublicUser,
   SessionLogEntry,
@@ -17,6 +20,7 @@ import {
   normalizeWorkDepartmentId,
   isOwnerRole,
   isStaffRole,
+  workDepartmentsFrom,
 } from '../types'
 import {
   DEFAULT_SUPPORT_PHONES,
@@ -50,6 +54,20 @@ function levelLabel(level: SessionLogLevel): string {
   if (level === 'error') return 'Ошибка'
   if (level === 'warn') return 'Предупр.'
   return 'Инфо'
+}
+
+function formatDepartmentApiError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e)
+  const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
+  if (/^not found$/i.test(cleaned.trim())) {
+    return (
+      'Сервер не поддерживает добавление разделов (404 Not found). ' +
+      'На API должна быть версия с /admin/departments и миграцией 009. ' +
+      'Для разработки: http://127.0.0.1:3000 и перезапуск npm run dev:local в server/. ' +
+      'Если в входе указан боевой URL — задеплойте обновлённый сервер.'
+    )
+  }
+  return cleaned || 'Не удалось выполнить операцию с разделами'
 }
 
 function formatBytes(bytes: number): string {
@@ -143,6 +161,18 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   const [pullingFull, setPullingFull] = useState(false)
   const [supportPhones, setSupportPhones] = useState<SupportPhoneLine[]>(DEFAULT_SUPPORT_PHONES)
   const [savingSupportPhones, setSavingSupportPhones] = useState(false)
+  const [adminDepartments, setAdminDepartments] = useState<AdminDepartment[]>([])
+  const [workDepts, setWorkDepts] = useState<Department[]>(WORK_DEPARTMENTS)
+  const [newDeptId, setNewDeptId] = useState('')
+  const [newDeptLabel, setNewDeptLabel] = useState('')
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null)
+  const [editingDeptLabel, setEditingDeptLabel] = useState('')
+  const [savingDept, setSavingDept] = useState(false)
+  const [addingSubsectionDeptId, setAddingSubsectionDeptId] = useState<string | null>(null)
+  const [newSubsectionLabel, setNewSubsectionLabel] = useState('')
+  const [editingSubsectionId, setEditingSubsectionId] = useState<string | null>(null)
+  const [editingSubsectionLabel, setEditingSubsectionLabel] = useState('')
+  const [savingSubsection, setSavingSubsection] = useState(false)
   const sessionLogRef = useRef<HTMLDivElement>(null)
 
   const actorIsOwner = userIsOwner(currentUser)
@@ -154,7 +184,199 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   }
 
   function deptLabel(id: WorkDepartmentId): string {
-    return WORK_DEPARTMENTS.find((d) => d.id === id)?.label ?? id
+    return workDepts.find((d) => d.id === id)?.label ?? id
+  }
+
+  function localAdminDepartmentsFromGuide(
+    rows: Awaited<ReturnType<typeof window.spravochnik.getDepartments>>,
+  ): AdminDepartment[] {
+    return rows
+      .filter((d) => d.id !== 'lost')
+      .map((d, index) => ({
+        id: d.id,
+        label: d.label,
+        listKey: d.listKey ?? 'questions',
+        sortOrder: (index + 1) * 10,
+        systemLocked: d.id === 'templates',
+      }))
+  }
+
+  async function reloadDepartmentsConfig() {
+    if (!actorIsStaff) return
+    let localGuideDepts: Awaited<ReturnType<typeof window.spravochnik.getDepartments>> = []
+    try {
+      localGuideDepts = await window.spravochnik.getDepartments()
+      setWorkDepts(
+        workDepartmentsFrom(
+          localGuideDepts.map((d) => ({
+            id: d.id,
+            label: d.label,
+            fileName: d.fileName,
+            listKey: d.listKey ?? 'questions',
+          })),
+        ),
+      )
+    } catch {
+      setWorkDepts(WORK_DEPARTMENTS)
+      localGuideDepts = WORK_DEPARTMENTS.map((d) => ({
+        id: d.id,
+        label: d.label,
+        fileName: d.fileName,
+        listKey: d.listKey,
+      }))
+    }
+
+    const localAdmin = localAdminDepartmentsFromGuide(localGuideDepts)
+    let localSubs: DepartmentSubsection[] = []
+    try {
+      localSubs = await window.spravochnik.getSubsections()
+    } catch {
+      localSubs = []
+    }
+    function attachSubsections(rows: AdminDepartment[]): AdminDepartment[] {
+      return rows.map((d) => ({
+        ...d,
+        subsections:
+          d.subsections && d.subsections.length > 0
+            ? d.subsections
+            : localSubs.filter((s) => s.departmentId === d.id),
+      }))
+    }
+    try {
+      const rows = await window.spravochnik.listAdminDepartments()
+      setAdminDepartments(attachSubsections(rows.length > 0 ? rows : localAdmin))
+    } catch {
+      setAdminDepartments(attachSubsections(localAdmin))
+    }
+  }
+
+  async function createSubsection(departmentId: string) {
+    const label = newSubsectionLabel.trim()
+    if (!label) {
+      setError('Введите название подраздела')
+      return
+    }
+    setSavingSubsection(true)
+    setError(null)
+    try {
+      await window.spravochnik.createAdminSubsection({ departmentId, label })
+      setNewSubsectionLabel('')
+      setAddingSubsectionDeptId(null)
+      setInfo('Подраздел добавлен')
+      await reloadDepartmentsConfig()
+    } catch (e) {
+      setError(formatDepartmentApiError(e))
+    } finally {
+      setSavingSubsection(false)
+    }
+  }
+
+  async function saveSubsectionLabel(id: string) {
+    const label = editingSubsectionLabel.trim()
+    if (!label) {
+      setError('Введите название подраздела')
+      return
+    }
+    setSavingSubsection(true)
+    setError(null)
+    try {
+      await window.spravochnik.updateAdminSubsection({ id, label })
+      setEditingSubsectionId(null)
+      setInfo('Подраздел сохранён')
+      await reloadDepartmentsConfig()
+    } catch (e) {
+      setError(formatDepartmentApiError(e))
+    } finally {
+      setSavingSubsection(false)
+    }
+  }
+
+  async function removeSubsection(id: string, label: string) {
+    if (
+      !window.confirm(
+        `Удалить подраздел «${label}»? Темы в нём останутся, но при следующем сохранении потребуется подраздел.`,
+      )
+    ) {
+      return
+    }
+    setSavingSubsection(true)
+    setError(null)
+    try {
+      await window.spravochnik.deleteAdminSubsection(id)
+      setInfo('Подраздел удалён')
+      await reloadDepartmentsConfig()
+    } catch (e) {
+      setError(formatDepartmentApiError(e))
+    } finally {
+      setSavingSubsection(false)
+    }
+  }
+
+  async function createDepartment() {
+    const id = newDeptId.trim().toLowerCase()
+    const label = newDeptLabel.trim()
+    if (!id || !label) {
+      setError('Укажите идентификатор и название раздела')
+      return
+    }
+    setSavingDept(true)
+    setError(null)
+    try {
+      await window.spravochnik.createAdminDepartment({ id, label })
+      setNewDeptId('')
+      setNewDeptLabel('')
+      setInfo('Раздел добавлен')
+      await reloadDepartmentsConfig()
+    } catch (e) {
+      setError(formatDepartmentApiError(e))
+    } finally {
+      setSavingDept(false)
+    }
+  }
+
+  async function saveDepartmentLabel(id: string) {
+    const label = editingDeptLabel.trim()
+    if (!label) {
+      setError('Укажите название раздела')
+      return
+    }
+    setSavingDept(true)
+    setError(null)
+    try {
+      await window.spravochnik.updateAdminDepartment({ id, label })
+      setEditingDeptId(null)
+      setInfo('Раздел сохранён')
+      await reloadDepartmentsConfig()
+    } catch (e) {
+      setError(formatDepartmentApiError(e))
+    } finally {
+      setSavingDept(false)
+    }
+  }
+
+  async function removeDepartment(id: string, label: string) {
+    if (
+      !window.confirm(
+        `Удалить раздел «${label}»?\nТемы из него попадут в «Потерялись».`,
+      )
+    ) {
+      return
+    }
+    setSavingDept(true)
+    setError(null)
+    try {
+      const result = await window.spravochnik.deleteAdminDepartment(id)
+      setInfo(
+        result.movedTopics > 0
+          ? `Раздел удалён. Тем в «Потерялись»: ${result.movedTopics}`
+          : 'Раздел удалён',
+      )
+      await reloadDepartmentsConfig()
+    } catch (e) {
+      setError(formatDepartmentApiError(e))
+    } finally {
+      setSavingDept(false)
+    }
   }
 
   async function reload() {
@@ -171,6 +393,7 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
     if (actorIsStaff) {
       const phones = await window.spravochnik.getSupportPhones()
       setSupportPhones(normalizeSupportPhones(phones))
+      await reloadDepartmentsConfig()
     }
     if (actorIsOwner) {
       setStorageLoading(true)
@@ -723,7 +946,7 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
               onChange={(e) => setNewDepartmentId(e.target.value as WorkDepartmentId)}
               aria-label="Отдел"
             >
-              {WORK_DEPARTMENTS.map((d) => (
+              {workDepts.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label}
                 </option>
@@ -768,6 +991,226 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
 
         {actorIsStaff && (
           <section className="settings-section">
+            <h2>Разделы справочника</h2>
+            <p className="muted">
+              Добавление, переименование и удаление разделов и подразделов. При удалении раздела с
+              темами они попадают в «Потерялись» (виден в шапке только если там есть темы). Раздел
+              «Потерялись» в настройках не отображается. Если у раздела есть подразделы, новые темы
+              можно создавать только внутри подраздела.
+            </p>
+            <ul className="departments-settings">
+              {adminDepartments.length === 0 ? (
+                <li className="muted departments-settings__empty">
+                  Не удалось загрузить список. Проверьте связь с сервером или выполните «Полная
+                  синхронизация».
+                </li>
+              ) : null}
+              {adminDepartments.map((dept) => {
+                const locked = dept.id === 'templates'
+                const editing = editingDeptId === dept.id
+                const subs = dept.subsections ?? []
+                return (
+                  <Fragment key={dept.id}>
+                    <li className="departments-settings__row">
+                      <span className="departments-settings__id muted">{dept.id}</span>
+                      {editing ? (
+                        <input
+                          type="text"
+                          value={editingDeptLabel}
+                          onChange={(e) => setEditingDeptLabel(e.target.value)}
+                          aria-label="Название раздела"
+                        />
+                      ) : (
+                        <span className="departments-settings__label">{dept.label}</span>
+                      )}
+                      <div className="departments-settings__actions">
+                        {!locked && !editing ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={savingSubsection}
+                              onClick={() => {
+                                setAddingSubsectionDeptId(dept.id)
+                                setNewSubsectionLabel('')
+                                setEditingSubsectionId(null)
+                              }}
+                            >
+                              Добавить
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              onClick={() => {
+                                setEditingDeptId(dept.id)
+                                setEditingDeptLabel(dept.label)
+                                setAddingSubsectionDeptId(null)
+                              }}
+                            >
+                              Изменить
+                            </button>
+                          </>
+                        ) : null}
+                        {!locked && editing ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              disabled={savingDept}
+                              onClick={() => void saveDepartmentLabel(dept.id)}
+                            >
+                              Сохранить
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              onClick={() => setEditingDeptId(null)}
+                            >
+                              Отмена
+                            </button>
+                          </>
+                        ) : null}
+                        {!locked ? (
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            disabled={savingDept}
+                            onClick={() => void removeDepartment(dept.id, dept.label)}
+                          >
+                            Удалить
+                          </button>
+                        ) : (
+                          <span className="muted">Системный</span>
+                        )}
+                      </div>
+                    </li>
+                    {subs.map((sub) => {
+                      const subEditing = editingSubsectionId === sub.id
+                      return (
+                        <li
+                          key={sub.id}
+                          className="departments-settings__row departments-settings__row--subsection"
+                        >
+                          <span className="departments-settings__id muted" aria-hidden="true" />
+                          {subEditing ? (
+                            <input
+                              type="text"
+                              value={editingSubsectionLabel}
+                              onChange={(e) => setEditingSubsectionLabel(e.target.value)}
+                              aria-label="Название подраздела"
+                            />
+                          ) : (
+                            <span className="departments-settings__label">{sub.label}</span>
+                          )}
+                          <div className="departments-settings__actions">
+                            {!subEditing ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                onClick={() => {
+                                  setEditingSubsectionId(sub.id)
+                                  setEditingSubsectionLabel(sub.label)
+                                  setAddingSubsectionDeptId(null)
+                                }}
+                              >
+                                Изменить
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={savingSubsection}
+                                  onClick={() => void saveSubsectionLabel(sub.id)}
+                                >
+                                  Сохранить
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  onClick={() => setEditingSubsectionId(null)}
+                                >
+                                  Отмена
+                                </button>
+                              </>
+                            )}
+                            {!subEditing ? (
+                              <button
+                                type="button"
+                                className="btn btn-danger"
+                                disabled={savingSubsection}
+                                onClick={() => void removeSubsection(sub.id, sub.label)}
+                              >
+                                Удалить
+                              </button>
+                            ) : null}
+                          </div>
+                        </li>
+                      )
+                    })}
+                    {addingSubsectionDeptId === dept.id ? (
+                      <li className="departments-settings__row departments-settings__row--subsection">
+                        <span className="departments-settings__id muted" aria-hidden="true" />
+                        <input
+                          type="text"
+                          value={newSubsectionLabel}
+                          onChange={(e) => setNewSubsectionLabel(e.target.value)}
+                          placeholder="Название подраздела"
+                          aria-label="Название нового подраздела"
+                        />
+                        <div className="departments-settings__actions">
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={savingSubsection}
+                            onClick={() => void createSubsection(dept.id)}
+                          >
+                            Сохранить
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => {
+                              setAddingSubsectionDeptId(null)
+                              setNewSubsectionLabel('')
+                            }}
+                          >
+                            Отмена
+                          </button>
+                        </div>
+                      </li>
+                    ) : null}
+                  </Fragment>
+                )
+              })}
+            </ul>
+            <div className="departments-settings__add whitelist-add">
+              <input
+                value={newDeptId}
+                onChange={(e) => setNewDeptId(e.target.value)}
+                placeholder="id (латиница)"
+                aria-label="Идентификатор раздела"
+              />
+              <input
+                value={newDeptLabel}
+                onChange={(e) => setNewDeptLabel(e.target.value)}
+                placeholder="Название"
+                aria-label="Название раздела"
+              />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={savingDept}
+                onClick={() => void createDepartment()}
+              >
+                Добавить раздел
+              </button>
+            </div>
+          </section>
+        )}
+
+        {actorIsStaff && (
+          <section className="settings-section">
             <h2>Телефоны техподдержки</h2>
             <p className="muted">
               Полоска над списком тем в отделе «Техподдержка». Введите только цифры номера — формат
@@ -798,11 +1241,6 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
                       inputMode="numeric"
                       placeholder="83472468072"
                     />
-                    {row.tel ? (
-                      <span className="support-phones-settings__preview">
-                        {formatSupportPhoneDisplay(row.tel)}
-                      </span>
-                    ) : null}
                   </label>
                   <button
                     type="button"
@@ -1084,7 +1522,7 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
                   value={editDepartmentId}
                   onChange={(e) => setEditDepartmentId(e.target.value as WorkDepartmentId)}
                 >
-                  {WORK_DEPARTMENTS.map((d) => (
+                  {workDepts.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.label}
                     </option>

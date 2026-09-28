@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { query, getGlobalVersion } from '../db/pool.js'
-import { DEPARTMENTS, rowToGuideItem, type TopicRow } from '../lib/topics.js'
+import { listDepartments } from '../lib/departments.js'
+import { listSubsections, subsectionToClient } from '../lib/subsections.js'
+import { rowToGuideItem, type TopicRow } from '../lib/topics.js'
 import { authMiddleware, optionalAuth, type AuthRequest } from '../middleware/auth.js'
 
 export const syncRouter = Router()
@@ -28,12 +30,15 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
         `SELECT relative_path, sha256, size_bytes, updated_at FROM media_files WHERE deleted_at IS NULL`,
       )
 
+      const departmentRows = await listDepartments()
+      const subsectionRows = await listSubsections()
       const topicsByDept: Record<string, Record<string, unknown>[]> = {}
-      for (const dept of Object.keys(DEPARTMENTS)) {
-        topicsByDept[dept] = []
+      for (const dept of departmentRows) {
+        topicsByDept[dept.id] = []
       }
       for (const row of topicsResult.rows) {
-        topicsByDept[row.department_id]?.push(rowToGuideItem(row))
+        if (!topicsByDept[row.department_id]) topicsByDept[row.department_id] = []
+        topicsByDept[row.department_id].push(rowToGuideItem(row))
       }
 
       let users: unknown[] = []
@@ -69,6 +74,14 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
         full: true,
         globalVersion,
         syncedAt: new Date().toISOString(),
+        departments: departmentRows.map((d) => ({
+          id: d.id,
+          label: d.label,
+          listKey: d.listKey,
+          sortOrder: d.sortOrder,
+          systemLocked: d.systemLocked,
+        })),
+        subsections: subsectionRows.map(subsectionToClient),
         topicsByDept,
         deletedTopics: deletedResult.rows,
         media: mediaResult.rows,
@@ -103,21 +116,17 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
       [sinceDate.toISOString()],
     )
 
+    const departmentRows = await listDepartments()
+    const subsectionRows = await listSubsections()
     const topicsByDept: Record<string, Record<string, unknown>[]> = {}
-    const deletedByDept: Record<string, Record<string, unknown>[]> = {}
-    for (const dept of Object.keys(DEPARTMENTS)) {
-      topicsByDept[dept] = []
-      deletedByDept[dept] = []
+    for (const dept of departmentRows) {
+      topicsByDept[dept.id] = []
     }
 
     for (const row of changedTopics.rows) {
-      if (row.deleted_at) {
-        deletedByDept[row.department_id]?.push({
-          id: row.id,
-          deleted_at: row.deleted_at,
-        })
-      } else {
-        topicsByDept[row.department_id]?.push(rowToGuideItem(row))
+      if (!row.deleted_at) {
+        if (!topicsByDept[row.department_id]) topicsByDept[row.department_id] = []
+        topicsByDept[row.department_id].push(rowToGuideItem(row))
       }
     }
 
@@ -163,6 +172,14 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
       full: false,
       globalVersion,
       syncedAt: new Date().toISOString(),
+      departments: departmentRows.map((d) => ({
+        id: d.id,
+        label: d.label,
+        listKey: d.listKey,
+        sortOrder: d.sortOrder,
+        systemLocked: d.systemLocked,
+      })),
+      subsections: subsectionRows.map(subsectionToClient),
       topicsByDept,
       deletedTopics: deletedTopics.rows,
       media: changedMedia.rows,

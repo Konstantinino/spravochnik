@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DepartmentId, PublicUser, SyncStatus, UpdateInfo, UserRole } from '../types'
+import type { Department, DepartmentId, PublicUser, SyncStatus, UpdateInfo, UserRole } from '../types'
 import {
   ROLE_LABELS,
   canSwitchDepartment,
-  departmentsForUser,
   isStaffRole,
 } from '../types'
 import { SupportPhonesBar } from './SupportPhonesBar'
@@ -11,6 +10,7 @@ import { SUPPORT_PHONES_PLACEMENT } from '../lib/supportPhonesUi'
 
 interface HeaderProps {
   departmentId: DepartmentId
+  departments: Department[]
   onDepartmentChange: (id: DepartmentId) => void
   onOpenSettings: () => void
   user: PublicUser
@@ -24,6 +24,7 @@ interface HeaderProps {
 
 export function Header({
   departmentId,
+  departments,
   onDepartmentChange,
   onOpenSettings,
   user,
@@ -125,7 +126,7 @@ export function Header({
             aria-label="Отдел"
             disabled={interactionLocked}
           >
-            {departmentsForUser(user.role).map((d) => (
+            {departments.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.label}
               </option>
@@ -133,7 +134,7 @@ export function Header({
           </select>
         ) : (
           <span className="app-header__dept-label" aria-label="Отдел">
-            {departmentsForUser(user.role).find((d) => d.id === departmentId)?.label ?? 'Отдел'}
+            {departments.find((d) => d.id === departmentId)?.label ?? 'Отдел'}
           </span>
         )}
       </label>

@@ -29,7 +29,9 @@ import {
 } from './lib/prefs'
 import type {
   ConflictResolution,
+  Department,
   DepartmentId,
+  DepartmentSubsection,
   GuideFile,
   GuideItem,
   ImageDisplayMap,
@@ -41,11 +43,14 @@ import type {
 import {
   DEPARTMENTS,
   DEPT_VIEW_FILTERS,
+  LOST_DEPARTMENT_ID,
   SUPPORT_VIEW_FILTERS,
+  departmentsForUser,
   isSupportParty,
   normalizeWorkDepartmentId,
   isStaffRole,
   canEditDepartment,
+  workDepartmentsFrom,
 } from './types'
 
 const defaultSync: SyncStatus = {
@@ -153,6 +158,36 @@ export default function App() {
     topicId: number
     seq: number
   } | null>(null)
+  const [departments, setDepartments] = useState<Department[]>(DEPARTMENTS)
+  const [subsections, setSubsections] = useState<DepartmentSubsection[]>([])
+  const [lostTopicsCount, setLostTopicsCount] = useState(0)
+
+  async function refreshDepartmentsAndLostCount() {
+    try {
+      const rows = await window.spravochnik.getDepartments()
+      setDepartments(
+        rows.map((d) => ({
+          id: d.id,
+          label: d.label,
+          fileName: d.fileName,
+          listKey: d.listKey ?? 'questions',
+        })),
+      )
+    } catch {
+      /* keep previous */
+    }
+    try {
+      const lostGuide = await window.spravochnik.loadGuide(LOST_DEPARTMENT_ID)
+      setLostTopicsCount(getItems(lostGuide).length)
+    } catch {
+      setLostTopicsCount(0)
+    }
+    try {
+      setSubsections(await window.spravochnik.getSubsections())
+    } catch {
+      setSubsections([])
+    }
+  }
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -170,12 +205,14 @@ export default function App() {
         setConflictOpen(true)
       }
     })
+    void refreshDepartmentsAndLostCount()
     return window.spravochnik.onSyncStatus((status) => {
       setSyncStatus(status)
       if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
         setConflictOpen(true)
       }
       if (status.code === 'up_to_date' || status.code === 'pending') {
+        void refreshDepartmentsAndLostCount()
         void window.spravochnik.getCurrentUser().then((u) => {
           if (!u) return
           // Avoid new object identity on every sync — that re-triggers load() and clears selection.
@@ -196,6 +233,12 @@ export default function App() {
       }
     })
   }, [])
+
+  useEffect(() => {
+    if (lostTopicsCount === 0 && departmentId === LOST_DEPARTMENT_ID) {
+      void handleDepartmentChange('support')
+    }
+  }, [lostTopicsCount, departmentId])
 
   async function handleDepartmentChange(id: DepartmentId) {
     if (user && !isStaffRole(user.role) && id === 'templates') return
@@ -612,7 +655,7 @@ export default function App() {
     setReorderPreparing(true)
     try {
       const result = await window.spravochnik.prepareTopicReorder(departmentId)
-      const listKey = DEPARTMENTS.find((d) => d.id === departmentId)?.listKey ?? 'questions'
+      const listKey = departments.find((d) => d.id === departmentId)?.listKey ?? 'questions'
       setGuide(result.guide)
 
       if (!result.ok) {
@@ -649,7 +692,7 @@ export default function App() {
     if (changes.length === 0) return
 
     const merged = mergeSortIndexChanges(items, changes)
-    const listKey = DEPARTMENTS.find((d) => d.id === departmentId)?.listKey ?? 'questions'
+    const listKey = departments.find((d) => d.id === departmentId)?.listKey ?? 'questions'
     setGuide((prev) => (prev ? { ...prev, [listKey]: merged } : prev))
   }
 
@@ -674,6 +717,7 @@ export default function App() {
     parent_id: number | null
     client_topic_id?: number | null
     party?: SupportParty
+    subsection_id?: string | null
     id?: number
     draftId?: string
   }) {
@@ -691,6 +735,9 @@ export default function App() {
           party: payload.party ?? existing.party,
           ...(payload.client_topic_id !== undefined
             ? { client_topic_id: payload.client_topic_id }
+            : {}),
+          ...(payload.subsection_id !== undefined
+            ? { subsection_id: payload.subsection_id }
             : {}),
         },
       })
@@ -712,6 +759,7 @@ export default function App() {
         client_topic_id: payload.client_topic_id,
         has_children: false,
         party: payload.party,
+        ...(payload.subsection_id ? { subsection_id: payload.subsection_id } : {}),
         photos: [],
         documents: [],
       },
@@ -901,7 +949,12 @@ export default function App() {
   // Block UI only while uploading local changes — startup/background pull stays interactive
   const syncBlocking = pushing || busyLeft != null
 
-  const deptLabel = DEPARTMENTS.find((d) => d.id === departmentId)?.label ?? ''
+  const deptLabel = departments.find((d) => d.id === departmentId)?.label ?? ''
+  const headerDepartments = departmentsForUser(user.role, departments, {
+    showLost: lostTopicsCount > 0,
+  })
+  const topicEditorDepartments = workDepartmentsFrom(departments)
+  const currentSubsections = subsections.filter((s) => s.departmentId === departmentId)
 
   const editorDefaultParty: SupportParty = (() => {
     if (editorParentId != null) {
@@ -918,6 +971,7 @@ export default function App() {
     >
       <Header
         departmentId={departmentId}
+        departments={headerDepartments}
         onDepartmentChange={handleDepartmentChange}
         onOpenSettings={() => setView('settings')}
         user={user}
@@ -963,6 +1017,7 @@ export default function App() {
                 selectedId={selectedId}
                 onSelect={selectTopicFromSidebar}
                 searchFilter={searchFilter}
+                subsections={currentSubsections}
                 groupRootsByParty={departmentId === 'support' && listFilter === 'all'}
                 rootReorderSameParty={rootReorderRequiresSameParty(departmentId, listFilter)}
                 reorderMode={reorderMode}
@@ -1020,6 +1075,8 @@ export default function App() {
         open={editorOpen}
         mode={editorMode}
         departmentId={departmentId}
+        departments={topicEditorDepartments}
+        subsections={subsections}
         parentId={editorParentId}
         items={items}
         defaultParty={editorDefaultParty}

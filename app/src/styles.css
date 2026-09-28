@@ -108,11 +108,11 @@ option {
 .support-phones-bar--header {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: center;
   gap: 1px;
   flex-shrink: 0;
-  margin: 0 4px 0 10px;
+  margin: 0 8px 0 12px;
   padding: 0;
   max-width: min(320px, 36vw);
   font-size: 0.68rem;
@@ -133,8 +133,12 @@ option {
   margin-right: 0;
 }
 
-.app-header:has(.support-phones-bar--header) .app-header__dept {
+.app-header:has(.support-phones-bar--header) .support-phones-bar--header {
   margin-left: auto;
+}
+
+.app-header:has(.support-phones-bar--header) .app-header__dept {
+  margin-left: 0;
 }
 
 .support-phones-bar__item {
@@ -172,6 +176,7 @@ option {
   width: 100%;
   min-width: 0;
   gap: 0.45em;
+  justify-content: flex-end;
 }
 
 .support-phones-bar--header .support-phones-bar__label {
@@ -624,6 +629,35 @@ option {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.topic-subsection-section {
+  list-style: none;
+}
+
+.topic-subsection-section + .topic-subsection-section .topic-subsection-section__heading {
+  margin-top: 6px;
+}
+
+.topic-subsection-section__heading {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 2px;
+  padding: 5px 12px 5px 28px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(28, 36, 48, 0.52);
+  background: rgba(28, 36, 48, 0.045);
+  user-select: none;
+  pointer-events: none;
+}
+
+.topic-subsection-section__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 20px;
 }
 
 /* Guide line for nested subtopics */
@@ -2358,6 +2392,49 @@ mark.nbsp-entity-mark {
   background: #fff;
 }
 
+.departments-settings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.departments-settings__row {
+  display: grid;
+  grid-template-columns: minmax(80px, 120px) 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.departments-settings__id {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+
+.departments-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.departments-settings__add input {
+  min-width: 120px;
+}
+
+.departments-settings__row--subsection {
+  padding-left: 28px;
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.departments-settings__row--subsection .departments-settings__id {
+  visibility: hidden;
+}
+
 .whitelist__dept {
   font-size: 0.9em;
   white-space: nowrap;
@@ -2424,13 +2501,6 @@ mark.nbsp-entity-mark {
   font-size: 0.78rem;
   color: var(--muted);
   font-weight: 600;
-}
-
-.support-phones-settings__preview {
-  font-size: 0.82rem;
-  color: var(--header-blue);
-  font-weight: 600;
-  letter-spacing: 0.04em;
 }
 
 .support-phones-settings__remove {

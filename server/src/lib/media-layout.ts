@@ -11,11 +11,14 @@ export const MEDIA_DEPARTMENT_IDS = [
   'templates',
 ] as const
 
-export type MediaDepartmentId = (typeof MEDIA_DEPARTMENT_IDS)[number]
-export const DEFAULT_MEDIA_DEPARTMENT: MediaDepartmentId = 'support'
+export type MediaDepartmentId = string
+
+export const DEFAULT_MEDIA_DEPARTMENT = 'support'
+
+const MEDIA_DEPT_SLUG_RE = /^[a-z][a-z0-9_-]{0,47}$/
 
 export function isMediaDepartmentId(value: unknown): value is MediaDepartmentId {
-  return typeof value === 'string' && (MEDIA_DEPARTMENT_IDS as readonly string[]).includes(value)
+  return typeof value === 'string' && MEDIA_DEPT_SLUG_RE.test(value)
 }
 
 export function normalizeMediaDepartmentId(value: unknown): MediaDepartmentId {
@@ -37,7 +40,7 @@ export function canonicalizeMediaRelativePath(
   if (!rest || rest.startsWith('_draft/')) return n
   const parts = rest.split('/')
   const first = parts[0] ?? ''
-  if (isMediaDepartmentId(first)) return n
+  if (MEDIA_DEPT_SLUG_RE.test(first) && first !== '_draft') return n
   if (/^\d+$/.test(first) && parts.length >= 2) {
     return `media/${dept}/${rest}`
   }
@@ -59,7 +62,7 @@ export function mediaRelativePathCandidates(
   }
   add(n)
   add(canonical)
-  add(canonical.replace(/^media\/(?:support|lawyers|managers|spp|templates)\//, 'media/'))
+  add(canonical.replace(/^media\/[a-z][a-z0-9_-]{0,47}\//, 'media/'))
   return out
 }
 
@@ -70,16 +73,16 @@ export function parseMediaRelativePath(relativePath: string): {
 } {
   const n = posixMediaRel(relativePath)
   const nested = n.match(
-    /^media\/(?:(support|lawyers|managers|spp|templates)\/)?(\d+)\/(images|files)\//,
+    /^media\/(?:([a-z][a-z0-9_-]{0,47})\/)?(\d+)\/(images|files)\//,
   )
   if (nested) {
     return {
-      departmentId: isMediaDepartmentId(nested[1]) ? nested[1] : null,
+      departmentId: nested[1] && isMediaDepartmentId(nested[1]) ? nested[1] : null,
       topicId: parseInt(nested[2], 10),
       kind: nested[3] === 'images' ? 'photos' : 'files',
     }
   }
-  const deptPrefix = n.match(/^media\/(support|lawyers|managers|spp|templates)\//)
+  const deptPrefix = n.match(/^media\/([a-z][a-z0-9_-]{0,47})\//)
   const isPhoto = /\.(png|jpe?g|gif|webp|bmp)$/i.test(n)
   return {
     departmentId: deptPrefix && isMediaDepartmentId(deptPrefix[1]) ? deptPrefix[1] : null,

@@ -6,6 +6,8 @@ import type {
 
   GuideItem,
 
+  AdminDepartment,
+
   DepartmentId,
 
   WorkDepartmentId,
@@ -36,7 +38,9 @@ import type {
 
 export interface SpravochnikApi {
 
-  getDepartments: () => Promise<{ id: DepartmentId; label: string; fileName: string }[]>
+  getDepartments: () => Promise<
+    { id: DepartmentId; label: string; fileName: string; listKey: 'questions' | 'templates' }[]
+  >
 
   loadGuide: (departmentId: DepartmentId) => Promise<GuideFile>
 
@@ -227,7 +231,29 @@ export interface SpravochnikApi {
 
   getStorageStats: () => Promise<StorageStats>
 
+  listAdminDepartments: () => Promise<AdminDepartment[]>
 
+  createAdminDepartment: (payload: { id: string; label: string }) => Promise<AdminDepartment>
+
+  updateAdminDepartment: (payload: { id: string; label: string }) => Promise<AdminDepartment>
+
+  deleteAdminDepartment: (id: string) => Promise<{ movedTopics: number }>
+
+  getSubsections: () => Promise<
+    Array<{ id: string; departmentId: string; label: string; sortOrder: number }>
+  >
+
+  createAdminSubsection: (payload: {
+    departmentId: string
+    label: string
+  }) => Promise<{ id: string; departmentId: string; label: string; sortOrder: number }>
+
+  updateAdminSubsection: (payload: {
+    id: string
+    label: string
+  }) => Promise<{ id: string; departmentId: string; label: string; sortOrder: number }>
+
+  deleteAdminSubsection: (id: string) => Promise<{ ok: boolean }>
 
   setServerUrl: (url: string) => Promise<{ serverUrl: string }>
 

@@ -57,7 +57,9 @@ graphify update .
 |---|---|
 | `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment`, `updates:install`, `app:focus-window`, валидация URL сервера |
 | `server-api.ts` | HTTP-клиент к REST API; `validateServerUrl()`; заголовок **`X-Rest-Info-Client-Version`** |
-| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа, reconcile create, `ensureRequestedPartyPersisted`, **`ensureRequestedClientLinkPersisted`**, `mergeTopicAfterPush`, ответ **426** → «Нужно обновить приложение» |
+| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа, reconcile create, `ensureRequestedPartyPersisted`, **`ensureRequestedClientLinkPersisted`**, `mergeTopicAfterPush`, **`applySubsectionsFromSync`**, ответ **426** → «Нужно обновить приложение» |
+| `departments-store.ts` | локальный `departments.json`, merge из sync/admin |
+| `subsections-store.ts` | локальный `subsections.json`, merge из sync/admin |
 | `session-log.ts` | журнал сессии (ring buffer), IPC для настроек |
 | `guide-data.ts` | reconcile `has_children` в локальном JSON |
 | `media-layout.ts` | пути `media/{отдел}/{id}/images|files`, миграция legacy → `support/` |
@@ -73,10 +75,13 @@ graphify update .
 |---|---|
 | `index.ts` | Express app, роуты |
 | `routes/auth.ts` | login, register, JWT |
-| `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`** (owner, разовый fix legacy-путей медиа) |
+| `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`**, **`GET/POST/PUT/DELETE /admin/departments`**, **подразделы** (`/admin/departments/:id/subsections`, `/admin/subsections/:id`) |
+| `lib/departments.ts` | CRUD разделов, `lost`, `sort_order`, `system_locked` |
+| `lib/subsections.ts` | CRUD подразделов, `resolveTopicSubsectionId` |
+| `lib/move-topics-to-lost.ts` | перенос тем в раздел `lost` при удалении раздела |
 | `routes/topics.ts` | CRUD тем, блокировки, topic-order; поле **`client_topic_id`** (admin → client) |
 | `middleware/min-client-version.ts` | запись на API только с актуальной версией клиента (см. `lib/app-version.ts`) |
-| `routes/sync.ts` | GET /sync/changes, GET /sync/status |
+| `routes/sync.ts` | GET /sync/changes, GET /sync/status; в changes: **`departments`**, **`subsections`** |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
 | `routes/updates.ts` | GET /app/update (legacy), GET /app/updates/*, **GET /app/support-phones** |
@@ -94,7 +99,7 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | Файл | Назначение |
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
-| `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
+| `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, **разделы и подразделы**, телефоны support (без дубля preview), передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
 | `Viewer.tsx`, `Header.tsx` | просмотр/правка; topbar: ← Назад, **«Клиент»/«Админ»** (связанные темы), телефоны support; профиль → «Обновить»; **«Сбросить»** |
 | `SupportPhonesBar.tsx`, `lib/supportPhones.ts`, `lib/supportPhonesUi.ts` | телефоны техподдержки: формат из цифр, копирование, placement header/strip |
 | `TopicMarkdownImage.tsx` | resolve shared image paths, retry download |
@@ -102,7 +107,8 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | `lib/restoreAppFocus.ts` | восстановление фокуса Electron после модалок / сброса |
 | `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | родитель: combobox, поиск по названию, фильтр party; «+»: весь отдел без архива |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
-| `TopicList.tsx` | дерево тем, секции party, **reorder**, ПКМ «редактировать тему/порядок» |
+| `TopicList.tsx` | дерево тем, секции **party** / **подразделов** (отступ), **reorder**, ПКМ «редактировать тему/порядок» |
+| `TopicEditorModal.tsx` | обязательный выбор **подраздела**, если у раздела есть подразделы (корневая тема) |
 | `lib/data.ts` | фильтры, `reorderSiblingTopics` + party scope, `getAncestorIds`, `getItemParty`, `topicDisplayLabel` |
 | `lib/markdown.ts` | media src, ссылки тем, вложения `files/` |
 | `lib/textInsert.ts` | вставка / `+query` / обёртка выделения ссылкой |
@@ -188,6 +194,9 @@ npm run dist:ascii
 12. **Первый вход в reorder:** локально проставляет `sort_index` по текущему порядку (без push до «Завершить»).
 13. **Минимальная версия клиента:** API отклоняет запись (426), если `X-Rest-Info-Client-Version` старее последнего `app_releases`; без записи в `app_releases` проверка выключена.
 14. **Admin↔client link:** пока production API без **008**, связь держится локально после push; для общей БД — деплой **008** + клиент с заголовком версии.
+15. **Динамические разделы:** миграция **009** + `/admin/departments`; без деплоя — 404 Not found при добавлении раздела. Раздел **`lost`** («Потерялись») в шапке только при наличии тем.
+16. **Подразделы:** миграция **010** + admin/sync API; корневая тема в разделе с подразделами требует `subsection_id`. Медиа: `normalizeMediaDepartmentId` принимает slug новых разделов `[a-z][a-z0-9_-]{0,47}`.
+17. **Телефоны в шапке:** блок справа (`supportPhonesUi.ts` → `header`); копирование форматированного номера.
 
 ## Правила для агента
 

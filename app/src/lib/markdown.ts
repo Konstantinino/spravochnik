@@ -1,7 +1,11 @@
 import type { DepartmentId } from '../types'
 
-const IMAGE_STORAGE_PATH_RE =
-  /^media\/(?:(support|lawyers|managers|spp|templates)\/)?(\d+)\/images\/([^/?#\s]+)$/i
+const MEDIA_DEPT_IN_PATH = '[a-z][a-z0-9_-]{0,47}'
+
+const IMAGE_STORAGE_PATH_RE = new RegExp(
+  `^media\\/(?:(?:${MEDIA_DEPT_IN_PATH})\\/)?(\\d+)\\/images\\/([^/?#\\s]+)$`,
+  'i',
+)
 
 function stripMediaRefPrefix(ref: string): string {
   return ref.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^spravochnik:\/\//, '')
@@ -9,9 +13,7 @@ function stripMediaRefPrefix(ref: string): string {
 
 export function topicIdFromImageStoragePath(ref: string): number | null {
   const cleaned = stripMediaRefPrefix(ref)
-  const m = cleaned.match(
-    /^media\/(?:support|lawyers|managers|spp|templates)\/(\d+)\/images\//i,
-  )
+  const m = cleaned.match(new RegExp(`^media\\/(?:${MEDIA_DEPT_IN_PATH})\\/(\\d+)\\/images\\/`, 'i'))
   if (!m) return null
   const id = Number(m[1])
   return Number.isFinite(id) ? id : null
@@ -24,10 +26,16 @@ export function canonicalImageStoragePath(
   departmentId?: DepartmentId | null,
 ): string | null {
   const cleaned = stripMediaRefPrefix(ref)
+  const withDept = cleaned.match(
+    new RegExp(`^media\\/(${MEDIA_DEPT_IN_PATH})\\/(\\d+)\\/images\\/([^/?#\\s]+)$`, 'i'),
+  )
+  if (withDept) {
+    return `media/${withDept[1]}/${withDept[2]}/images/${withDept[3]}`
+  }
   const nested = cleaned.match(IMAGE_STORAGE_PATH_RE)
   if (nested) {
-    const dept = (nested[1] as DepartmentId | undefined) || departmentId || 'support'
-    return `media/${dept}/${nested[2]}/images/${nested[3]}`
+    const dept = departmentId || 'support'
+    return `media/${dept}/${nested[1]}/images/${nested[2]}`
   }
   if (cleaned.startsWith('images/') && topicId != null) {
     const name = cleaned.slice('images/'.length).split(/[?#]/)[0]
@@ -119,7 +127,7 @@ export function parseFileAttachmentHref(href: string | undefined): { storedName:
   if (!href) return null
   const cleaned = href.replace(/\\/g, '/').replace(/^\/+/, '').trim()
   const match = cleaned.match(
-    /^(?:spravochnik:\/\/)?(?:media\/(?:_draft\/[^/]+|(?:(?:support|lawyers|managers|spp|templates)\/)?\d+)\/)?files\/([^/?#\s]+)$/i,
+    /^(?:spravochnik:\/\/)?(?:media\/(?:_draft\/[^/]+|(?:(?:[a-z][a-z0-9_-]{0,47})\/)?\d+)\/)?files\/([^/?#\s]+)$/i,
   )
   if (!match) return null
   const storedName = match[1]

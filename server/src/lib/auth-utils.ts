@@ -5,7 +5,10 @@ export type UserRole = 'user' | 'editor' | 'admin' | 'owner'
 export const STAFF_ROLES: UserRole[] = ['admin', 'owner']
 export const CONTENT_EDITOR_ROLES: UserRole[] = ['editor', 'admin', 'owner']
 
-export type WorkDepartmentId = 'support' | 'lawyers' | 'managers' | 'spp'
+export type WorkDepartmentId = string
+
+export const LOST_DEPARTMENT_ID = 'lost'
+export const TEMPLATES_DEPARTMENT_ID = 'templates'
 
 export interface JwtUser {
   id: string
@@ -45,13 +48,12 @@ export function isOwnerRole(role: string | undefined | null): boolean {
   return role === 'owner'
 }
 
+const WORK_DEPT_ID_PATTERN = /^[a-z][a-z0-9_-]{0,47}$/
+
 export function isWorkDepartmentId(value: unknown): value is WorkDepartmentId {
-  return (
-    value === 'support' ||
-    value === 'lawyers' ||
-    value === 'managers' ||
-    value === 'spp'
-  )
+  if (typeof value !== 'string') return false
+  if (value === TEMPLATES_DEPARTMENT_ID || value === LOST_DEPARTMENT_ID) return false
+  return WORK_DEPT_ID_PATTERN.test(value)
 }
 
 export function normalizeWorkDepartmentId(value: unknown): WorkDepartmentId {

@@ -278,3 +278,98 @@ export async function saveSupportPhonesOnServer(
   })
   return data.phones ?? []
 }
+
+export interface AdminSubsectionDto {
+  id: string
+  departmentId: string
+  label: string
+  sortOrder: number
+}
+
+export interface AdminDepartmentDto {
+  id: string
+  label: string
+  listKey: 'questions' | 'templates'
+  sortOrder: number
+  systemLocked?: boolean
+  subsections?: AdminSubsectionDto[]
+}
+
+export async function fetchAdminDepartments(): Promise<AdminDepartmentDto[]> {
+  const data = await serverFetch<{ departments: AdminDepartmentDto[] }>('/admin/departments', {
+    skipRemotePull: true,
+  })
+  return data.departments ?? []
+}
+
+export async function createSubsectionOnServer(
+  departmentId: string,
+  payload: { label: string },
+): Promise<AdminSubsectionDto> {
+  const data = await serverFetch<{ subsection: AdminSubsectionDto }>(
+    `/admin/departments/${encodeURIComponent(departmentId)}/subsections`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      skipRemotePull: true,
+    },
+  )
+  return data.subsection
+}
+
+export async function updateSubsectionOnServer(
+  id: string,
+  payload: { label: string },
+): Promise<AdminSubsectionDto> {
+  const data = await serverFetch<{ subsection: AdminSubsectionDto }>(
+    `/admin/subsections/${encodeURIComponent(id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+      skipRemotePull: true,
+    },
+  )
+  return data.subsection
+}
+
+export async function deleteSubsectionOnServer(id: string): Promise<void> {
+  await serverFetch(`/admin/subsections/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    skipRemotePull: true,
+  })
+}
+
+export async function createDepartmentOnServer(payload: {
+  id: string
+  label: string
+}): Promise<AdminDepartmentDto> {
+  const data = await serverFetch<{ department: AdminDepartmentDto }>('/admin/departments', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipRemotePull: true,
+  })
+  return data.department
+}
+
+export async function updateDepartmentOnServer(
+  id: string,
+  payload: { label: string },
+): Promise<AdminDepartmentDto> {
+  const data = await serverFetch<{ department: AdminDepartmentDto }>(`/admin/departments/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    skipRemotePull: true,
+  })
+  return data.department
+}
+
+export async function deleteDepartmentOnServer(id: string): Promise<{ movedTopics: number }> {
+  const data = await serverFetch<{ ok: boolean; movedTopics?: number }>(
+    `/admin/departments/${id}`,
+    {
+      method: 'DELETE',
+      skipRemotePull: true,
+    },
+  )
+  return { movedTopics: data.movedTopics ?? 0 }
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { GuideItem, SupportParty } from '../types'
+import type { DepartmentSubsection, GuideItem, SupportParty } from '../types'
 import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import {
   buildTree,
@@ -80,6 +80,7 @@ interface TopicListProps {
   selectedId: number | null
   onSelect: (id: number) => void
   searchFilter: TopicSearchFilter | null
+  subsections?: DepartmentSubsection[]
   /** Support + «Все»: group root topics under party section headings */
   groupRootsByParty?: boolean
   /** Support filters: root reorder only within the same party */
@@ -224,6 +225,27 @@ function autoScrollContainer(scrollEl: HTMLElement, clientY: number): void {
     const t = (clientY - (rect.bottom - AUTO_SCROLL_EDGE_PX)) / AUTO_SCROLL_EDGE_PX
     scrollEl.scrollTop += Math.ceil(t * AUTO_SCROLL_MAX_PX)
   }
+}
+
+function groupRootsBySubsections(
+  roots: GuideItem[],
+  subsections: DepartmentSubsection[],
+): Array<{ id: string; label: string; items: GuideItem[] }> {
+  const byId = new Map<string, GuideItem[]>()
+  for (const sub of subsections) byId.set(sub.id, [])
+  const fallbackId = subsections[0]?.id
+  for (const item of roots) {
+    const key =
+      item.subsection_id && byId.has(item.subsection_id)
+        ? item.subsection_id
+        : fallbackId
+    if (key && byId.has(key)) byId.get(key)!.push(item)
+  }
+  return subsections.map((sub) => ({
+    id: sub.id,
+    label: sub.label,
+    items: byId.get(sub.id) ?? [],
+  }))
 }
 
 function groupRootsByPartySections(
@@ -422,6 +444,7 @@ export function TopicList({
   selectedId,
   onSelect,
   searchFilter,
+  subsections = [],
   groupRootsByParty = false,
   rootReorderSameParty = false,
   reorderMode = false,
@@ -741,8 +764,26 @@ export function TopicList({
   const roots = buildTree(items).filter(
     (item) => !searchFilter || searchFilter.visibleIds.has(item.id),
   )
-  const showPartySections = groupRootsByParty
+  const showSubsectionSections = subsections.length > 0 && !searchFilter
+  const subsectionSections = showSubsectionSections
+    ? groupRootsBySubsections(roots, subsections)
+    : []
+  const showPartySections = groupRootsByParty && !showSubsectionSections
   const partySections = showPartySections ? groupRootsByPartySections(roots) : []
+
+  function renderRootItems(sectionRoots: GuideItem[]) {
+    if (groupRootsByParty) {
+      return groupRootsByPartySections(sectionRoots).map(({ party, items: partyRoots }) => (
+        <li key={party} className="topic-party-section topic-party-section--nested">
+          <div className="topic-party-section__heading">{SUPPORT_PARTY_LABELS[party]}</div>
+          <ul className="topic-party-section__list">
+            {partyRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+          </ul>
+        </li>
+      ))
+    }
+    return sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))
+  }
 
   function openContextMenu(e: React.MouseEvent) {
     e.preventDefault()
@@ -805,16 +846,25 @@ export function TopicList({
         className={`topic-tree topic-list${reorderMode ? ' is-reorder-active' : ''}`}
         onContextMenu={openContextMenu}
       >
-        {showPartySections
-          ? partySections.map(({ party, items: sectionRoots }) => (
-              <li key={party} className="topic-party-section">
-                <div className="topic-party-section__heading">{SUPPORT_PARTY_LABELS[party]}</div>
-                <ul className="topic-party-section__list">
-                  {sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+        {showSubsectionSections
+          ? subsectionSections.map(({ id, label, items: sectionRoots }) => (
+              <li key={id} className="topic-subsection-section">
+                <div className="topic-subsection-section__heading">{label}</div>
+                <ul className="topic-subsection-section__list">
+                  {renderRootItems(sectionRoots)}
                 </ul>
               </li>
             ))
-          : roots.map((item) => renderTreeNode(item, treeNodeProps))}
+          : showPartySections
+            ? partySections.map(({ party, items: sectionRoots }) => (
+                <li key={party} className="topic-party-section">
+                  <div className="topic-party-section__heading">{SUPPORT_PARTY_LABELS[party]}</div>
+                  <ul className="topic-party-section__list">
+                    {sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+                  </ul>
+                </li>
+              ))
+            : roots.map((item) => renderTreeNode(item, treeNodeProps))}
       </ul>
 
       {dragGhost &&

@@ -15,7 +15,23 @@ import {
   type WorkDepartmentId,
 } from '../lib/auth-utils.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
-import { DEPARTMENTS } from '../lib/topics.js'
+import {
+  getDepartmentById,
+  isDepartmentIdSlug,
+  isEditableInSettings,
+  isLostDepartmentId,
+  isTemplatesDepartmentId,
+  listDepartments,
+  nextDepartmentSortOrder,
+} from '../lib/departments.js'
+import { moveDepartmentTopicsToLost } from '../lib/move-topics-to-lost.js'
+import {
+  allocateSubsectionId,
+  getSubsectionById,
+  listSubsections,
+  nextSubsectionSortOrder,
+  subsectionToClient,
+} from '../lib/subsections.js'
 import {
   normalizeSupportPhones,
   readSupportPhonesFromDb,
@@ -532,13 +548,13 @@ adminRouter.get('/storage-stats', requireRole('owner'), async (_req, res) => {
         GROUP BY department_id, kind`,
     )
 
-    const deptIds = Object.keys(DEPARTMENTS) as Array<keyof typeof DEPARTMENTS>
+    const departmentRows = await listDepartments()
     const byId = new Map(
-      deptIds.map((id) => [
-        id,
+      departmentRows.map((d) => [
+        d.id,
         {
-          id,
-          label: DEPARTMENTS[id].label,
+          id: d.id,
+          label: d.label,
           textBytes: 0,
           photoBytes: 0,
           fileBytes: 0,
@@ -551,14 +567,14 @@ adminRouter.get('/storage-stats', requireRole('owner'), async (_req, res) => {
     let unassignedFileBytes = 0
 
     for (const row of textResult.rows) {
-      const entry = byId.get(row.department_id as keyof typeof DEPARTMENTS)
+      const entry = byId.get(row.department_id)
       if (entry) entry.textBytes = toByteCount(row.bytes)
     }
 
     for (const row of mediaResult.rows) {
       const bytes = toByteCount(row.bytes)
       const entry = row.department_id
-        ? byId.get(row.department_id as keyof typeof DEPARTMENTS)
+        ? byId.get(row.department_id)
         : undefined
       if (entry) {
         if (row.kind === 'photos') entry.photoBytes += bytes
@@ -570,8 +586,8 @@ adminRouter.get('/storage-stats', requireRole('owner'), async (_req, res) => {
       }
     }
 
-    const departments = deptIds.map((id) => {
-      const entry = byId.get(id)!
+    const departments = departmentRows.map((d) => {
+      const entry = byId.get(d.id)!
       entry.totalBytes = entry.textBytes + entry.photoBytes + entry.fileBytes
       return entry
     })
@@ -618,6 +634,249 @@ adminRouter.put('/support-phones', async (req: AuthRequest, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка сохранения телефонов' })
+  }
+})
+
+function departmentToClient(d: Awaited<ReturnType<typeof listDepartments>>[number]) {
+  return {
+    id: d.id,
+    label: d.label,
+    listKey: d.listKey,
+    sortOrder: d.sortOrder,
+    systemLocked: d.systemLocked,
+  }
+}
+
+adminRouter.get('/departments', async (_req, res) => {
+  try {
+    const rows = await listDepartments()
+    const subsections = await listSubsections()
+    const subsByDept = new Map<string, ReturnType<typeof subsectionToClient>[]>()
+    for (const sub of subsections) {
+      const list = subsByDept.get(sub.departmentId) ?? []
+      list.push(subsectionToClient(sub))
+      subsByDept.set(sub.departmentId, list)
+    }
+    res.json({
+      departments: rows.filter(isEditableInSettings).map((d) => ({
+        ...departmentToClient(d),
+        subsections: subsByDept.get(d.id) ?? [],
+      })),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка загрузки разделов' })
+  }
+})
+
+adminRouter.post('/departments', async (req: AuthRequest, res) => {
+  try {
+    const id = String(req.body?.id ?? '')
+      .trim()
+      .toLowerCase()
+    const label = String(req.body?.label ?? '').trim()
+    if (!isDepartmentIdSlug(id)) {
+      res.status(400).json({
+        error: 'Идентификатор: латиница, цифры, дефис; начинается с буквы (до 48 символов)',
+      })
+      return
+    }
+    if (isLostDepartmentId(id) || isTemplatesDepartmentId(id)) {
+      res.status(400).json({ error: 'Этот идентификатор зарезервирован' })
+      return
+    }
+    if (!label) {
+      res.status(400).json({ error: 'Укажите название раздела' })
+      return
+    }
+    const existing = await getDepartmentById(id)
+    if (existing) {
+      res.status(409).json({ error: 'Раздел с таким идентификатором уже есть' })
+      return
+    }
+    const sortOrder = await nextDepartmentSortOrder()
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO departments (id, label, list_key, sort_order, system_locked)
+         VALUES ($1, $2, 'questions', $3, false)`,
+        [id, label, sortOrder],
+      )
+      await client.query(
+        `INSERT INTO topic_id_counters (department_id, next_id) VALUES ($1, 1)
+         ON CONFLICT (department_id) DO NOTHING`,
+        [id],
+      )
+      await bumpGlobalVersion(client)
+    })
+    const created = await getDepartmentById(id)
+    res.status(201).json({ department: created ? departmentToClient(created) : { id, label } })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка создания раздела' })
+  }
+})
+
+adminRouter.put('/departments/:id', async (req: AuthRequest, res) => {
+  try {
+    const id = param(req.params.id)
+    const dept = await getDepartmentById(id)
+    if (!dept || !isEditableInSettings(dept)) {
+      res.status(404).json({ error: 'Раздел не найден' })
+      return
+    }
+    if (isLostDepartmentId(id)) {
+      res.status(403).json({ error: 'Этот раздел нельзя редактировать' })
+      return
+    }
+    const label = String(req.body?.label ?? '').trim()
+    if (!label) {
+      res.status(400).json({ error: 'Укажите название раздела' })
+      return
+    }
+    await withTransaction(async (client) => {
+      await client.query(`UPDATE departments SET label = $2 WHERE id = $1`, [id, label])
+      await bumpGlobalVersion(client)
+    })
+    const updated = await getDepartmentById(id)
+    res.json({ department: updated ? departmentToClient(updated) : { id, label } })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка сохранения раздела' })
+  }
+})
+
+adminRouter.delete('/departments/:id', async (req: AuthRequest, res) => {
+  try {
+    const id = param(req.params.id)
+    const dept = await getDepartmentById(id)
+    if (!dept || !isEditableInSettings(dept)) {
+      res.status(404).json({ error: 'Раздел не найден' })
+      return
+    }
+    if (isTemplatesDepartmentId(id) || isLostDepartmentId(id)) {
+      res.status(403).json({ error: 'Этот раздел нельзя удалить' })
+      return
+    }
+    let movedTopics = 0
+    await withTransaction(async (client) => {
+      movedTopics = await moveDepartmentTopicsToLost(client, id)
+      await client.query(
+        `UPDATE users SET department_id = 'support' WHERE department_id = $1`,
+        [id],
+      )
+      await client.query(`UPDATE whitelist SET department_id = 'support' WHERE department_id = $1`, [
+        id,
+      ])
+      await client.query(`DELETE FROM topic_id_counters WHERE department_id = $1`, [id])
+      await client.query(`DELETE FROM departments WHERE id = $1`, [id])
+      await bumpGlobalVersion(client)
+    })
+    res.json({ ok: true, movedTopics })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка удаления раздела' })
+  }
+})
+
+adminRouter.post('/departments/:deptId/subsections', async (req: AuthRequest, res) => {
+  try {
+    const departmentId = param(req.params.deptId)
+    const dept = await getDepartmentById(departmentId)
+    if (!dept || !isEditableInSettings(dept)) {
+      res.status(404).json({ error: 'Раздел не найден' })
+      return
+    }
+    if (isTemplatesDepartmentId(departmentId) || isLostDepartmentId(departmentId)) {
+      res.status(403).json({ error: 'В этот раздел нельзя добавить подраздел' })
+      return
+    }
+    const label = String(req.body?.label ?? '').trim()
+    if (!label) {
+      res.status(400).json({ error: 'Укажите название подраздела' })
+      return
+    }
+    let createdId: string | null = null
+    await withTransaction(async (client) => {
+      const id = await allocateSubsectionId(departmentId, label, client)
+      const sortOrder = await nextSubsectionSortOrder(departmentId, client)
+      await client.query(
+        `INSERT INTO department_subsections (id, department_id, label, sort_order)
+         VALUES ($1, $2, $3, $4)`,
+        [id, departmentId, label, sortOrder],
+      )
+      await bumpGlobalVersion(client)
+      createdId = id
+    })
+    const row = createdId ? await getSubsectionById(createdId) : null
+    res.status(201).json({ subsection: row ? subsectionToClient(row) : null })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка создания подраздела' })
+  }
+})
+
+adminRouter.put('/subsections/:id', async (req: AuthRequest, res) => {
+  try {
+    const id = param(req.params.id)
+    const existing = await getSubsectionById(id)
+    if (!existing) {
+      res.status(404).json({ error: 'Подраздел не найден' })
+      return
+    }
+    const label = String(req.body?.label ?? '').trim()
+    if (!label) {
+      res.status(400).json({ error: 'Укажите название подраздела' })
+      return
+    }
+    await withTransaction(async (client) => {
+      await client.query(`UPDATE department_subsections SET label = $2 WHERE id = $1`, [id, label])
+      await bumpGlobalVersion(client)
+    })
+    const updated = await getSubsectionById(id)
+    res.json({ subsection: updated ? subsectionToClient(updated) : { id, label } })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка сохранения подраздела' })
+  }
+})
+
+adminRouter.delete('/subsections/:id', async (req: AuthRequest, res) => {
+  try {
+    const id = param(req.params.id)
+    const existing = await getSubsectionById(id)
+    if (!existing) {
+      res.status(404).json({ error: 'Подраздел не найден' })
+      return
+    }
+    await withTransaction(async (client) => {
+      const others = await client.query<{ id: string }>(
+        `SELECT id FROM department_subsections
+          WHERE department_id = $1 AND id <> $2
+          ORDER BY sort_order ASC, id ASC
+          LIMIT 1`,
+        [existing.departmentId, id],
+      )
+      const fallbackId = others.rows[0]?.id ?? null
+      if (fallbackId) {
+        await client.query(
+          `UPDATE topics SET subsection_id = $3
+            WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
+          [existing.departmentId, id, fallbackId],
+        )
+      } else {
+        await client.query(
+          `UPDATE topics SET subsection_id = NULL
+            WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
+          [existing.departmentId, id],
+        )
+      }
+      await client.query(`DELETE FROM department_subsections WHERE id = $1`, [id])
+      await bumpGlobalVersion(client)
+    })
+    res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка удаления подраздела' })
   }
 })
 

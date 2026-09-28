@@ -79,7 +79,25 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
   getStorageStats: () => ipcRenderer.invoke('admin:storage-stats'),
 
+  listAdminDepartments: () => ipcRenderer.invoke('admin:list-departments'),
 
+  createAdminDepartment: (payload: { id: string; label: string }) =>
+    ipcRenderer.invoke('admin:create-department', payload),
+
+  updateAdminDepartment: (payload: { id: string; label: string }) =>
+    ipcRenderer.invoke('admin:update-department', payload),
+
+  deleteAdminDepartment: (id: string) => ipcRenderer.invoke('admin:delete-department', id),
+
+  getSubsections: () => ipcRenderer.invoke('get-subsections'),
+
+  createAdminSubsection: (payload: { departmentId: string; label: string }) =>
+    ipcRenderer.invoke('admin:create-subsection', payload),
+
+  updateAdminSubsection: (payload: { id: string; label: string }) =>
+    ipcRenderer.invoke('admin:update-subsection', payload),
+
+  deleteAdminSubsection: (id: string) => ipcRenderer.invoke('admin:delete-subsection', id),
 
   setServerUrl: (url: string) => ipcRenderer.invoke('sync:set-server-url', url),
 

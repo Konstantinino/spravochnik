@@ -22,10 +22,25 @@ import {
 } from '../lib/topics.js'
 import { canEditDepartment } from '../lib/auth-utils.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
+import { blockWritesIfClientOutdated } from '../middleware/min-client-version.js'
 
 export const topicsRouter = Router()
+topicsRouter.use(blockWritesIfClientOutdated)
 
 const MEDIA_DIR = process.env.MEDIA_DIR ?? path.join(process.cwd(), 'data', 'media')
+
+function resolveClientTopicId(
+  dept: string,
+  party: string | null,
+  value: unknown,
+  fallback: number | null,
+): number | null {
+  if (dept !== 'support' || party !== 'additional') return null
+  if (value === undefined) return fallback
+  if (value === null) return null
+  const n = parseInt(String(value), 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
 
 function param(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value
@@ -150,6 +165,7 @@ topicsRouter.post(
           : parseInt(String(item.parent_id), 10)
       const party =
         dept === 'support' ? normalizeSupportParty(item.party, 'supplier') : null
+      const clientTopicId = resolveClientTopicId(dept, party, item.client_topic_id, null)
 
       const topic = await withTransaction(async (client) => {
         const idRes = await client.query<{ next_id: number }>(
@@ -166,15 +182,16 @@ topicsRouter.post(
 
         await client.query(
           `INSERT INTO topics (
-             department_id, id, question, answer, parent_id, has_children, party,
+             department_id, id, question, answer, parent_id, client_topic_id, has_children, party,
              archived, sort_index, image_display, photos, documents, version, updated_by
-           ) VALUES ($1, $2, $3, $4, $5, false, $6, false, $7, $8, $9, $10, 1, $11)`,
+           ) VALUES ($1, $2, $3, $4, $5, $6, false, $7, false, $8, $9, $10, $11, 1, $12)`,
           [
             dept,
             newId,
             question,
             answer,
             parentId,
+            clientTopicId,
             party,
             Number.isFinite(sortIndex) ? sortIndex : null,
             item.image_display ? JSON.stringify(item.image_display) : null,
@@ -400,6 +417,12 @@ topicsRouter.put(
               isSupportParty(current.party) ? current.party : 'supplier',
             )
           : null
+      const clientTopicId = resolveClientTopicId(
+        dept,
+        party,
+        item.client_topic_id,
+        current.client_topic_id ?? null,
+      )
       const sortIndex =
         item.sort_index !== undefined
           ? item.sort_index === null
@@ -410,9 +433,9 @@ topicsRouter.put(
       const updated = await withTransaction(async (client) => {
         await client.query(
           `UPDATE topics SET
-             question = $3, answer = $4, parent_id = $5, party = $6, archived = $7,
-             sort_index = $8, image_display = $9, photos = $10, documents = $11,
-             version = version + 1, updated_at = NOW(), updated_by = $12
+             question = $3, answer = $4, parent_id = $5, client_topic_id = $6, party = $7,
+             archived = $8, sort_index = $9, image_display = $10, photos = $11, documents = $12,
+             version = version + 1, updated_at = NOW(), updated_by = $13
            WHERE department_id = $1 AND id = $2 AND deleted_at IS NULL`,
           [
             dept,
@@ -420,6 +443,7 @@ topicsRouter.put(
             question,
             answer,
             parentId,
+            clientTopicId,
             party,
             archived,
             Number.isFinite(sortIndex) ? sortIndex : null,

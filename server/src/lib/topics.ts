@@ -23,6 +23,7 @@ export interface TopicRow {
   question: string
   answer: string
   parent_id: number | null
+  client_topic_id: number | null
   has_children: boolean
   party: string | null
   archived: boolean
@@ -44,6 +45,7 @@ export function rowToGuideItem(row: TopicRow): Record<string, unknown> {
     parent_id: row.parent_id,
     has_children: row.has_children,
   }
+  if (row.client_topic_id != null) item.client_topic_id = row.client_topic_id
   if (row.party) item.party = row.party
   if (row.archived) item.archived = true
   if (row.sort_index != null && Number.isFinite(row.sort_index)) {

@@ -20,6 +20,7 @@ interface GuideItem {
   question?: string
   answer?: string
   parent_id?: number | null
+  client_topic_id?: number | null
   has_children?: boolean
   party?: string
   archived?: boolean
@@ -167,19 +168,20 @@ async function importFromDir(dataDir: string, mediaDir?: string): Promise<void> 
 
         await client.query(
           `INSERT INTO topics (
-             department_id, id, question, answer, parent_id, has_children, party,
+             department_id, id, question, answer, parent_id, client_topic_id, has_children, party,
              archived, sort_index, image_display, photos, documents, version
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1)
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
            ON CONFLICT (department_id, id) DO UPDATE SET
-             question = $3, answer = $4, parent_id = $5, has_children = $6, party = $7,
-             archived = $8, sort_index = $9, image_display = $10, photos = $11, documents = $12,
-             version = topics.version + 1, updated_at = NOW()`,
+             question = $3, answer = $4, parent_id = $5, client_topic_id = $6, has_children = $7,
+             party = $8, archived = $9, sort_index = $10, image_display = $11, photos = $12,
+             documents = $13, version = topics.version + 1, updated_at = NOW()`,
           [
             deptId,
             item.id,
             item.question ?? '',
             item.answer ?? '',
             item.parent_id ?? null,
+            item.client_topic_id ?? null,
             Boolean(item.has_children),
             item.party ?? null,
             Boolean(item.archived),

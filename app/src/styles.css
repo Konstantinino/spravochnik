@@ -831,8 +831,25 @@ body.topic-reorder-dragging.topic-reorder-drop-ok * {
 }
 
 .viewer__toolbar-start {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   flex-shrink: 0;
   min-width: 0;
+}
+
+.viewer__part-switch-btn {
+  background: #ffefb0;
+  color: #a67c00;
+  border: 1px solid #e6b800;
+  font-weight: 600;
+}
+
+.viewer__part-switch-btn:hover {
+  background: #ffe680;
+  color: #8a6600;
+  border-color: #d4a017;
 }
 
 .viewer__header {
@@ -1202,9 +1219,11 @@ mark.nbsp-entity-mark {
   max-width: 100%;
   width: auto;
   height: auto;
-  margin: 12px 0;
+  margin: 12px 0 32px;
   border-radius: 6px;
   border: 1px solid var(--border);
+  border-bottom: 3px solid var(--header-blue);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   cursor: pointer;
 }
 

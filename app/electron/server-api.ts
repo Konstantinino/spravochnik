@@ -1,6 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { app } from 'electron'
 import { readSettings, normalizeServerUrl } from './auth-store'
+
+export const CLIENT_VERSION_HEADER = 'X-Rest-Info-Client-Version'
 
 export class ServerApiError extends Error {
   status: number
@@ -21,9 +24,22 @@ function baseUrl(): string {
   return url
 }
 
+function clientVersionHeaders(): Record<string, string> {
+  try {
+    const version = app.getVersion()?.trim()
+    if (version) return { [CLIENT_VERSION_HEADER]: version }
+  } catch {
+    /* not in Electron main */
+  }
+  return {}
+}
+
 function authHeaders(): Record<string, string> {
   const token = readSettings().authToken.trim()
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...clientVersionHeaders(),
+  }
   if (token) headers.Authorization = `Bearer ${token}`
   return headers
 }
@@ -173,7 +189,10 @@ export async function uploadMediaFile(
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: {
+      ...clientVersionHeaders(),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: form,
   })
 

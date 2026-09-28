@@ -10,6 +10,18 @@ export function getItemParty(item: GuideItem): SupportParty {
   return isSupportParty(item.party) ? item.party : 'supplier'
 }
 
+export function normalizeTopicIdRef(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** Admin topic → linked client topic id (party «Администратор» only). */
+export function getLinkedClientTopicId(item: GuideItem): number | null {
+  if (getItemParty(item) !== 'additional') return null
+  return normalizeTopicIdRef(item.client_topic_id)
+}
+
 export function isArchived(item: GuideItem): boolean {
   return Boolean(item.archived)
 }
@@ -280,6 +292,32 @@ export function filterTopicsForParentPicker(
   party: SupportParty,
 ): GuideItem[] {
   return filterTopicsForLinkPicker(items).filter((item) => getItemParty(item) === party)
+}
+
+/** Client topic for admin link (not «Администратор» category). */
+export function filterTopicsForClientLinkPicker(
+  items: GuideItem[],
+  excludeId?: number | null,
+): GuideItem[] {
+  return filterTopicsForLinkPicker(items).filter((item) => {
+    if (excludeId != null && item.id === excludeId) return false
+    return getItemParty(item) !== 'additional'
+  })
+}
+
+export function findAdminTopicForClient(
+  items: GuideItem[],
+  clientTopicId: number,
+): GuideItem | null {
+  const clientId = normalizeTopicIdRef(clientTopicId)
+  if (clientId == null) return null
+  return (
+    items.find(
+      (item) =>
+        getItemParty(item) === 'additional' &&
+        normalizeTopicIdRef(item.client_topic_id) === clientId,
+    ) ?? null
+  )
 }
 
 export function topicDisplayLabel(item: GuideItem): string {

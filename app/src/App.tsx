@@ -672,6 +672,7 @@ export default function App() {
     question: string
     answer: string
     parent_id: number | null
+    client_topic_id?: number | null
     party?: SupportParty
     id?: number
     draftId?: string
@@ -688,6 +689,9 @@ export default function App() {
           answer: payload.answer,
           parent_id: payload.parent_id,
           party: payload.party ?? existing.party,
+          ...(payload.client_topic_id !== undefined
+            ? { client_topic_id: payload.client_topic_id }
+            : {}),
         },
       })
       setGuide(data)
@@ -705,6 +709,7 @@ export default function App() {
         question: payload.question,
         answer: payload.answer,
         parent_id: payload.parent_id,
+        client_topic_id: payload.client_topic_id,
         has_children: false,
         party: payload.party,
         photos: [],
@@ -733,6 +738,7 @@ export default function App() {
     question: string
     answer: string
     parent_id: number | null
+    client_topic_id?: number | null
     party?: SupportParty
   }) {
     if (!selected) return
@@ -748,6 +754,9 @@ export default function App() {
           answer: payload.answer,
           parent_id: payload.parent_id,
           party: payload.party ?? selected.party,
+          ...(payload.client_topic_id !== undefined
+            ? { client_topic_id: payload.client_topic_id }
+            : {}),
         },
       })
       setGuide(data)

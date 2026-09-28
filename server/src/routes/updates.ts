@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { query } from '../db/pool.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { compareVersions } from '../lib/app-version.js'
 import { readSupportPhonesFromDb } from '../lib/support-phones.js'
 
 const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 'updates')
@@ -22,18 +23,6 @@ updatesRouter.use(
     },
   }),
 )
-
-function compareVersions(a: string, b: string): number {
-  const pa = a.replace(/^v/i, '').split(/[.+-]/).map((x) => parseInt(x, 10) || 0)
-  const pb = b.replace(/^v/i, '').split(/[.+-]/).map((x) => parseInt(x, 10) || 0)
-  const len = Math.max(pa.length, pb.length)
-  for (let i = 0; i < len; i++) {
-    const da = pa[i] ?? 0
-    const db = pb[i] ?? 0
-    if (da !== db) return da - db
-  }
-  return 0
-}
 
 updatesRouter.get('/support-phones', authMiddleware, async (_req, res) => {
   try {

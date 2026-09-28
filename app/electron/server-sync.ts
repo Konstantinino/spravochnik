@@ -139,17 +139,95 @@ export function getSyncStatus(): SyncStatus {
   }
 }
 
+function normalizeTopicIdRef(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** Keep client_topic_id from push payload if API response omitted it (legacy server / pending migration). */
+function mergeTopicAfterPush(
+  serverTopic: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (payload.client_topic_id === undefined) return serverTopic
+  const merged = { ...serverTopic }
+  if (normalizeTopicIdRef(merged.client_topic_id) != null) return merged
+  const requested = normalizeTopicIdRef(payload.client_topic_id)
+  if (requested == null) delete merged.client_topic_id
+  else merged.client_topic_id = requested
+  return merged
+}
+
+function isAdditionalParty(value: unknown): boolean {
+  return value === 'additional'
+}
+
+/** Admin-client link is stored only on party «additional»; keep locally if sync payload omits it. */
+function preserveLocalAdminClientLink(
+  incoming: Record<string, unknown>,
+  previous: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const merged = { ...incoming }
+  if (!previous) return merged
+  const prevLink = normalizeTopicIdRef(previous.client_topic_id)
+  const nextLink = normalizeTopicIdRef(merged.client_topic_id)
+  if (prevLink == null || nextLink != null) return merged
+  const party = merged.party ?? previous.party
+  if (!isAdditionalParty(party)) return merged
+  merged.client_topic_id = prevLink
+  return merged
+}
+
+function ensureRequestedClientLinkPersisted(
+  deptId: DepartmentId,
+  topicId: number,
+  requestedParty: unknown,
+  requestedLink: unknown,
+): void {
+  if (deptId !== 'support' || !isAdditionalParty(requestedParty)) return
+  if (requestedLink === undefined) return
+
+  const dept = departmentById(deptId)
+  const filePath = path.join(getUserDataRoot(), dept.fileName)
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>
+  const list = (data[dept.listKey] as Array<Record<string, unknown>>) ?? []
+  const idx = list.findIndex((t) => t.id === topicId)
+  if (idx < 0) return
+
+  const requested = normalizeTopicIdRef(requestedLink)
+  const localLink = normalizeTopicIdRef(list[idx].client_topic_id)
+  if (requested != null && localLink == null) {
+    list[idx].client_topic_id = requested
+    data[dept.listKey] = list
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+    appendSessionLog(
+      'warn',
+      'sync/client-link',
+      `Сервер не вернул client_topic_id для темы #${topicId}; локально сохранена связь с #${requested}`,
+    )
+    return
+  }
+  if (requested == null && requestedLink === null && localLink != null) {
+    delete list[idx].client_topic_id
+    data[dept.listKey] = list
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+  }
+}
+
 function reconcileCreatedTopic(
   deptId: DepartmentId,
   clientId: number | null | undefined,
   serverTopic: Record<string, unknown>,
+  payload?: Record<string, unknown>,
 ): void {
   const serverId = serverTopic.id as number
   if (clientId != null && clientId !== serverId) {
     removeTopicFromLocal(deptId, clientId)
     remigrateTopicMediaIds(deptId, clientId, serverId)
   }
-  applyTopicToLocal(deptId, serverTopic)
+  const topic = payload ? mergeTopicAfterPush(serverTopic, payload) : serverTopic
+  applyTopicToLocal(deptId, topic)
 }
 
 export async function ensureMediaFilesDownloaded(
@@ -253,11 +331,13 @@ function applyTopicToLocal(deptId: DepartmentId, topic: Record<string, unknown>)
   const list = (data[listKey] as Array<Record<string, unknown>>) ?? []
   const id = topic.id as number
   const idx = list.findIndex((t) => t.id === id)
-  const clean = { ...topic }
+  let clean = { ...topic }
   delete clean.version
   delete clean.updated_at
-  if (idx >= 0) list[idx] = clean
-  else list.push(clean)
+  if (idx >= 0) {
+    clean = preserveLocalAdminClientLink(clean, list[idx])
+    list[idx] = clean
+  } else list.push(clean)
   data[listKey] = list
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
   void ensureTopicMediaDownloaded(deptId, clean)
@@ -277,12 +357,15 @@ function writeFullDeptTopics(deptId: DepartmentId, topics: Record<string, unknow
   const dept = departmentById(deptId)
   const filePath = path.join(getUserDataRoot(), dept.fileName)
   const data = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>
+  const oldList = (data[dept.listKey] as Array<Record<string, unknown>>) ?? []
+  const oldById = new Map(oldList.map((t) => [t.id as number, t]))
   const cleaned = reconcileHasChildren(
     topics.map((t) => {
       const c = { ...t }
       delete c.version
       delete c.updated_at
-      return c as {
+      const prev = oldById.get(c.id as number)
+      return preserveLocalAdminClientLink(c, prev) as {
         id: number
         parent_id?: number | null
         has_children?: boolean
@@ -557,7 +640,7 @@ async function replayOperation(op: PendingOperation): Promise<void> {
           body: JSON.stringify({ item: op.payload }),
         },
       )
-      reconcileCreatedTopic(deptId, clientId, result.topic)
+      reconcileCreatedTopic(deptId, clientId, result.topic, op.payload)
       break
     }
     case 'update_topic': {
@@ -565,11 +648,15 @@ async function replayOperation(op: PendingOperation): Promise<void> {
       const id = op.payload.id as number
       const headers: Record<string, string> = {}
       if (op.expectedVersion) headers['If-Match'] = String(op.expectedVersion)
-      await serverFetch(`/departments/${deptId}/topics/${id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ item: op.payload }),
-      })
+      const result = await serverFetch<{ topic: Record<string, unknown> }>(
+        `/departments/${deptId}/topics/${id}`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ item: op.payload }),
+        },
+      )
+      applyTopicToLocal(deptId, mergeTopicAfterPush(result.topic, op.payload))
       break
     }
     case 'delete_topic': {
@@ -647,6 +734,17 @@ async function replayOperation(op: PendingOperation): Promise<void> {
   }
 }
 
+function syncErrorFromClientOutdated(e: ServerApiError): SyncStatus | null {
+  if (e.status !== 426) return null
+  const body = e.body as { minVersion?: string; error?: string } | null
+  const min = body?.minVersion ? ` (нужна ${body.minVersion}+)` : ''
+  return {
+    code: 'error',
+    label: 'Нужно обновить приложение',
+    detail: body?.error ?? `Установите последнюю версию REST INFO${min}`,
+  }
+}
+
 export async function pushToServer(): Promise<SyncStatus> {
   const settings = readSettings()
   if (!settings.serverUrl.trim()) {
@@ -694,6 +792,10 @@ export async function pushToServer(): Promise<SyncStatus> {
             detail: body.lockedByName ? `Редактирует: ${body.lockedByName}` : undefined,
             lockBy: body.lockedByName,
           })
+        } else if (e instanceof ServerApiError) {
+          const outdated = syncErrorFromClientOutdated(e)
+          if (outdated) return emit(outdated)
+          throw e
         } else {
           throw e
         }
@@ -864,11 +966,17 @@ export async function tryPushTopicOnline(
         `/departments/${departmentId}/topics`,
         { method: 'POST', body: JSON.stringify({ item: payload }) },
       )
-      reconcileCreatedTopic(departmentId, clientId, result.topic)
+      reconcileCreatedTopic(departmentId, clientId, result.topic, payload)
       ensureRequestedPartyPersisted(
         departmentId,
         result.topic.id as number,
         payload.party,
+      )
+      ensureRequestedClientLinkPersisted(
+        departmentId,
+        result.topic.id as number,
+        payload.party,
+        payload.client_topic_id,
       )
     } else if (type === 'update') {
       const id = payload.id as number
@@ -878,8 +986,14 @@ export async function tryPushTopicOnline(
         `/departments/${departmentId}/topics/${id}`,
         { method: 'PUT', headers, body: JSON.stringify({ item: payload }) },
       )
-      applyTopicToLocal(departmentId, result.topic)
+      applyTopicToLocal(departmentId, mergeTopicAfterPush(result.topic, payload))
       ensureRequestedPartyPersisted(departmentId, id, payload.party)
+      ensureRequestedClientLinkPersisted(
+        departmentId,
+        id,
+        payload.party,
+        payload.client_topic_id,
+      )
     } else {
       const id = payload.id as number
       await serverFetch(`/departments/${departmentId}/topics/${id}`, { method: 'DELETE' })
@@ -904,6 +1018,9 @@ export async function tryPushTopicOnline(
           remoteFull: body.serverTopic,
         },
       }
+    }
+    if (e instanceof ServerApiError && e.status === 426) {
+      throw e
     }
     if (e instanceof ServerApiError && (e.status === 0 || e.status >= 500)) {
       return { ok: false, offline: true }

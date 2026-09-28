@@ -73,7 +73,7 @@ export function isOwnerRole(role: string | undefined | null): boolean {
   return role === 'owner'
 }
 
-/** Только для отдела «Тех. поддержка»: Поставщик / Заказчик / Ошибки / Дополнительно */
+/** Только для отдела «Тех. поддержка»: Поставщик / Заказчик / Ошибки / Администратор */
 export type SupportParty = 'supplier' | 'customer' | 'errors' | 'additional'
 
 /** Sidebar list filter (support has parties; all depts have archive for editors) */
@@ -86,7 +86,7 @@ export const SUPPORT_PARTY_LABELS: Record<SupportParty, string> = {
   supplier: 'Поставщик',
   customer: 'Заказчик',
   errors: 'Ошибки',
-  additional: 'Дополнительно',
+  additional: 'Администратор',
 }
 
 export const TOPIC_VIEW_FILTER_LABELS: Record<TopicViewFilter, string> = {
@@ -94,13 +94,13 @@ export const TOPIC_VIEW_FILTER_LABELS: Record<TopicViewFilter, string> = {
   supplier: 'Поставщик',
   customer: 'Заказчик',
   errors: 'Ошибки',
-  additional: 'Дополнительно',
+  additional: 'Администратор',
   archive: 'Архив',
 }
 
 export const SUPPORT_PARTIES: SupportParty[] = ['supplier', 'customer', 'errors', 'additional']
 
-/** Техподдержка: Все / Поставщик / Заказчик / Ошибки / Дополнительно (+ Архив для editor/admin) */
+/** Техподдержка: Все / Поставщик / Заказчик / Ошибки / Администратор (+ Архив для editor/admin) */
 export const SUPPORT_VIEW_FILTERS: TopicViewFilter[] = [
   'all',
   'supplier',
@@ -256,6 +256,8 @@ export interface GuideItem {
   archived?: boolean
   /** Custom order among siblings (same parent_id). Lower = higher in list. */
   sort_index?: number
+  /** Техподдержка, категория «Администратор»: id клиентской темы (Поставщик/Заказчик/Ошибки). */
+  client_topic_id?: number | null
   photo?: string
   photos?: string[]
   documents?: GuideDocument[]

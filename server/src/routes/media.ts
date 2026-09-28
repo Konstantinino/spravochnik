@@ -6,6 +6,7 @@ import multer from 'multer'
 import { query, bumpGlobalVersion } from '../db/pool.js'
 import { canEditDepartment } from '../lib/auth-utils.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
+import { blockWritesIfClientOutdated } from '../middleware/min-client-version.js'
 import {
   canonicalizeMediaRelativePath,
   mediaRelativePathCandidates,
@@ -19,6 +20,7 @@ const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 
 const UPLOAD_MAX_BYTES = 120 * 1024 * 1024
 
 export const mediaRouter = Router()
+mediaRouter.use(blockWritesIfClientOutdated)
 
 const upload = multer({
   storage: multer.diskStorage({

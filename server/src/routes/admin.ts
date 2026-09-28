@@ -21,11 +21,23 @@ import {
   readSupportPhonesFromDb,
   writeSupportPhonesToDb,
 } from '../lib/support-phones.js'
+import { requireCurrentClientVersion } from '../middleware/min-client-version.js'
 
 const BOOTSTRAP_ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'kostya.alone18@yandex.ru'
 
 export const adminRouter = Router()
 adminRouter.use(authMiddleware, requireRole('admin', 'owner'))
+adminRouter.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    next()
+    return
+  }
+  if (req.method === 'POST' && /\/releases\/?$/.test(req.path)) {
+    next()
+    return
+  }
+  void requireCurrentClientVersion(req, res, next)
+})
 
 function param(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value

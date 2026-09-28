@@ -56,8 +56,8 @@ graphify update .
 | Файл | Назначение |
 |---|---|
 | `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment`, `updates:install`, `app:focus-window`, валидация URL сервера |
-| `server-api.ts` | HTTP-клиент к REST API; `validateServerUrl()` через `GET /health` |
-| `server-sync.ts` | pull/push, конфликты, очередь (`reorder_topics`), flush медиа при save, reconcile create (без дублей id), `ensureTopicMediaDownloaded`, `tryPushReorderOnline`, `ensureRequestedPartyPersisted`, `showSyncLoadingIfOnline` |
+| `server-api.ts` | HTTP-клиент к REST API; `validateServerUrl()`; заголовок **`X-Rest-Info-Client-Version`** |
+| `server-sync.ts` | pull/push, конфликты, очередь, flush медиа, reconcile create, `ensureRequestedPartyPersisted`, **`ensureRequestedClientLinkPersisted`**, `mergeTopicAfterPush`, ответ **426** → «Нужно обновить приложение» |
 | `session-log.ts` | журнал сессии (ring buffer), IPC для настроек |
 | `guide-data.ts` | reconcile `has_children` в локальном JSON |
 | `media-layout.ts` | пути `media/{отдел}/{id}/images|files`, миграция legacy → `support/` |
@@ -74,7 +74,8 @@ graphify update .
 | `index.ts` | Express app, роуты |
 | `routes/auth.ts` | login, register, JWT |
 | `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`** (owner, разовый fix legacy-путей медиа) |
-| `routes/topics.ts` | CRUD тем, блокировки, **`PUT /:dept/topic-order`**, **`POST …/topic-order/lock|unlock|renew-lock`** |
+| `routes/topics.ts` | CRUD тем, блокировки, topic-order; поле **`client_topic_id`** (admin → client) |
+| `middleware/min-client-version.ts` | запись на API только с актуальной версией клиента (см. `lib/app-version.ts`) |
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
@@ -94,7 +95,7 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
 | `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
-| `Viewer.tsx`, `Header.tsx` | просмотр/правка; фиксированный topbar; версия в шапке; **телефоны support в шапке** (эксперимент); профиль → «Обновить»; **«Сбросить»**; ⋮ → копия ссылки; ← Назад; Esc |
+| `Viewer.tsx`, `Header.tsx` | просмотр/правка; topbar: ← Назад, **«Клиент»/«Админ»** (связанные темы), телефоны support; профиль → «Обновить»; **«Сбросить»** |
 | `SupportPhonesBar.tsx`, `lib/supportPhones.ts`, `lib/supportPhonesUi.ts` | телефоны техподдержки: формат из цифр, копирование, placement header/strip |
 | `TopicMarkdownImage.tsx` | resolve shared image paths, retry download |
 | `hooks/usePreserveTextareaFocus.ts` | сохранение фокуса textarea при Alt+Shift (Windows) |
@@ -182,9 +183,11 @@ npm run dist:ascii
 7. **Автоподгрузка с сервера** не перезаписывает локальные правки темы, пока в очереди `pending-operations` или `hasPendingChanges` (кроме force sync).
 8. **Legacy-пути медиа в БД после import:** в `media_files` могут остаться `media/images/uuid.jpg`, файлы на диске — `media/{отдел}/{id}/images/uuid.jpg` → sync 404 при «Синхронизировать». Fix: один раз `fix-media-paths.js --apply` (см. `docs/fix-media-paths.md`); файлы на диске не перемещает. **Production (9 сент.):** fix применён (107 записей).
 9. **Auto-update 1.4.0:** требует deploy сервера с `GET /app/updates/*` и публикации `latest.yml` + blockmap через `upload-release.js`.
-10. **Reorder + party categories:** на production нужны миграции **004–006**; **007** (`topic_order_locks`) — для одновременного reorder; без 007 lock API 404, без 004–006 reorder не сохраняется на сервере.
+10. **Reorder + party categories:** на production нужны миграции **004–007**; **008** — `client_topic_id` (admin↔client).
 11. **Reorder:** порядок на сервер уходит только при «Завершить редактирование»; перед входом — pull порядка + lock; unlock после успешного PUT.
 12. **Первый вход в reorder:** локально проставляет `sort_index` по текущему порядку (без push до «Завершить»).
+13. **Минимальная версия клиента:** API отклоняет запись (426), если `X-Rest-Info-Client-Version` старее последнего `app_releases`; без записи в `app_releases` проверка выключена.
+14. **Admin↔client link:** пока production API без **008**, связь держится локально после push; для общей БД — деплой **008** + клиент с заголовком версии.
 
 ## Правила для агента
 

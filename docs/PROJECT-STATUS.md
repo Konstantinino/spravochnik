@@ -1,6 +1,6 @@
 # REST INFO — статус проекта (handoff)
 
-Обновлено: 2026-09-25
+Обновлено: 2026-09-28
 
 ## Текущая фаза
 
@@ -8,7 +8,7 @@
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows (25 сент.): медиа `media/{отдел}/{id}/images|files`, фото на сервер при сохранении темы, автоподгрузка чужих правок без перезапуска, **тема остаётся открытой после сохранения** (Esc закрывает / «← Назад» при переходе по ссылке; ручная смена фильтра списка — сбрасывает выбор). Setup **1.4.5** (общие фото между темами, телефоны техподдержки в синей шапке столбиком, настройки номеров только «название + цифры» с автоформатом; reorder без автраскрытия всех папок). Production: nginx `client_max_body_size` ≥120M для upload Setup (~81 МБ), иначе **413**. **Миграции 004–007** на production — reorder, категории «Ошибки»/«Дополнительно», блокировка порядка (`topic_order_locks`). Для телефонов — деплой API с `GET /app/support-phones`, `GET/PUT /admin/support-phones` (данные в `sync_state`, без отдельной миграции).
+Локально на Windows (28 сент.): медиа `media/{отдел}/{id}/images|files`, автоподгрузка чужих правок, **тема остаётся открытой после сохранения**. Setup **1.4.5** + сессия: оформление фото в теме (тень, нижняя синяя полоска); категория **«Администратор»** (party `additional`); связка admin↔client (`client_topic_id`, миграция **008**); кнопки **«Клиент»/«Админ»** в topbar. Production: nginx `client_max_body_size` ≥120M; **миграции 004–008**. **Минимальная версия клиента для записи:** `X-Rest-Info-Client-Version`, порог = последний `app_releases` (иначе **426**); чтение/sync pull без ограничений. Env: `SKIP_MIN_CLIENT_VERSION`, `MIN_CLIENT_VERSION`. Пока production без **008** — связь admin↔client сохраняется локально после push (`server-sync`), на сервер не реплицируется.
 
 **Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
@@ -25,7 +25,8 @@
 - [x] Sync: `GET /sync/changes` (full + incremental)
 - [x] App updates: `GET /app/update`, download Setup.exe; **`GET /app/updates/*`** — static `latest.yml` + blockmap для electron-updater (1.4.0+)
 - [x] Admin: users, роли **owner / admin / editor / user**, whitelist, releases, **PUT /admin/users/:id**, **POST /admin/transfer-ownership**, **GET /admin/storage-stats** (только owner)
-- [x] Миграции `002_user_department.sql`, `003_owner_role.sql`, **`004_topic_sort_index.sql`**, **`005_topic_party_errors.sql`**, **`006_topic_party_additional.sql`**, **`007_topic_order_locks.sql`**
+- [x] Миграции `002`–`007` + **`008_client_topic_link.sql`** (`client_topic_id` для admin-тем)
+- [x] **`middleware/min-client-version.ts`** — блок POST/PUT/DELETE, если версия клиента старее последнего релиза (`lib/app-version.ts`)
 - [x] **`PUT /departments/:dept/topic-order`** — сохранение `sort_index` (reorder списка; требует активной lock-сессии)
 - [x] **`POST /departments/:dept/topic-order/lock|unlock|renew-lock`** — одновременное редактирование порядка (как topic locks)
 - [x] `import-from-json.ts` — импорт из REST-INFO-export
@@ -56,7 +57,8 @@
 - [x] **`fix-media-paths.js`** — разовое исправление путей медиа на сервере с Windows-ПК (как upload-release; см. [fix-media-paths.md](fix-media-paths.md))
 - [x] SettingsPage: роль + Изменить + Удалить в одну строку, модал подтверждения удаления
 - [x] Список тем и подтем — **`sort_index`** внутри группы сiblings, иначе алфавит (`compareTopicsForList` в `data.ts`)
-- [x] **Техподдержка:** фильтры **Все / Поставщик / Заказчик / Ошибки / Дополнительно** (+ Архив); при «Все» — секции-заголовки в sidebar; категория в редакторе тем
+- [x] **Техподдержка:** фильтры **Все / Поставщик / Заказчик / Ошибки / Администратор** (+ Архив); admin↔client link в редакторе; **«Клиент»/«Админ»** в topbar
+- [x] **`server-api.ts`:** заголовок **`X-Rest-Info-Client-Version`**; sync при **426** — «Нужно обновить приложение»
 - [x] **Редактировать порядок** (ПКМ): на **любом** фильтре party; порядок общий (`sort_index`); сохранение на сервер **только при «Завершить»**; перед входом — pull порядка + lock; красная плашка 1 с, если занято
 - [x] **Viewer:** рекурсивное дерево подтем; уровень 2+ — opacity **0.7**
 - [x] Sidebar: папки **свёрнуты** при старте / Ctrl+R; после **сброса поиска** — раскрытие пути к выбранной теме + скролл в **центр** списка

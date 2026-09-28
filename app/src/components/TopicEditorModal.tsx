@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DepartmentId, GuideItem, SupportParty } from '../types'
 import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import {
+  filterTopicsForClientLinkPicker,
   filterTopicsForLinkPicker,
   filterTopicsForParentPicker,
   getItemParty,
@@ -39,6 +40,7 @@ interface TopicEditorModalProps {
     question: string
     answer: string
     parent_id: number | null
+    client_topic_id?: number | null
     party?: SupportParty
     id?: number
     draftId?: string
@@ -69,6 +71,8 @@ export function TopicEditorModal({
   const [party, setParty] = useState<SupportParty>(defaultParty)
   const [attachParent, setAttachParent] = useState(false)
   const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
+  const [attachClientLink, setAttachClientLink] = useState(false)
+  const [selectedClientTopicId, setSelectedClientTopicId] = useState<number | null>(null)
   const [draftId, setDraftId] = useState(() => newDraftId())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -95,6 +99,12 @@ export function TopicEditorModal({
     return filterTopicsForParentPicker(items, party)
   }, [items, showParty, party, linkPickerItems])
 
+  const clientLinkPickerItems = useMemo(
+    () =>
+      filterTopicsForClientLinkPicker(items, mode === 'edit' ? (initial?.id ?? null) : null),
+    [items, mode, initial?.id],
+  )
+
   useEffect(() => {
     if (!open) return
     setQuestion(initial?.question ?? '')
@@ -104,6 +114,10 @@ export function TopicEditorModal({
       mode === 'edit' ? (initial?.parent_id ?? null) : parentId
     setSelectedParentId(initialParent)
     setAttachParent(initialParent != null)
+    const initialClient =
+      mode === 'edit' ? (initial?.client_topic_id ?? null) : null
+    setSelectedClientTopicId(initialClient)
+    setAttachClientLink(initialClient != null)
     setParty(
       mode === 'edit' && initial
         ? getItemParty(initial)
@@ -139,6 +153,10 @@ export function TopicEditorModal({
     setParty(next)
     setAttachParent(false)
     setSelectedParentId(null)
+    if (next !== 'additional') {
+      setAttachClientLink(false)
+      setSelectedClientTopicId(null)
+    }
   }
 
   function handleParentIdChange(id: number | null) {
@@ -272,6 +290,10 @@ export function TopicEditorModal({
       setError('Выберите родительскую тему или снимите галочку')
       return
     }
+    if (showParty && party === 'additional' && attachClientLink && selectedClientTopicId == null) {
+      setError('Выберите клиентскую тему или снимите галочку')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -280,6 +302,12 @@ export function TopicEditorModal({
         question: question.trim(),
         answer,
         parent_id: attachParent ? selectedParentId : null,
+        client_topic_id:
+          showParty && party === 'additional'
+            ? attachClientLink
+              ? selectedClientTopicId
+              : null
+            : undefined,
         party: showParty ? party : undefined,
         id: initial?.id,
         draftId: mode === 'add' ? draftId : undefined,
@@ -372,6 +400,20 @@ export function TopicEditorModal({
             parentId={selectedParentId}
             onParentIdChange={handleParentIdChange}
           />
+
+          {showParty && party === 'additional' && (
+            <ParentTopicField
+              items={clientLinkPickerItems}
+              excludeId={mode === 'edit' ? initial?.id ?? null : null}
+              attach={attachClientLink}
+              onAttachChange={setAttachClientLink}
+              parentId={selectedClientTopicId}
+              onParentIdChange={setSelectedClientTopicId}
+              checkboxLabel="Сделать админ частью другой темы"
+              comboboxAriaLabel="Клиентская тема"
+              pickAnyTopic
+            />
+          )}
 
           <label className="field">
             <span>Текст ответа (Markdown)</span>

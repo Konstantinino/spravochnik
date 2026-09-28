@@ -4,10 +4,13 @@ import remarkGfm from 'remark-gfm'
 import type { DepartmentId, GuideItem, ImageDisplayMap, SupportParty } from '../types'
 import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
 import {
+  filterTopicsForClientLinkPicker,
   filterTopicsForLinkPicker,
   filterTopicsForParentPicker,
+  findAdminTopicForClient,
   getChildren,
   getItemParty,
+  getLinkedClientTopicId,
   topicDisplayLabel,
 } from '../lib/data'
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
@@ -58,6 +61,7 @@ interface ViewerProps {
     question: string
     answer: string
     parent_id: number | null
+    client_topic_id?: number | null
     party?: SupportParty
   }) => Promise<void>
   onSaveImageDisplay: (image_display: ImageDisplayMap | undefined) => Promise<void>
@@ -181,6 +185,8 @@ export function Viewer({
   const [answer, setAnswer] = useState('')
   const [parentId, setParentId] = useState<number | null>(null)
   const [attachParent, setAttachParent] = useState(false)
+  const [attachClientLink, setAttachClientLink] = useState(false)
+  const [clientTopicId, setClientTopicId] = useState<number | null>(null)
   const [party, setParty] = useState<SupportParty>('supplier')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -287,6 +293,9 @@ export function Viewer({
     setAnswer(item.answer ?? '')
     setParentId(item.parent_id ?? null)
     setAttachParent(item.parent_id != null)
+    const linkedClient = item.client_topic_id ?? null
+    setClientTopicId(linkedClient)
+    setAttachClientLink(linkedClient != null)
     setParty(getItemParty(item))
   }, [
     editing,
@@ -294,6 +303,7 @@ export function Viewer({
     item?.question,
     item?.answer,
     item?.parent_id,
+    item?.client_topic_id,
     item?.party,
   ])
 
@@ -322,6 +332,9 @@ export function Viewer({
     setAnswer(item.answer ?? '')
     setParentId(item.parent_id ?? null)
     setAttachParent(item.parent_id != null)
+    const linkedClient = item.client_topic_id ?? null
+    setClientTopicId(linkedClient)
+    setAttachClientLink(linkedClient != null)
     setParty(getItemParty(item))
     onEditStart?.(structuredClone(item))
     setEditing(true)
@@ -361,6 +374,26 @@ export function Viewer({
     if (!showParty) return linkPickerItems
     return filterTopicsForParentPicker(allItems, party)
   }, [allItems, showParty, party, linkPickerItems])
+
+  const clientLinkPickerItems = useMemo(
+    () => filterTopicsForClientLinkPicker(allItems, item?.id ?? null),
+    [allItems, item?.id],
+  )
+
+  const linkedClientTopicId = useMemo(
+    () => (item ? getLinkedClientTopicId(item) : null),
+    [item],
+  )
+
+  const showClientPartButton =
+    showParty &&
+    linkedClientTopicId != null &&
+    allItems.some((i) => Number(i.id) === linkedClientTopicId)
+
+  const linkedAdminTopic = useMemo(() => {
+    if (!item || !showParty) return null
+    return findAdminTopicForClient(allItems, item.id)
+  }, [allItems, item, showParty])
 
   function handleParentIdChange(id: number | null) {
     setParentId(id)
@@ -492,6 +525,10 @@ export function Viewer({
       setError('Выберите родительскую тему или снимите галочку')
       return
     }
+    if (showParty && party === 'additional' && attachClientLink && clientTopicId == null) {
+      setError('Выберите клиентскую тему или снимите галочку')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -499,6 +536,12 @@ export function Viewer({
         question: question.trim(),
         answer,
         parent_id: attachParent ? parentId : null,
+        client_topic_id:
+          showParty && party === 'additional'
+            ? attachClientLink
+              ? clientTopicId
+              : null
+            : undefined,
         party: showParty ? party : undefined,
       })
       setEditing(false)
@@ -880,6 +923,24 @@ export function Viewer({
                   ← Назад
                 </button>
               )}
+              {showClientPartButton && linkedClientTopicId != null && (
+                <button
+                  type="button"
+                  className="btn viewer__part-switch-btn"
+                  onClick={() => onNavigateToTopic(linkedClientTopicId)}
+                >
+                  Клиент
+                </button>
+              )}
+              {linkedAdminTopic && (
+                <button
+                  type="button"
+                  className="btn viewer__part-switch-btn"
+                  onClick={() => onNavigateToTopic(linkedAdminTopic.id)}
+                >
+                  Админ
+                </button>
+              )}
             </div>
 
             <div className="viewer__actions">
@@ -930,6 +991,9 @@ export function Viewer({
                       setAnswer(current.answer ?? '')
                       setParentId(current.parent_id ?? null)
                       setAttachParent(current.parent_id != null)
+                      const linkedClient = current.client_topic_id ?? null
+                      setClientTopicId(linkedClient)
+                      setAttachClientLink(linkedClient != null)
                       setParty(getItemParty(current))
                       onEditStart?.(structuredClone(current))
                       setEditing(true)
@@ -1058,6 +1122,10 @@ export function Viewer({
                   setParty(next)
                   setAttachParent(false)
                   setParentId(null)
+                  if (next !== 'additional') {
+                    setAttachClientLink(false)
+                    setClientTopicId(null)
+                  }
                 }}
               >
                 {SUPPORT_PARTIES.map((p) => (
@@ -1076,6 +1144,19 @@ export function Viewer({
             parentId={parentId}
             onParentIdChange={handleParentIdChange}
           />
+          {showParty && party === 'additional' && (
+            <ParentTopicField
+              items={clientLinkPickerItems}
+              excludeId={current.id}
+              attach={attachClientLink}
+              onAttachChange={setAttachClientLink}
+              parentId={clientTopicId}
+              onParentIdChange={setClientTopicId}
+              checkboxLabel="Сделать админ частью другой темы"
+              comboboxAriaLabel="Клиентская тема"
+              pickAnyTopic
+            />
+          )}
           <TextareaWithNbspButton
             value={answer}
             onValueChange={setAnswer}

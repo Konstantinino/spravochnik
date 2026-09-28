@@ -166,6 +166,27 @@ function asSupportParty(value: unknown, fallback: SupportPartyValue = 'supplier'
     : fallback
 }
 
+function normalizeClientTopicId(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function applyClientTopicLink(
+  target: Record<string, unknown>,
+  party: SupportPartyValue,
+  clientTopicId: unknown,
+): void {
+  if (party !== 'additional') {
+    delete target.client_topic_id
+    return
+  }
+  if (clientTopicId === undefined) return
+  const id = normalizeClientTopicId(clientTopicId)
+  if (id == null) delete target.client_topic_id
+  else target.client_topic_id = id
+}
+
 function ensureDataReady(): void {
   const root = getUserDataRoot()
   const media = getMediaDir()
@@ -1130,6 +1151,7 @@ function registerIpc(): void {
           question: string
           answer: string
           parent_id?: number | null
+          client_topic_id?: number | null
           has_children?: boolean
           party?: SupportPartyValue
           photos?: string[]
@@ -1171,6 +1193,13 @@ function registerIpc(): void {
         ...(payload.departmentId === 'support'
           ? { party: asSupportParty(payload.item.party) }
           : {}),
+      }
+      if (payload.departmentId === 'support') {
+        applyClientTopicLink(
+          newItem,
+          asSupportParty(payload.item.party),
+          payload.item.client_topic_id,
+        )
       }
 
       list.push(newItem)
@@ -1236,6 +1265,7 @@ function registerIpc(): void {
           question: string
           answer: string
           parent_id?: number | null
+          client_topic_id?: number | null
           has_children?: boolean
           party?: SupportPartyValue
           archived?: boolean
@@ -1305,6 +1335,13 @@ function registerIpc(): void {
               party: asSupportParty(payload.item.party, asSupportParty(list[idx].party)),
             }
           : {}),
+      }
+      if (payload.departmentId === 'support') {
+        applyClientTopicLink(
+          list[idx],
+          asSupportParty(payload.item.party, asSupportParty(list[idx].party)),
+          payload.item.client_topic_id,
+        )
       }
 
       const oldArchived = Boolean(list[idx].archived)

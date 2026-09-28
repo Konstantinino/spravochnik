@@ -16,6 +16,10 @@ interface ParentTopicFieldProps {
   onAttachChange: (attach: boolean) => void
   parentId: number | null
   onParentIdChange: (parentId: number | null) => void
+  checkboxLabel?: string
+  comboboxAriaLabel?: string
+  /** Skip parent-tree validation (flat topic pick). */
+  pickAnyTopic?: boolean
 }
 
 const NOT_SELECTED_LABEL = 'не выбрано'
@@ -27,6 +31,9 @@ export function ParentTopicField({
   onAttachChange,
   parentId,
   onParentIdChange,
+  checkboxLabel = 'Сделать подтемой другой темы',
+  comboboxAriaLabel = 'Родительская тема',
+  pickAnyTopic = false,
 }: ParentTopicFieldProps) {
   const [inputText, setInputText] = useState('')
   const [open, setOpen] = useState(false)
@@ -45,9 +52,9 @@ export function ParentTopicField({
   const validOptions = useMemo(() => {
     return items
       .filter((item) => !excluded.has(item.id))
-      .filter((item) => isValidParent(items, excludeId, item.id))
+      .filter((item) => pickAnyTopic || isValidParent(items, excludeId, item.id))
       .sort(compareTopicsForList)
-  }, [items, excluded, excludeId])
+  }, [items, excluded, excludeId, pickAnyTopic])
 
   const filteredOptions = useMemo(() => {
     if (!attach) return []
@@ -181,7 +188,7 @@ export function ParentTopicField({
           checked={attach}
           onChange={(e) => setAttached(e.target.checked)}
         />
-        <span>Сделать подтемой другой темы</span>
+        <span>{checkboxLabel}</span>
       </label>
 
       <div
@@ -198,7 +205,7 @@ export function ParentTopicField({
           aria-disabled={!attach}
           aria-expanded={attach && open}
           aria-haspopup="listbox"
-          aria-label="Родительская тема"
+          aria-label={comboboxAriaLabel}
           placeholder={attach ? 'Поиск темы…' : undefined}
           onFocus={openDropdown}
           onClick={openDropdown}

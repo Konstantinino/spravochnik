@@ -9,6 +9,10 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    watch: {
+      // dist:ascii locks Setup.exe — без ignore dev падает с EBUSY на Windows
+      ignored: ['**/release/**', '**/*.blockmap'],
+    },
   },
   plugins: [
     react(),

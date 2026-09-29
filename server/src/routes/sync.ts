@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query, getGlobalVersion } from '../db/pool.js'
 import { listDepartments } from '../lib/departments.js'
 import { listSubsections, subsectionToClient } from '../lib/subsections.js'
+import { listSupportSections, supportSectionToClient } from '../lib/support-sections.js'
 import { rowToGuideItem, type TopicRow } from '../lib/topics.js'
 import { authMiddleware, optionalAuth, type AuthRequest } from '../middleware/auth.js'
 
@@ -82,6 +83,7 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
           systemLocked: d.systemLocked,
         })),
         subsections: subsectionRows.map(subsectionToClient),
+        supportSections: (await listSupportSections()).map(supportSectionToClient),
         topicsByDept,
         deletedTopics: deletedResult.rows,
         media: mediaResult.rows,
@@ -180,6 +182,7 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
         systemLocked: d.systemLocked,
       })),
       subsections: subsectionRows.map(subsectionToClient),
+      supportSections: (await listSupportSections()).map(supportSectionToClient),
       topicsByDept,
       deletedTopics: deletedTopics.rows,
       media: changedMedia.rows,

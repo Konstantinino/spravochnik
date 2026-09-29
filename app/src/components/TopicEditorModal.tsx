@@ -4,15 +4,20 @@ import type {
   DepartmentId,
   DepartmentSubsection,
   GuideItem,
-  SupportParty,
+  SupportTopicSection,
 } from '../types'
-import { DEPARTMENTS, SUPPORT_PARTIES, SUPPORT_PARTY_LABELS, workDepartmentsFrom } from '../types'
+import { DEPARTMENTS, supportPartySelectOptions, workDepartmentsFrom } from '../types'
 import {
   filterTopicsForClientLinkPicker,
   filterTopicsForLinkPicker,
   filterTopicsForParentPicker,
   getItemParty,
 } from '../lib/data'
+import {
+  editorSubsectionsForDepartment,
+  isEditableRootTopic,
+  sectionRequiredErrorMessage,
+} from '../lib/topicSectionPickers'
 import {
   formatFileMarkdownLink,
   formatSharedImageMarkdown,
@@ -36,11 +41,14 @@ interface TopicEditorModalProps {
   departmentId: DepartmentId
   departments?: Department[]
   subsections?: DepartmentSubsection[]
+  supportSections?: SupportTopicSection[]
   /** When adding a subtopic — parent id; null for root */
   parentId: number | null
   items: GuideItem[]
   /** Default Поставщик/Заказчик from sidebar filter (support only) */
-  defaultParty?: SupportParty
+  defaultParty?: string
+  /** Раздел темы из фильтра sidebar (СПП, юристы и т.д.) */
+  defaultSubsectionId?: string
   initial?: GuideItem | null
   onClose: () => void
   onSave: (payload: {
@@ -49,7 +57,7 @@ interface TopicEditorModalProps {
     answer: string
     parent_id: number | null
     client_topic_id?: number | null
-    party?: SupportParty
+    party?: string
     subsection_id?: string | null
     id?: number
     draftId?: string
@@ -69,9 +77,11 @@ export function TopicEditorModal({
   departmentId,
   departments = workDepartmentsFrom(DEPARTMENTS),
   subsections = [],
+  supportSections = [],
   parentId,
   items,
   defaultParty = 'supplier',
+  defaultSubsectionId,
   initial,
   onClose,
   onSave,
@@ -80,7 +90,7 @@ export function TopicEditorModal({
   const [answer, setAnswer] = useState('')
   const [targetDept, setTargetDept] = useState<DepartmentId>(departmentId)
   const [targetSubsectionId, setTargetSubsectionId] = useState('')
-  const [party, setParty] = useState<SupportParty>(defaultParty)
+  const [party, setParty] = useState(defaultParty)
   const [attachParent, setAttachParent] = useState(false)
   const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
   const [attachClientLink, setAttachClientLink] = useState(false)
@@ -104,17 +114,24 @@ export function TopicEditorModal({
 
   const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
 
-  const targetDeptSubsections = useMemo(
-    () =>
-      subsections
-        .filter((s) => s.departmentId === targetDept)
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru')),
-    [subsections, targetDept],
+  const isRootTopic = isEditableRootTopic(
+    attachParent,
+    mode,
+    mode === 'edit' ? initial?.parent_id : null,
   )
 
-  const showSubsectionPicker =
-    targetDeptSubsections.length > 0 &&
-    (mode === 'add' ? !attachParent : initial?.parent_id == null)
+  const targetDeptSubsections = useMemo(
+    () => editorSubsectionsForDepartment(subsections, targetDept, party),
+    [subsections, targetDept, party],
+  )
+
+  const showPartyPicker = showParty && isRootTopic
+  const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
+
+  const partySelectOptions = useMemo(
+    () => supportPartySelectOptions(supportSections, party),
+    [supportSections, party],
+  )
 
   const linkPickerItems = useMemo(() => filterTopicsForLinkPicker(items), [items])
 
@@ -134,11 +151,19 @@ export function TopicEditorModal({
     setQuestion(initial?.question ?? '')
     setAnswer(initial?.answer ?? '')
     setTargetDept(departmentId)
-    const subsForDept = subsections.filter((s) => s.departmentId === departmentId)
+    const initialParty =
+      mode === 'edit' && initial ? getItemParty(initial) : defaultParty
+    const subsForDept = editorSubsectionsForDepartment(
+      subsections,
+      departmentId,
+      initialParty,
+    )
     const initialSub =
       mode === 'edit' && initial?.subsection_id
         ? initial.subsection_id
-        : subsForDept[0]?.id ?? ''
+        : defaultSubsectionId && subsForDept.some((s) => s.id === defaultSubsectionId)
+          ? defaultSubsectionId
+          : subsForDept[0]?.id ?? ''
     setTargetSubsectionId(initialSub)
     const initialParent =
       mode === 'edit' ? (initial?.parent_id ?? null) : parentId
@@ -157,7 +182,17 @@ export function TopicEditorModal({
     setError(null)
     clearPicker()
     setSaving(false)
-  }, [open, initial, departmentId, parentId, mode, defaultParty, clearPicker, subsections])
+  }, [
+    open,
+    initial,
+    departmentId,
+    parentId,
+    mode,
+    defaultParty,
+    defaultSubsectionId,
+    clearPicker,
+    subsections,
+  ])
 
   if (!open) return null
 
@@ -179,10 +214,12 @@ export function TopicEditorModal({
     onPickTopicLink(item, answer, setAnswer)
   }
 
-  function handlePartyChange(next: SupportParty) {
+  function handlePartyChange(next: string) {
     setParty(next)
     setAttachParent(false)
     setSelectedParentId(null)
+    const nextSubs = editorSubsectionsForDepartment(subsections, targetDept, next)
+    setTargetSubsectionId(nextSubs[0]?.id ?? '')
     if (next !== 'additional') {
       setAttachClientLink(false)
       setSelectedClientTopicId(null)
@@ -325,7 +362,9 @@ export function TopicEditorModal({
       return
     }
     if (showSubsectionPicker && !targetSubsectionId) {
-      setError('Выберите подраздел')
+      setError(
+        sectionRequiredErrorMessage(targetDept, targetDeptSubsections.length > 0),
+      )
       return
     }
     setSaving(true)
@@ -386,7 +425,7 @@ export function TopicEditorModal({
                 onChange={(e) => {
                   const next = e.target.value as DepartmentId
                   setTargetDept(next)
-                  const nextSubs = subsections.filter((s) => s.departmentId === next)
+                  const nextSubs = editorSubsectionsForDepartment(subsections, next, party)
                   setTargetSubsectionId(nextSubs[0]?.id ?? '')
                   if (next !== 'support') {
                     setSelectedParentId(null)
@@ -403,9 +442,26 @@ export function TopicEditorModal({
             </label>
           )}
 
+          {showPartyPicker && (
+            <label className="field">
+              <span>Раздел</span>
+              <select
+                value={party}
+                required
+                onChange={(e) => handlePartyChange(e.target.value)}
+              >
+                {partySelectOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           {showSubsectionPicker && (
             <label className="field">
-              <span>Подраздел</span>
+              <span>{targetDept === 'support' ? 'Подраздел' : 'Раздел'}</span>
               <select
                 value={targetSubsectionId}
                 required
@@ -414,22 +470,6 @@ export function TopicEditorModal({
                 {targetDeptSubsections.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {showParty && (
-            <label className="field">
-              <span>Категория</span>
-              <select
-                value={party}
-                onChange={(e) => handlePartyChange(e.target.value as SupportParty)}
-              >
-                {SUPPORT_PARTIES.map((p) => (
-                  <option key={p} value={p}>
-                    {SUPPORT_PARTY_LABELS[p]}
                   </option>
                 ))}
               </select>

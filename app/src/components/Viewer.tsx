@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { DepartmentId, GuideItem, ImageDisplayMap, SupportParty } from '../types'
-import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
+import type {
+  DepartmentId,
+  DepartmentSubsection,
+  GuideItem,
+  ImageDisplayMap,
+  SupportTopicSection,
+} from '../types'
+import { supportPartySelectOptions } from '../types'
 import {
   filterTopicsForClientLinkPicker,
   filterTopicsForLinkPicker,
@@ -37,6 +43,11 @@ import {
   insertPastedImageReferenceAsync,
   wrapSelectionWithTopicLink,
 } from '../lib/textInsert'
+import {
+  editorSubsectionsForDepartment,
+  isEditableRootTopic,
+  sectionRequiredErrorMessage,
+} from '../lib/topicSectionPickers'
 import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ImageScaleDialog } from './ImageScaleDialog'
@@ -62,7 +73,8 @@ interface ViewerProps {
     answer: string
     parent_id: number | null
     client_topic_id?: number | null
-    party?: SupportParty
+    party?: string
+    subsection_id?: string | null
   }) => Promise<void>
   onSaveImageDisplay: (image_display: ImageDisplayMap | undefined) => Promise<void>
   onDelete: () => Promise<void>
@@ -75,6 +87,8 @@ interface ViewerProps {
   startEditRequest?: { topicId: number; seq: number } | null
   onStartEditRequestHandled?: () => void
   reorderMode?: boolean
+  supportSections?: SupportTopicSection[]
+  subsections?: DepartmentSubsection[]
 }
 
 type ImgMenuState = {
@@ -161,6 +175,8 @@ export function Viewer({
   items,
   allItems,
   departmentId,
+  supportSections = [],
+  subsections = [],
   canEdit,
   isAdmin,
   canGoBack,
@@ -187,7 +203,8 @@ export function Viewer({
   const [attachParent, setAttachParent] = useState(false)
   const [attachClientLink, setAttachClientLink] = useState(false)
   const [clientTopicId, setClientTopicId] = useState<number | null>(null)
-  const [party, setParty] = useState<SupportParty>('supplier')
+  const [party, setParty] = useState('supplier')
+  const [subsectionId, setSubsectionId] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -297,6 +314,9 @@ export function Viewer({
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
     setParty(getItemParty(item))
+    const subs = editorSubsectionsForDepartment(subsections, departmentId, getItemParty(item))
+    const sid = String(item.subsection_id ?? '').trim()
+    setSubsectionId(sid && subs.some((s) => s.id === sid) ? sid : subs[0]?.id ?? '')
   }, [
     editing,
     item?.id,
@@ -305,6 +325,9 @@ export function Viewer({
     item?.parent_id,
     item?.client_topic_id,
     item?.party,
+    item?.subsection_id,
+    subsections,
+    departmentId,
   ])
 
   useEffect(() => {
@@ -336,6 +359,9 @@ export function Viewer({
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
     setParty(getItemParty(item))
+    const subs = editorSubsectionsForDepartment(subsections, departmentId, getItemParty(item))
+    const sid = String(item.subsection_id ?? '').trim()
+    setSubsectionId(sid && subs.some((s) => s.id === sid) ? sid : subs[0]?.id ?? '')
     onEditStart?.(structuredClone(item))
     setEditing(true)
     onStartEditRequestHandled?.()
@@ -364,6 +390,37 @@ export function Viewer({
   }, [imgMenu, topicMenu])
 
   const showParty = departmentId === 'support'
+
+  const isRootTopic = isEditableRootTopic(
+    attachParent,
+    'edit',
+    item?.parent_id ?? null,
+  )
+
+  const targetDeptSubsections = useMemo(
+    () => editorSubsectionsForDepartment(subsections, departmentId, party),
+    [subsections, departmentId, party],
+  )
+
+  const showPartyPicker = showParty && isRootTopic
+  const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
+
+  const partySelectOptions = useMemo(
+    () => supportPartySelectOptions(supportSections, party),
+    [supportSections, party],
+  )
+
+  function handlePartyChange(next: string) {
+    setParty(next)
+    setAttachParent(false)
+    setParentId(null)
+    const nextSubs = editorSubsectionsForDepartment(subsections, departmentId, next)
+    setSubsectionId(nextSubs[0]?.id ?? '')
+    if (next !== 'additional') {
+      setAttachClientLink(false)
+      setClientTopicId(null)
+    }
+  }
 
   const linkPickerItems = useMemo(
     () => filterTopicsForLinkPicker(allItems),
@@ -529,6 +586,12 @@ export function Viewer({
       setError('Выберите клиентскую тему или снимите галочку')
       return
     }
+    if (showSubsectionPicker && !subsectionId) {
+      setError(
+        sectionRequiredErrorMessage(departmentId, targetDeptSubsections.length > 0),
+      )
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -543,6 +606,7 @@ export function Viewer({
               : null
             : undefined,
         party: showParty ? party : undefined,
+        ...(showSubsectionPicker ? { subsection_id: subsectionId } : {}),
       })
       setEditing(false)
     } catch (e) {
@@ -1112,25 +1176,33 @@ export function Viewer({
 
       {editing ? (
         <div className="viewer__editor">
-          {showParty && (
+          {showPartyPicker && (
             <label className="field">
-              <span>Категория</span>
+              <span>Раздел</span>
               <select
                 value={party}
-                onChange={(e) => {
-                  const next = e.target.value as SupportParty
-                  setParty(next)
-                  setAttachParent(false)
-                  setParentId(null)
-                  if (next !== 'additional') {
-                    setAttachClientLink(false)
-                    setClientTopicId(null)
-                  }
-                }}
+                required
+                onChange={(e) => handlePartyChange(e.target.value)}
               >
-                {SUPPORT_PARTIES.map((p) => (
-                  <option key={p} value={p}>
-                    {SUPPORT_PARTY_LABELS[p]}
+                {partySelectOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {showSubsectionPicker && (
+            <label className="field">
+              <span>{departmentId === 'support' ? 'Подраздел' : 'Раздел'}</span>
+              <select
+                value={subsectionId}
+                required
+                onChange={(e) => setSubsectionId(e.target.value)}
+              >
+                {targetDeptSubsections.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
                   </option>
                 ))}
               </select>

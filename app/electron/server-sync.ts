@@ -12,7 +12,11 @@ import {
   resolveExistingMediaAbsolutePath,
 } from './media-layout'
 import { applyDepartmentsFromSync } from './departments-store'
-import { applySubsectionsFromSync } from './subsections-store'
+import { applySubsectionsFromSync, replaceSubsectionsFromSync } from './subsections-store'
+import {
+  applySupportSectionsFromSync,
+  readStoredSupportSections,
+} from './support-sections-store'
 import {
   readSettings,
   setPendingChanges,
@@ -22,7 +26,12 @@ import {
   setWhitelist,
   type AccountsData,
 } from './auth-store'
-import { hasPendingMedia, readPendingMedia, writePendingMedia } from './pending-media'
+import {
+  clearPendingMedia,
+  hasPendingMedia,
+  readPendingMedia,
+  writePendingMedia,
+} from './pending-media'
 import {
   clearPendingOperations,
   hasPendingOperations,
@@ -108,6 +117,14 @@ const PULL_LOADING_LABEL = 'Загрузка данных…'
 function hasUnsyncedLocalWork(): boolean {
   const settings = readSettings()
   return settings.hasPendingChanges || hasPendingOperations() || hasPendingMedia()
+}
+
+/** После принудительной загрузки с сервера — локальные очереди не нужны. */
+function clearLocalSyncPendingState(): void {
+  setPendingChanges(false)
+  clearPendingOperations()
+  clearPendingMedia()
+  pendingConflicts = []
 }
 
 function emit(partial: Partial<SyncStatus> & Pick<SyncStatus, 'code' | 'label'>): SyncStatus {
@@ -298,13 +315,20 @@ function isSupportPartyValue(
   )
 }
 
+function isPersistableSupportPartyId(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim()) return false
+  const id = value.trim()
+  if (isSupportPartyValue(id)) return true
+  return readStoredSupportSections().some((s) => s.id === id)
+}
+
 /** Keep requested support party locally if an outdated API downgraded it to supplier. */
 function ensureRequestedPartyPersisted(
   deptId: DepartmentId,
   topicId: number,
   requestedParty: unknown,
 ): void {
-  if (deptId !== 'support' || !isSupportPartyValue(requestedParty)) return
+  if (deptId !== 'support' || !isPersistableSupportPartyId(requestedParty)) return
 
   const dept = departmentById(deptId)
   const filePath = path.join(getUserDataRoot(), dept.fileName)
@@ -443,6 +467,15 @@ interface SyncChangesResponse {
     departmentId: string
     label: string
     sortOrder: number
+    party?: string | null
+    isArchiveLost?: boolean
+    isArchiveArchived?: boolean
+  }>
+  supportSections?: Array<{
+    id: string
+    label: string
+    sortOrder: number
+    systemLocked?: boolean
   }>
   topicsByDept: Record<string, Record<string, unknown>[]>
   deletedTopics: Array<{ department_id: string; id: number; deleted_at: string }>
@@ -480,6 +513,8 @@ export function showSyncLoadingIfOnline(): SyncStatus {
 export async function pullFromServer(options?: {
   force?: boolean
   silent?: boolean
+  /** Сбросить локальные очереди и принять снимок сервера (полная синхронизация из настроек). */
+  clearPending?: boolean
 }): Promise<SyncStatus> {
   const settings = readSettings()
   if (!settings.serverUrl.trim()) {
@@ -529,8 +564,15 @@ export async function pullFromServer(options?: {
     if (changes.departments?.length) {
       applyDepartmentsFromSync(changes.departments)
     }
-    if (changes.subsections?.length) {
-      applySubsectionsFromSync(changes.subsections)
+    if (Array.isArray(changes.subsections)) {
+      if (changes.full && options?.clearPending) {
+        replaceSubsectionsFromSync(changes.subsections)
+      } else {
+        applySubsectionsFromSync(changes.subsections)
+      }
+    }
+    if (Array.isArray(changes.supportSections)) {
+      applySupportSectionsFromSync(changes.supportSections)
     }
 
     const departments = getDepartments()
@@ -627,8 +669,11 @@ export async function pullFromServer(options?: {
     if (!options?.silent) {
       void checkForUpdates()
     }
-    if (options?.force && !options?.silent) {
-      appendSessionLog('info', 'sync', 'Полная синхронизация завершена')
+    if (options?.clearPending) {
+      clearLocalSyncPendingState()
+      if (!options?.silent) {
+        appendSessionLog('info', 'sync', 'Полная синхронизация завершена, локальные очереди сброшены')
+      }
     }
     return finishPullStatus(() =>
       emit({
@@ -1064,10 +1109,8 @@ export async function pushAccountsFile(): Promise<boolean> {
 }
 
 export async function discardLocalChanges(): Promise<SyncStatus> {
-  setPendingChanges(false)
-  clearPendingOperations()
   pendingConflicts = []
-  return pullFromServer({ force: true })
+  return pullFromServer({ force: true, clearPending: true })
 }
 
 export function refreshStatusFromSettings(): SyncStatus {

@@ -27,6 +27,7 @@ import {
   STAFF_ROLES,
   CONTENT_EDITOR_ROLES,
   canEditDepartment,
+  canManageTopicSectionsForDepartment,
   type DepartmentId,
   type UserRole,
   type WorkDepartmentId,
@@ -113,6 +114,7 @@ import {
   validateServerUrl,
   createDepartmentOnServer,
   createSubsectionOnServer,
+  type AdminSubsectionDto,
   deleteDepartmentOnServer,
   deleteSubsectionOnServer,
   fetchAdminDepartments,
@@ -123,9 +125,32 @@ import { mergeDepartmentPatch } from './departments-store'
 import {
   getSubsectionsForDepartment,
   mergeSubsectionPatch,
+  mergeSubsectionsLists,
   readStoredSubsections,
   removeSubsectionLocal,
+  writeStoredSubsections,
+  type StoredSubsection,
 } from './subsections-store'
+import {
+  applySupportSectionsFromSync,
+  mergeSupportSectionPatch,
+  readStoredSupportSections,
+  removeSupportSectionLocal,
+  type StoredSupportSection,
+} from './support-sections-store'
+import {
+  ARCHIVE_ARCHIVED_SUBSECTION_ID,
+  ARCHIVE_LOST_SUBSECTION_ID,
+  applySupportArchiveSubsectionToRow,
+  clearGuideTopicSubsectionId,
+  moveGuideTopicsToArchiveLost,
+} from '../src/lib/archiveLost'
+import {
+  createSupportSectionOnServer,
+  deleteSupportSectionOnServer,
+  fetchAdminSupportSections,
+  updateSupportSectionOnServer,
+} from './server-api'
 import {
   checkForUpdates,
   downloadLatestRelease,
@@ -174,10 +199,81 @@ protocol.registerSchemesAsPrivileged([
 const SUPPORT_PARTY_VALUES = ['supplier', 'customer', 'errors', 'additional'] as const
 type SupportPartyValue = (typeof SUPPORT_PARTY_VALUES)[number]
 
-function asSupportParty(value: unknown, fallback: SupportPartyValue = 'supplier'): SupportPartyValue {
-  return SUPPORT_PARTY_VALUES.includes(value as SupportPartyValue)
-    ? (value as SupportPartyValue)
-    : fallback
+function normalizeSupportPartyId(value: unknown, fallback = 'supplier'): string {
+  if (typeof value !== 'string' || !value.trim()) return fallback
+  const id = value.trim()
+  if (SUPPORT_PARTY_VALUES.includes(id as SupportPartyValue)) return id
+  if (readStoredSupportSections().some((s) => s.id === id)) return id
+  return fallback
+}
+
+function ensureArchiveLostSubsectionLocal(): void {
+  const list = readStoredSubsections()
+  if (list.some((s) => s.id === ARCHIVE_LOST_SUBSECTION_ID)) return
+  mergeSubsectionPatch({
+    id: ARCHIVE_LOST_SUBSECTION_ID,
+    departmentId: 'support',
+    label: 'Потерянные',
+    sortOrder: 5,
+    party: null,
+    isArchiveLost: true,
+  })
+}
+
+function ensureArchiveArchivedSubsectionLocal(): void {
+  const list = readStoredSubsections()
+  if (list.some((s) => s.id === ARCHIVE_ARCHIVED_SUBSECTION_ID)) return
+  mergeSubsectionPatch({
+    id: ARCHIVE_ARCHIVED_SUBSECTION_ID,
+    departmentId: 'support',
+    label: 'Архивированные',
+    sortOrder: 3,
+    party: null,
+    isArchiveArchived: true,
+  })
+}
+
+function archiveSupportTopicsLocally(match: (row: Record<string, unknown>) => boolean): number {
+  const dept = departmentById('support')
+  const data = readGuideFile(dept.fileName) as Record<string, unknown>
+  const listKey = dept.listKey
+  const list = (data[listKey] as Array<Record<string, unknown>>) || []
+  ensureArchiveLostSubsectionLocal()
+  const moved = moveGuideTopicsToArchiveLost(list, match)
+  if (moved > 0) {
+    data[listKey] = list
+    writeGuideFile(dept.fileName, data)
+  }
+  return moved
+}
+
+function clearSupportSubsectionLocally(subsectionId: string): number {
+  const dept = departmentById('support')
+  const data = readGuideFile(dept.fileName) as Record<string, unknown>
+  const listKey = dept.listKey
+  const list = (data[listKey] as Array<Record<string, unknown>>) || []
+  const cleared = clearGuideTopicSubsectionId(
+    list,
+    (row) => String(row.subsection_id ?? '').trim() === subsectionId,
+  )
+  if (cleared > 0) {
+    data[listKey] = list
+    writeGuideFile(dept.fileName, data)
+    markLocalChange()
+  }
+  return cleared
+}
+
+function rootSubsectionsForTopic(
+  departmentId: string,
+  party: string | undefined,
+): StoredSubsection[] {
+  const all = getSubsectionsForDepartment(departmentId)
+  if (departmentId === 'support') {
+    const p = normalizeSupportPartyId(party)
+    return all.filter((s) => (s.party ?? null) === p)
+  }
+  return all.filter((s) => !s.party)
 }
 
 function normalizeClientTopicId(value: unknown): number | null {
@@ -188,7 +284,7 @@ function normalizeClientTopicId(value: unknown): number | null {
 
 function applyClientTopicLink(
   target: Record<string, unknown>,
-  party: SupportPartyValue,
+  party: string,
   clientTopicId: unknown,
 ): void {
   if (party !== 'additional') {
@@ -231,6 +327,19 @@ function requireEditDepartment(departmentId: DepartmentId): void {
   requireRole(user, CONTENT_EDITOR_ROLES)
   if (!canEditDepartment(user!.role, user!.departmentId, departmentId)) {
     throw new Error('Редактор может изменять только свой отдел')
+  }
+}
+
+function requireManageTopicSections(departmentId: string): void {
+  const user = getCurrentUser()
+  requireRole(user, STAFF_ROLES)
+  const isOwner = Boolean(user!.isOwner) || user!.role === 'owner'
+  if (
+    !canManageTopicSectionsForDepartment(user!.role, user!.departmentId, departmentId, {
+      isOwner,
+    })
+  ) {
+    throw new Error('Администратор может настраивать разделы только своего отдела')
   }
 }
 
@@ -321,6 +430,43 @@ function readGuideFile(fileName: string): unknown {
 function writeGuideFile(fileName: string, data: unknown): void {
   const filePath = path.join(getUserDataRoot(), fileName)
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8')
+}
+
+/** Подставить разделы из subsection_id тем, если их ещё нет в subsections.json */
+function inferSubsectionsFromLocalGuides(existing: StoredSubsection[]): StoredSubsection[] {
+  const byId = new Map(existing.map((s) => [s.id, s]))
+  const out = [...existing]
+  for (const dept of getDepartments()) {
+    if (dept.listKey !== 'questions') continue
+    let data: Record<string, unknown>
+    try {
+      data = readGuideFile(dept.fileName) as Record<string, unknown>
+    } catch {
+      continue
+    }
+    const list = (data[dept.listKey] as Array<Record<string, unknown>>) ?? []
+    for (const row of list) {
+      const sid = typeof row.subsection_id === 'string' ? row.subsection_id.trim() : ''
+      if (!sid || byId.has(sid)) continue
+      const inferred: StoredSubsection = {
+        id: sid,
+        departmentId: dept.id,
+        label: sid,
+        sortOrder: 9990,
+        ...(dept.id === 'support'
+          ? { party: normalizeSupportPartyId(row.party) }
+          : { party: null }),
+      }
+      byId.set(sid, inferred)
+      out.push(inferred)
+    }
+  }
+  return out.sort(
+    (a, b) =>
+      a.departmentId.localeCompare(b.departmentId) ||
+      a.sortOrder - b.sortOrder ||
+      a.id.localeCompare(b.id),
+  )
 }
 
 async function refreshDeptTopicOrderFromServer(
@@ -509,7 +655,68 @@ function registerIpc(): void {
     })),
   )
 
-  ipcMain.handle('get-subsections', () => readStoredSubsections())
+  ipcMain.handle('get-subsections', async () => {
+    let list = readStoredSubsections()
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim()) {
+      try {
+        if (await isServerReachable()) {
+          const fromServer: StoredSubsection[] = []
+          for (const dept of await fetchAdminDepartments()) {
+            for (const sub of dept.subsections ?? []) {
+              fromServer.push({
+                id: sub.id,
+                departmentId: sub.departmentId,
+                label: sub.label,
+                sortOrder: sub.sortOrder,
+                party:
+                  typeof sub.party === 'string' && sub.party.trim()
+                    ? sub.party.trim()
+                    : null,
+                isArchiveLost: Boolean(sub.isArchiveLost) || sub.id === ARCHIVE_LOST_SUBSECTION_ID,
+                isArchiveArchived:
+                  Boolean(sub.isArchiveArchived) || sub.id === ARCHIVE_ARCHIVED_SUBSECTION_ID,
+              })
+            }
+          }
+          if (fromServer.length > 0) {
+            list = mergeSubsectionsLists(list, fromServer)
+            writeStoredSubsections(list)
+          }
+        }
+      } catch (err) {
+        appendSessionLog(
+          'warn',
+          'subsections',
+          err instanceof Error ? err.message : 'Не удалось загрузить разделы тем с сервера',
+        )
+      }
+    }
+    return inferSubsectionsFromLocalGuides(list)
+  })
+
+  ipcMain.handle('get-support-sections', async () => {
+    let list = readStoredSupportSections()
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim()) {
+      try {
+        if (await isServerReachable()) {
+          const fromServer = await fetchAdminSupportSections()
+          if (fromServer.length > 0) {
+            applySupportSectionsFromSync(fromServer)
+            list = readStoredSupportSections()
+          }
+        }
+      } catch (err) {
+        appendSessionLog(
+          'warn',
+          'support-sections',
+          err instanceof Error ? err.message : 'Не удалось загрузить разделы с сервера',
+        )
+      }
+    }
+    return list
+  })
 
   ipcMain.handle('get-data-path', () => getUserDataRoot())
 
@@ -1040,18 +1247,74 @@ function registerIpc(): void {
 
   ipcMain.handle(
     'admin:create-subsection',
-    async (_e, payload: { departmentId: string; label: string }) => {
-      requireRole(getCurrentUser(), STAFF_ROLES)
-      const created = await createSubsectionOnServer(payload.departmentId, {
-        label: payload.label,
+    async (_e, payload: { departmentId: string; label: string; party?: string | null }) => {
+      requireManageTopicSections(payload.departmentId)
+      const label = payload.label.trim()
+      if (!label) throw new Error('Укажите название')
+      const settings = readSettings()
+      const localFallback = (): StoredSubsection => {
+        const base = `${payload.departmentId}__${label
+          .toLowerCase()
+          .replace(/[^a-z0-9а-яё]+/gi, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 40) || 'part'}`
+        let id = base
+        const existing = readStoredSubsections()
+        let n = 2
+        while (existing.some((s) => s.id === id)) {
+          id = `${base}_${n}`
+          n += 1
+        }
+        const sortOrder =
+          Math.max(0, ...existing.filter((s) => s.departmentId === payload.departmentId).map((s) => s.sortOrder)) +
+          10
+        return {
+          id,
+          departmentId: payload.departmentId,
+          label,
+          sortOrder,
+          party:
+            payload.departmentId === 'support' && typeof payload.party === 'string'
+              ? payload.party.trim()
+              : null,
+        }
+      }
+
+      if (!settings.serverUrl.trim()) {
+        const row = localFallback()
+        mergeSubsectionPatch(row)
+        markLocalChange()
+        return row
+      }
+
+      let created: AdminSubsectionDto
+      try {
+        created = await createSubsectionOnServer(payload.departmentId, {
+          label,
+          party: payload.party ?? null,
+        })
+      } catch (err) {
+        appendSessionLog(
+          'warn',
+          'admin/subsections',
+          err instanceof Error ? err.message : 'Создание на сервере не удалось, сохранено локально',
+        )
+        const row = localFallback()
+        mergeSubsectionPatch(row)
+        markLocalChange()
+        return row
+      }
+      const merged = mergeSubsectionPatch({
+        ...created,
+        party: created.party ?? payload.party ?? null,
+        isArchiveLost: created.isArchiveLost ?? false,
       })
-      mergeSubsectionPatch(created)
       try {
         await pullFromYandex({ force: true })
       } catch {
         /* subsection already local */
       }
-      return created
+      return merged.find((s) => s.id === created.id) ?? created
     },
   )
 
@@ -1059,6 +1322,8 @@ function registerIpc(): void {
     'admin:update-subsection',
     async (_e, payload: { id: string; label: string }) => {
       requireRole(getCurrentUser(), STAFF_ROLES)
+      const existing = readStoredSubsections().find((s) => s.id === payload.id)
+      if (existing) requireManageTopicSections(existing.departmentId)
       const updated = await updateSubsectionOnServer(payload.id, { label: payload.label })
       mergeSubsectionPatch(updated)
       return updated
@@ -1067,8 +1332,131 @@ function registerIpc(): void {
 
   ipcMain.handle('admin:delete-subsection', async (_e, id: string) => {
     requireRole(getCurrentUser(), STAFF_ROLES)
-    await deleteSubsectionOnServer(id)
+    const existing = readStoredSubsections().find((s) => s.id === id)
+    if (existing) requireManageTopicSections(existing.departmentId)
+    if (existing?.isArchiveLost) {
+      throw new Error('Системный подраздел «Потерянные» нельзя удалить')
+    }
+    if (existing?.isArchiveArchived) {
+      throw new Error('Системный подраздел «Архивированные» нельзя удалить')
+    }
+    const settings = readSettings()
+    if (existing?.departmentId === 'support') {
+      if (settings.serverUrl.trim()) {
+        await deleteSubsectionOnServer(id)
+      }
+      clearSupportSubsectionLocally(id)
+    } else if (settings.serverUrl.trim()) {
+      await deleteSubsectionOnServer(id)
+    } else {
+      archiveSupportTopicsLocally(
+        (row) => String(row.subsection_id ?? '').trim() === id,
+      )
+    }
     removeSubsectionLocal(id)
+    try {
+      await pullFromYandex({ force: true })
+    } catch {
+      /* ok */
+    }
+    return { ok: true }
+  })
+
+  ipcMain.handle('admin:create-support-section', async (_e, payload: { label: string }) => {
+    requireManageTopicSections('support')
+    const label = payload.label.trim()
+    if (!label) throw new Error('Укажите название раздела')
+    const settings = readSettings()
+    const localFallback = (): StoredSupportSection => {
+      const base = label
+        .toLowerCase()
+        .replace(/[^a-z0-9а-яё]+/gi, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 40) || 'section'
+      const existing = readStoredSupportSections()
+      let id = base
+      let n = 2
+      while (existing.some((s) => s.id === id)) {
+        id = `${base}_${n}`
+        n += 1
+      }
+      const sortOrder = Math.max(0, ...existing.map((s) => s.sortOrder)) + 10
+      return { id, label, sortOrder, systemLocked: false }
+    }
+
+    if (!settings.serverUrl.trim()) {
+      const row = localFallback()
+      mergeSupportSectionPatch(row)
+      markLocalChange()
+      return row
+    }
+
+    try {
+      const created = await createSupportSectionOnServer({ label })
+      mergeSupportSectionPatch(created)
+      try {
+        await pullFromYandex({ force: true })
+      } catch {
+        /* ok */
+      }
+      return created
+    } catch (err) {
+      appendSessionLog(
+        'warn',
+        'admin/support-sections',
+        err instanceof Error ? err.message : 'Создание на сервере не удалось, сохранено локально',
+      )
+      const row = localFallback()
+      mergeSupportSectionPatch(row)
+      markLocalChange()
+      return row
+    }
+  })
+
+  ipcMain.handle(
+    'admin:update-support-section',
+    async (_e, payload: { id: string; label: string }) => {
+      requireManageTopicSections('support')
+      const updated = await updateSupportSectionOnServer(payload.id, { label: payload.label })
+      mergeSupportSectionPatch(updated)
+      return updated
+    },
+  )
+
+  ipcMain.handle('admin:delete-support-section', async (_e, id: string) => {
+    requireManageTopicSections('support')
+    if (id === 'all' || id === 'archive') {
+      throw new Error('Этот раздел нельзя удалить')
+    }
+    const settings = readSettings()
+    const partyMatch = (row: Record<string, unknown>) =>
+      String(row.party ?? '').trim() === id
+    let deletedOnServer = false
+    if (settings.serverUrl.trim()) {
+      try {
+        await deleteSupportSectionOnServer(id)
+        deletedOnServer = true
+      } catch (err) {
+        const missing =
+          err instanceof ServerApiError &&
+          (err.status === 404 || /не найден/i.test(err.message))
+        if (!missing) throw err
+        appendSessionLog(
+          'warn',
+          'admin/support-sections',
+          'Раздел не найден на сервере — удалён только локально',
+        )
+      }
+    }
+    if (!deletedOnServer) {
+      archiveSupportTopicsLocally(partyMatch)
+      markLocalChange()
+    }
+    const subs = readStoredSubsections().filter((s) => s.party === id)
+    for (const sub of subs) {
+      if (!sub.isArchiveLost) removeSubsectionLocal(sub.id)
+    }
+    removeSupportSectionLocal(id)
     try {
       await pullFromYandex({ force: true })
     } catch {
@@ -1113,7 +1501,7 @@ function registerIpc(): void {
   ipcMain.handle('sync:pull', async () => pullFromYandex())
   ipcMain.handle('sync:pull-full', async () => {
     appendSessionLog('info', 'sync', 'Полная синхронизация с сервера (темы, фото, файлы)…')
-    return pullFromYandex({ force: true })
+    return pullFromYandex({ force: true, clearPending: true })
   })
   ipcMain.handle('sync:discard', async () => {
     const user = getCurrentUser()
@@ -1336,23 +1724,29 @@ function registerIpc(): void {
           ? { image_display: payload.item.image_display }
           : {}),
         ...(payload.departmentId === 'support'
-          ? { party: asSupportParty(payload.item.party) }
+          ? { party: normalizeSupportPartyId(payload.item.party) }
           : {}),
       }
       if (payload.departmentId === 'support') {
         applyClientTopicLink(
           newItem,
-          asSupportParty(payload.item.party),
+          normalizeSupportPartyId(payload.item.party),
           payload.item.client_topic_id,
         )
       }
 
-      const deptSubs = getSubsectionsForDepartment(payload.departmentId)
+      const topicParty =
+        payload.departmentId === 'support'
+          ? normalizeSupportPartyId(payload.item.party)
+          : undefined
+      const deptSubs = rootSubsectionsForTopic(payload.departmentId, topicParty)
+      const pickSubMsg =
+        payload.departmentId === 'support' ? 'Выберите подраздел' : 'Выберите раздел'
       if (deptSubs.length > 0 && newItem.parent_id == null) {
         const subId =
           typeof payload.item.subsection_id === 'string' ? payload.item.subsection_id.trim() : ''
         if (!subId || !deptSubs.some((s) => s.id === subId)) {
-          throw new Error('Выберите подраздел')
+          throw new Error(pickSubMsg)
         }
         newItem.subsection_id = subId
       } else if (newItem.parent_id != null && deptSubs.length > 0) {
@@ -1481,7 +1875,13 @@ function registerIpc(): void {
         }
       }
 
-      const deptSubs = getSubsectionsForDepartment(payload.departmentId)
+      const topicParty =
+        payload.departmentId === 'support'
+          ? normalizeSupportPartyId(payload.item.party, normalizeSupportPartyId(list[idx].party))
+          : undefined
+      const deptSubs = rootSubsectionsForTopic(payload.departmentId, topicParty)
+      const pickSubMsg =
+        payload.departmentId === 'support' ? 'Выберите подраздел' : 'Выберите раздел'
       let nextSubsectionId: string | undefined
       if (deptSubs.length > 0) {
         if (newParentId == null) {
@@ -1490,7 +1890,7 @@ function registerIpc(): void {
               ? String(payload.item.subsection_id ?? '').trim()
               : String(list[idx].subsection_id ?? '').trim()
           if (!subId || !deptSubs.some((s) => s.id === subId)) {
-            throw new Error('Выберите подраздел')
+            throw new Error(pickSubMsg)
           }
           nextSubsectionId = subId
         } else {
@@ -1513,7 +1913,7 @@ function registerIpc(): void {
         documents: payload.item.documents ?? list[idx].documents ?? [],
         ...(payload.departmentId === 'support'
           ? {
-              party: asSupportParty(payload.item.party, asSupportParty(list[idx].party)),
+              party: normalizeSupportPartyId(payload.item.party, normalizeSupportPartyId(list[idx].party)),
             }
           : {}),
       }
@@ -1524,7 +1924,7 @@ function registerIpc(): void {
       if (payload.departmentId === 'support') {
         applyClientTopicLink(
           list[idx],
-          asSupportParty(payload.item.party, asSupportParty(list[idx].party)),
+          normalizeSupportPartyId(payload.item.party, normalizeSupportPartyId(list[idx].party)),
           payload.item.client_topic_id,
         )
       }
@@ -1532,7 +1932,11 @@ function registerIpc(): void {
       const oldArchived = Boolean(list[idx].archived)
       const nextArchived =
         payload.item.archived !== undefined ? Boolean(payload.item.archived) : oldArchived
-      if (nextArchived) {
+      if (payload.departmentId === 'support') {
+        ensureArchiveArchivedSubsectionLocal()
+        ensureArchiveLostSubsectionLocal()
+        applySupportArchiveSubsectionToRow(list[idx], nextArchived, oldArchived)
+      } else if (nextArchived) {
         list[idx].archived = true
       } else {
         delete list[idx].archived
@@ -1563,8 +1967,13 @@ function registerIpc(): void {
         for (const id of collectDescendants(payload.item.id)) {
           const row = list.find((r) => r.id === id)
           if (!row) continue
-          if (nextArchived) row.archived = true
-          else delete row.archived
+          if (payload.departmentId === 'support') {
+            applySupportArchiveSubsectionToRow(row, nextArchived, oldArchived)
+          } else if (nextArchived) {
+            row.archived = true
+          } else {
+            delete row.archived
+          }
         }
       }
 

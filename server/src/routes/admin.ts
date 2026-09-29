@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Response } from 'express'
 import path from 'node:path'
 import type pg from 'pg'
 import { query, bumpGlobalVersion, withTransaction } from '../db/pool.js'
@@ -9,6 +9,7 @@ import {
   isOwnerRole,
   isWorkDepartmentId,
   normalizeEmail,
+  canManageTopicSectionsForDepartment,
   normalizeWorkDepartmentId,
   parseUserRole,
   type UserRole,
@@ -38,6 +39,18 @@ import {
   writeSupportPhonesToDb,
 } from '../lib/support-phones.js'
 import { requireCurrentClientVersion } from '../middleware/min-client-version.js'
+import {
+  moveTopicsToArchiveLostByParty,
+} from '../lib/archive-lost.js'
+import {
+  allocateSupportSectionId,
+  getSupportSectionById,
+  listSupportSections,
+  nextSupportSectionSortOrder,
+  supportSectionToClient,
+} from '../lib/support-sections.js'
+import { isKnownSupportParty } from '../lib/support-sections.js'
+import type { SupportParty } from '../lib/topics.js'
 
 const BOOTSTRAP_ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'kostya.alone18@yandex.ru'
 
@@ -57,6 +70,25 @@ adminRouter.use((req, res, next) => {
 
 function param(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value
+}
+
+function denyTopicSectionsUnlessAllowed(
+  req: AuthRequest,
+  res: Response,
+  departmentId: string,
+): boolean {
+  const user = req.user
+  if (!user) {
+    res.status(401).json({ error: 'Требуется авторизация' })
+    return false
+  }
+  if (!canManageTopicSectionsForDepartment(user.role, user.departmentId, departmentId)) {
+    res.status(403).json({
+      error: 'Администратор может настраивать разделы только своего отдела',
+    })
+    return false
+  }
+  return true
 }
 
 function toPublicUser(row: {
@@ -665,7 +697,7 @@ adminRouter.get('/departments', async (_req, res) => {
     })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Ошибка загрузки разделов' })
+    res.status(500).json({ error: 'Ошибка загрузки отделов' })
   }
 })
 
@@ -686,12 +718,12 @@ adminRouter.post('/departments', async (req: AuthRequest, res) => {
       return
     }
     if (!label) {
-      res.status(400).json({ error: 'Укажите название раздела' })
+      res.status(400).json({ error: 'Укажите название отдела' })
       return
     }
     const existing = await getDepartmentById(id)
     if (existing) {
-      res.status(409).json({ error: 'Раздел с таким идентификатором уже есть' })
+      res.status(409).json({ error: 'Отдел с таким идентификатором уже есть' })
       return
     }
     const sortOrder = await nextDepartmentSortOrder()
@@ -712,7 +744,7 @@ adminRouter.post('/departments', async (req: AuthRequest, res) => {
     res.status(201).json({ department: created ? departmentToClient(created) : { id, label } })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Ошибка создания раздела' })
+    res.status(500).json({ error: 'Ошибка создания отдела' })
   }
 })
 
@@ -721,16 +753,16 @@ adminRouter.put('/departments/:id', async (req: AuthRequest, res) => {
     const id = param(req.params.id)
     const dept = await getDepartmentById(id)
     if (!dept || !isEditableInSettings(dept)) {
-      res.status(404).json({ error: 'Раздел не найден' })
+      res.status(404).json({ error: 'Отдел не найден' })
       return
     }
     if (isLostDepartmentId(id)) {
-      res.status(403).json({ error: 'Этот раздел нельзя редактировать' })
+      res.status(403).json({ error: 'Этот отдел нельзя редактировать' })
       return
     }
     const label = String(req.body?.label ?? '').trim()
     if (!label) {
-      res.status(400).json({ error: 'Укажите название раздела' })
+      res.status(400).json({ error: 'Укажите название отдела' })
       return
     }
     await withTransaction(async (client) => {
@@ -741,7 +773,7 @@ adminRouter.put('/departments/:id', async (req: AuthRequest, res) => {
     res.json({ department: updated ? departmentToClient(updated) : { id, label } })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Ошибка сохранения раздела' })
+    res.status(500).json({ error: 'Ошибка сохранения отдела' })
   }
 })
 
@@ -750,11 +782,11 @@ adminRouter.delete('/departments/:id', async (req: AuthRequest, res) => {
     const id = param(req.params.id)
     const dept = await getDepartmentById(id)
     if (!dept || !isEditableInSettings(dept)) {
-      res.status(404).json({ error: 'Раздел не найден' })
+      res.status(404).json({ error: 'Отдел не найден' })
       return
     }
     if (isTemplatesDepartmentId(id) || isLostDepartmentId(id)) {
-      res.status(403).json({ error: 'Этот раздел нельзя удалить' })
+      res.status(403).json({ error: 'Этот отдел нельзя удалить' })
       return
     }
     let movedTopics = 0
@@ -774,20 +806,21 @@ adminRouter.delete('/departments/:id', async (req: AuthRequest, res) => {
     res.json({ ok: true, movedTopics })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Ошибка удаления раздела' })
+    res.status(500).json({ error: 'Ошибка удаления отдела' })
   }
 })
 
 adminRouter.post('/departments/:deptId/subsections', async (req: AuthRequest, res) => {
   try {
     const departmentId = param(req.params.deptId)
+    if (!denyTopicSectionsUnlessAllowed(req, res, departmentId)) return
     const dept = await getDepartmentById(departmentId)
     if (!dept || !isEditableInSettings(dept)) {
-      res.status(404).json({ error: 'Раздел не найден' })
+      res.status(404).json({ error: 'Отдел не найден' })
       return
     }
     if (isTemplatesDepartmentId(departmentId) || isLostDepartmentId(departmentId)) {
-      res.status(403).json({ error: 'В этот раздел нельзя добавить подраздел' })
+      res.status(403).json({ error: 'В этот отдел нельзя добавить раздел тем' })
       return
     }
     const label = String(req.body?.label ?? '').trim()
@@ -795,15 +828,47 @@ adminRouter.post('/departments/:deptId/subsections', async (req: AuthRequest, re
       res.status(400).json({ error: 'Укажите название подраздела' })
       return
     }
+    let party: string | null = null
+    if (departmentId === 'support') {
+      const rawParty = typeof req.body?.party === 'string' ? req.body.party.trim() : ''
+      if (!rawParty || !(await isKnownSupportParty(rawParty))) {
+        res.status(400).json({ error: 'Укажите раздел' })
+        return
+      }
+      party = rawParty
+    } else if (req.body?.party != null && String(req.body.party).trim()) {
+      res.status(400).json({ error: 'Подразделы привязаны только к отделу техподдержки' })
+      return
+    }
     let createdId: string | null = null
     await withTransaction(async (client) => {
       const id = await allocateSubsectionId(departmentId, label, client)
-      const sortOrder = await nextSubsectionSortOrder(departmentId, client)
-      await client.query(
-        `INSERT INTO department_subsections (id, department_id, label, sort_order)
-         VALUES ($1, $2, $3, $4)`,
-        [id, departmentId, label, sortOrder],
+      const sortOrder = await nextSubsectionSortOrder(
+        departmentId,
+        party as SupportParty | null,
+        client,
       )
+      try {
+        await client.query(
+          `INSERT INTO department_subsections (id, department_id, label, sort_order, party)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [id, departmentId, label, sortOrder, party],
+        )
+      } catch (insertErr) {
+        const code =
+          typeof insertErr === 'object' && insertErr !== null && 'code' in insertErr
+            ? (insertErr as { code: string }).code
+            : ''
+        if (code === '42703') {
+          await client.query(
+            `INSERT INTO department_subsections (id, department_id, label, sort_order)
+             VALUES ($1, $2, $3, $4)`,
+            [id, departmentId, label, sortOrder],
+          )
+        } else {
+          throw insertErr
+        }
+      }
       await bumpGlobalVersion(client)
       createdId = id
     })
@@ -811,7 +876,7 @@ adminRouter.post('/departments/:deptId/subsections', async (req: AuthRequest, re
     res.status(201).json({ subsection: row ? subsectionToClient(row) : null })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Ошибка создания подраздела' })
+    res.status(500).json({ error: 'Ошибка создания раздела' })
   }
 })
 
@@ -820,12 +885,13 @@ adminRouter.put('/subsections/:id', async (req: AuthRequest, res) => {
     const id = param(req.params.id)
     const existing = await getSubsectionById(id)
     if (!existing) {
-      res.status(404).json({ error: 'Подраздел не найден' })
+      res.status(404).json({ error: 'Раздел не найден' })
       return
     }
+    if (!denyTopicSectionsUnlessAllowed(req, res, existing.departmentId)) return
     const label = String(req.body?.label ?? '').trim()
     if (!label) {
-      res.status(400).json({ error: 'Укажите название подраздела' })
+      res.status(400).json({ error: 'Укажите название раздела' })
       return
     }
     await withTransaction(async (client) => {
@@ -836,7 +902,117 @@ adminRouter.put('/subsections/:id', async (req: AuthRequest, res) => {
     res.json({ subsection: updated ? subsectionToClient(updated) : { id, label } })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Ошибка сохранения подраздела' })
+    res.status(500).json({ error: 'Ошибка сохранения раздела' })
+  }
+})
+
+adminRouter.get('/support-sections', async (_req: AuthRequest, res) => {
+  try {
+    const sections = await listSupportSections()
+    res.json({ sections: sections.map(supportSectionToClient) })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка загрузки разделов' })
+  }
+})
+
+adminRouter.post('/support-sections', async (req: AuthRequest, res) => {
+  try {
+    if (!denyTopicSectionsUnlessAllowed(req, res, 'support')) return
+    const label = String(req.body?.label ?? '').trim()
+    if (!label) {
+      res.status(400).json({ error: 'Укажите название раздела' })
+      return
+    }
+    let createdId: string | null = null
+    await withTransaction(async (client) => {
+      const id = await allocateSupportSectionId(label, client)
+      if (id === 'all' || id === 'archive') {
+        const err = new Error('Зарезервированный идентификатор раздела')
+        ;(err as Error & { status: number }).status = 400
+        throw err
+      }
+      const sortOrder = await nextSupportSectionSortOrder(client)
+      await client.query(
+        `INSERT INTO support_topic_sections (id, label, sort_order, system_locked)
+         VALUES ($1, $2, $3, false)`,
+        [id, label, sortOrder],
+      )
+      await bumpGlobalVersion(client)
+      createdId = id
+    })
+    const row = createdId ? await getSupportSectionById(createdId) : null
+    res.status(201).json({ section: row ? supportSectionToClient(row) : null })
+  } catch (err) {
+    console.error(err)
+    const status =
+      typeof err === 'object' && err !== null && 'status' in err
+        ? Number((err as { status: number }).status) || 500
+        : 500
+    res.status(status).json({
+      error: err instanceof Error ? err.message : 'Ошибка создания раздела',
+    })
+  }
+})
+
+adminRouter.put('/support-sections/:id', async (req: AuthRequest, res) => {
+  try {
+    if (!denyTopicSectionsUnlessAllowed(req, res, 'support')) return
+    const id = param(req.params.id)
+    if (id === 'all' || id === 'archive') {
+      res.status(403).json({ error: 'Этот раздел нельзя изменить' })
+      return
+    }
+    const existing = await getSupportSectionById(id)
+    if (!existing) {
+      res.status(404).json({ error: 'Раздел не найден' })
+      return
+    }
+    const label = String(req.body?.label ?? '').trim()
+    if (!label) {
+      res.status(400).json({ error: 'Укажите название раздела' })
+      return
+    }
+    await withTransaction(async (client) => {
+      await client.query(`UPDATE support_topic_sections SET label = $2 WHERE id = $1`, [id, label])
+      await bumpGlobalVersion(client)
+    })
+    const updated = await getSupportSectionById(id)
+    res.json({ section: updated ? supportSectionToClient(updated) : { id, label } })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка сохранения раздела' })
+  }
+})
+
+adminRouter.delete('/support-sections/:id', async (req: AuthRequest, res) => {
+  try {
+    if (!denyTopicSectionsUnlessAllowed(req, res, 'support')) return
+    const id = param(req.params.id)
+    if (id === 'all' || id === 'archive') {
+      res.status(403).json({ error: 'Этот раздел нельзя удалить' })
+      return
+    }
+    const existing = await getSupportSectionById(id)
+    if (!existing) {
+      res.status(404).json({ error: 'Раздел не найден' })
+      return
+    }
+    let movedTopics = 0
+    await withTransaction(async (client) => {
+      movedTopics = await moveTopicsToArchiveLostByParty('support', id, client)
+      await client.query(
+        `DELETE FROM department_subsections
+          WHERE department_id = 'support' AND party IS NOT DISTINCT FROM $1 AND NOT is_archive_lost`,
+        [id],
+      )
+      await client.query(`DELETE FROM support_topic_sections WHERE id = $1`, [id])
+      await bumpGlobalVersion(client)
+    })
+    res.json({ ok: true, movedTopics })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка удаления раздела' })
   }
 })
 
@@ -845,38 +1021,59 @@ adminRouter.delete('/subsections/:id', async (req: AuthRequest, res) => {
     const id = param(req.params.id)
     const existing = await getSubsectionById(id)
     if (!existing) {
-      res.status(404).json({ error: 'Подраздел не найден' })
+      res.status(404).json({ error: 'Раздел не найден' })
       return
     }
+    if (!denyTopicSectionsUnlessAllowed(req, res, existing.departmentId)) return
+    let movedTopics = 0
     await withTransaction(async (client) => {
-      const others = await client.query<{ id: string }>(
-        `SELECT id FROM department_subsections
-          WHERE department_id = $1 AND id <> $2
-          ORDER BY sort_order ASC, id ASC
-          LIMIT 1`,
-        [existing.departmentId, id],
-      )
-      const fallbackId = others.rows[0]?.id ?? null
-      if (fallbackId) {
-        await client.query(
-          `UPDATE topics SET subsection_id = $3
-            WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
-          [existing.departmentId, id, fallbackId],
-        )
-      } else {
-        await client.query(
+      if (existing.isArchiveLost) {
+        const err = new Error('Системный подраздел «Потерянные» нельзя удалить')
+        ;(err as Error & { status: number }).status = 403
+        throw err
+      }
+      if (existing.isArchiveArchived) {
+        const err = new Error('Системный подраздел «Архивированные» нельзя удалить')
+        ;(err as Error & { status: number }).status = 403
+        throw err
+      }
+      if (existing.departmentId === 'support') {
+        const res = await client.query(
           `UPDATE topics SET subsection_id = NULL
             WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
           [existing.departmentId, id],
         )
+        movedTopics = res.rowCount ?? 0
+      } else {
+        const others = await client.query<{ id: string }>(
+          `SELECT id FROM department_subsections
+            WHERE department_id = $1 AND id <> $2 AND party IS NULL
+            ORDER BY sort_order ASC, id ASC
+            LIMIT 1`,
+          [existing.departmentId, id],
+        )
+        const fallbackId = others.rows[0]?.id ?? null
+        if (fallbackId) {
+          await client.query(
+            `UPDATE topics SET subsection_id = $3
+              WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
+            [existing.departmentId, id, fallbackId],
+          )
+        } else {
+          await client.query(
+            `UPDATE topics SET subsection_id = NULL
+              WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
+            [existing.departmentId, id],
+          )
+        }
       }
       await client.query(`DELETE FROM department_subsections WHERE id = $1`, [id])
       await bumpGlobalVersion(client)
     })
-    res.json({ ok: true })
+    res.json({ ok: true, movedTopics })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Ошибка удаления подраздела' })
+    res.status(500).json({ error: 'Ошибка удаления раздела' })
   }
 })
 

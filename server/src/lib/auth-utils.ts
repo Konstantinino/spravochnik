@@ -48,6 +48,22 @@ export function isOwnerRole(role: string | undefined | null): boolean {
   return role === 'owner'
 }
 
+/** Разделы тем в настройках: владелец — любой отдел, admin — только свой. */
+export function canManageTopicSectionsForDepartment(
+  role: string | undefined | null,
+  userDepartmentId: WorkDepartmentId | string | undefined | null,
+  targetDepartmentId: string,
+): boolean {
+  if (isOwnerRole(role)) return true
+  if (role === 'admin') {
+    return (
+      normalizeWorkDepartmentId(userDepartmentId) ===
+      normalizeWorkDepartmentId(targetDepartmentId)
+    )
+  }
+  return false
+}
+
 const WORK_DEPT_ID_PATTERN = /^[a-z][a-z0-9_-]{0,47}$/
 
 export function isWorkDepartmentId(value: unknown): value is WorkDepartmentId {

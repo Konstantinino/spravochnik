@@ -9,6 +9,7 @@ interface SearchProps {
   listFilter?: TopicViewFilter
   onListFilterChange?: (filter: TopicViewFilter) => void
   filterOptions?: TopicViewFilter[]
+  filterLabels?: Record<string, string>
   showListFilter?: boolean
   searchInBody?: boolean
   onSearchInBodyChange?: (value: boolean) => void
@@ -22,6 +23,7 @@ export function Search({
   listFilter,
   onListFilterChange,
   filterOptions = [],
+  filterLabels,
   showListFilter,
   searchInBody = false,
   onSearchInBodyChange,
@@ -81,7 +83,7 @@ export function Search({
           >
             {filterOptions.map((p) => (
               <option key={p} value={p}>
-                {TOPIC_VIEW_FILTER_LABELS[p]}
+                {filterLabels?.[p] ?? TOPIC_VIEW_FILTER_LABELS[p as keyof typeof TOPIC_VIEW_FILTER_LABELS] ?? p}
               </option>
             ))}
           </select>

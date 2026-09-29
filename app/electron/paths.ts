@@ -67,6 +67,22 @@ export function canEditDepartment(
   return normalizeWorkDepartmentId(userDepartmentId) === normalizeWorkDepartmentId(targetDepartmentId)
 }
 
+export function canManageTopicSectionsForDepartment(
+  role: UserRole | undefined,
+  userDepartmentId: unknown,
+  targetDepartmentId: string,
+  opts?: { isOwner?: boolean },
+): boolean {
+  if (opts?.isOwner || isOwnerRole(role)) return true
+  if (role === 'admin') {
+    return (
+      normalizeWorkDepartmentId(userDepartmentId) ===
+      normalizeWorkDepartmentId(targetDepartmentId)
+    )
+  }
+  return false
+}
+
 export function isOwnerRole(role: string | undefined | null): boolean {
   return role === 'owner'
 }

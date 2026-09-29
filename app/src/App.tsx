@@ -32,19 +32,19 @@ import type {
   Department,
   DepartmentId,
   DepartmentSubsection,
+  SupportTopicSection,
   GuideFile,
   GuideItem,
   ImageDisplayMap,
   PublicUser,
-  SupportParty,
   TopicViewFilter,
   SyncStatus,
 } from './types'
 import {
   DEPARTMENTS,
-  DEPT_VIEW_FILTERS,
+  buildTopicViewFilterLabels,
+  deptTopicSectionIdsForDepartment,
   LOST_DEPARTMENT_ID,
-  SUPPORT_VIEW_FILTERS,
   departmentsForUser,
   isSupportParty,
   normalizeWorkDepartmentId,
@@ -109,10 +109,12 @@ function resolveListFilter(
   const saved = loadSavedListFilter(userId, departmentId)
   if (saved === 'archive' && !canEdit) return 'all'
   if (departmentId === 'support') {
-    if (saved === 'archive' || saved === 'all' || isSupportParty(saved)) return saved!
+    if (saved === 'archive' || saved === 'all') return saved
+    if (typeof saved === 'string' && saved.trim()) return saved.trim()
     return 'all'
   }
   if (saved === 'archive' || saved === 'all') return saved
+  if (typeof saved === 'string' && saved.trim()) return saved.trim()
   return 'all'
 }
 
@@ -160,6 +162,7 @@ export default function App() {
   } | null>(null)
   const [departments, setDepartments] = useState<Department[]>(DEPARTMENTS)
   const [subsections, setSubsections] = useState<DepartmentSubsection[]>([])
+  const [supportSections, setSupportSections] = useState<SupportTopicSection[]>([])
   const [lostTopicsCount, setLostTopicsCount] = useState(0)
 
   async function refreshDepartmentsAndLostCount() {
@@ -187,7 +190,31 @@ export default function App() {
     } catch {
       setSubsections([])
     }
+    try {
+      setSupportSections(await window.spravochnik.getSupportSections())
+    } catch {
+      setSupportSections([])
+    }
   }
+
+  const deptTopicSectionIdSet = useMemo(() => {
+    if (departmentId === 'support') return new Set<string>()
+    return new Set(deptTopicSectionIdsForDepartment(departmentId, subsections))
+  }, [departmentId, subsections])
+
+  useEffect(() => {
+    if (listFilter === 'all' || listFilter === 'archive') return
+    if (departmentId === 'support') {
+      const known = new Set(supportSections.map((s) => s.id))
+      if (!known.has(listFilter) && !isSupportParty(listFilter)) {
+        setListFilter('all')
+      }
+      return
+    }
+    if (!deptTopicSectionIdSet.has(listFilter)) {
+      setListFilter('all')
+    }
+  }, [departmentId, listFilter, supportSections, deptTopicSectionIdSet])
 
   useEffect(() => {
     void window.spravochnik.getCurrentUser().then((u) => {
@@ -235,6 +262,11 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!editorOpen) return
+    void window.spravochnik.getSupportSections().then(setSupportSections).catch(() => undefined)
+  }, [editorOpen])
+
+  useEffect(() => {
     if (lostTopicsCount === 0 && departmentId === LOST_DEPARTMENT_ID) {
       void handleDepartmentChange('support')
     }
@@ -277,7 +309,7 @@ export default function App() {
   }
 
   /** After save: align party filter without deselecting the open topic. */
-  function syncListFilterAfterPartySave(party: SupportParty) {
+  function syncListFilterAfterPartySave(party: string) {
     if (listFilter === 'all' || listFilter === 'archive' || listFilter === party) return
     setListFilter(party)
     if (user) saveListFilter(user.id, departmentId, party)
@@ -413,16 +445,30 @@ export default function App() {
   const isAdmin = isStaffRole(user?.role)
 
   const visibleItems: GuideItem[] = useMemo(
-    () => filterItemsByView(items, listFilter),
-    [items, listFilter],
+    () =>
+      filterItemsByView(items, listFilter, {
+        deptSectionIds: departmentId === 'support' ? undefined : deptTopicSectionIdSet,
+      }),
+    [items, listFilter, departmentId, deptTopicSectionIdSet],
   )
 
   const filterOptions: TopicViewFilter[] = useMemo(() => {
     const base =
-      departmentId === 'support' ? [...SUPPORT_VIEW_FILTERS] : [...DEPT_VIEW_FILTERS]
+      departmentId === 'support'
+        ? (['all', ...supportSections.map((s) => s.id)] as TopicViewFilter[])
+        : (['all', ...deptTopicSectionIdsForDepartment(departmentId, subsections)] as TopicViewFilter[])
     if (canEdit) base.push('archive')
     return base
-  }, [departmentId, canEdit])
+  }, [departmentId, canEdit, supportSections, subsections])
+
+  const filterLabels = useMemo(
+    () =>
+      buildTopicViewFilterLabels(
+        supportSections,
+        subsections.filter((s) => s.departmentId === departmentId),
+      ),
+    [supportSections, subsections, departmentId],
+  )
 
   const selected = useMemo(() => {
     if (selectedId == null) return null
@@ -687,7 +733,9 @@ export default function App() {
     draggedId: number,
     targetId: number,
   ) {
-    const scope = resolveReorderSiblingScope(listFilter, parentId, items, draggedId)
+    const scope = resolveReorderSiblingScope(listFilter, parentId, items, draggedId, {
+      deptSectionIds: departmentId === 'support' ? undefined : deptTopicSectionIdSet,
+    })
     const { changes } = reorderSiblingTopics(items, parentId, draggedId, targetId, scope)
     if (changes.length === 0) return
 
@@ -716,7 +764,7 @@ export default function App() {
     answer: string
     parent_id: number | null
     client_topic_id?: number | null
-    party?: SupportParty
+    party?: string
     subsection_id?: string | null
     id?: number
     draftId?: string
@@ -780,6 +828,7 @@ export default function App() {
 
   function handleEditStart(item: GuideItem) {
     editSnapshotRef.current = item
+    void window.spravochnik.getSupportSections().then(setSupportSections).catch(() => undefined)
   }
 
   async function handleInlineSave(payload: {
@@ -787,7 +836,8 @@ export default function App() {
     answer: string
     parent_id: number | null
     client_topic_id?: number | null
-    party?: SupportParty
+    party?: string
+    subsection_id?: string | null
   }) {
     if (!selected) return
     const topicId = selected.id
@@ -804,6 +854,9 @@ export default function App() {
           party: payload.party ?? selected.party,
           ...(payload.client_topic_id !== undefined
             ? { client_topic_id: payload.client_topic_id }
+            : {}),
+          ...(payload.subsection_id !== undefined
+            ? { subsection_id: payload.subsection_id }
             : {}),
         },
       })
@@ -930,9 +983,17 @@ export default function App() {
 
   if (view === 'settings') {
     return (
-      <SettingsErrorBoundary onBack={() => setView('main')}>
+      <SettingsErrorBoundary
+        onBack={() => {
+          setView('main')
+          void refreshDepartmentsAndLostCount()
+        }}
+      >
         <SettingsPage
-          onBack={() => setView('main')}
+          onBack={() => {
+            setView('main')
+            void refreshDepartmentsAndLostCount()
+          }}
           currentUser={user}
           onCurrentUserChange={(next) => {
             if (!next) {
@@ -956,12 +1017,39 @@ export default function App() {
   const topicEditorDepartments = workDepartmentsFrom(departments)
   const currentSubsections = subsections.filter((s) => s.departmentId === departmentId)
 
-  const editorDefaultParty: SupportParty = (() => {
+  const editorDefaultParty: string = (() => {
     if (editorParentId != null) {
       const parent = items.find((i) => i.id === editorParentId)
       if (parent) return getItemParty(parent)
     }
-    return isSupportParty(listFilter) ? listFilter : 'supplier'
+    if (departmentId === 'support' && listFilter !== 'all' && listFilter !== 'archive') {
+      if (isSupportParty(listFilter)) return listFilter
+      const sub = subsections.find(
+        (s) =>
+          s.id === listFilter &&
+          s.departmentId === 'support' &&
+          !s.isArchiveLost &&
+          !s.isArchiveArchived,
+      )
+      if (sub?.party) return sub.party
+    }
+    return 'supplier'
+  })()
+
+  const editorDefaultSubsectionId = (() => {
+    if (listFilter === 'all' || listFilter === 'archive') return undefined
+    if (departmentId === 'support') {
+      if (isSupportParty(listFilter)) return undefined
+      const sub = subsections.find(
+        (s) =>
+          s.id === listFilter &&
+          s.departmentId === 'support' &&
+          !s.isArchiveLost &&
+          !s.isArchiveArchived,
+      )
+      return sub?.id
+    }
+    return deptTopicSectionIdSet.has(listFilter) ? listFilter : undefined
   })()
 
   return (
@@ -998,6 +1086,7 @@ export default function App() {
             showListFilter={filterOptions.length > 1}
             listFilter={listFilter}
             filterOptions={filterOptions}
+            filterLabels={filterLabels}
             onListFilterChange={handleListFilterChange}
             onAdd={() => {
               setEditorMode('add')
@@ -1018,7 +1107,10 @@ export default function App() {
                 onSelect={selectTopicFromSidebar}
                 searchFilter={searchFilter}
                 subsections={currentSubsections}
-                groupRootsByParty={departmentId === 'support' && listFilter === 'all'}
+                supportDept={departmentId === 'support'}
+                supportListFilter={listFilter}
+                supportSections={supportSections}
+                groupRootsByParty={listFilter === 'all'}
                 rootReorderSameParty={rootReorderRequiresSameParty(departmentId, listFilter)}
                 reorderMode={reorderMode}
                 reorderPreparing={reorderPreparing}
@@ -1043,6 +1135,8 @@ export default function App() {
             items={visibleItems}
             allItems={items}
             departmentId={departmentId}
+            supportSections={supportSections}
+            subsections={currentSubsections}
             canEdit={!!canEdit && !!selected}
             isAdmin={!!isAdmin && !!selected}
             canGoBack={navHistory.length > 0}
@@ -1077,9 +1171,11 @@ export default function App() {
         departmentId={departmentId}
         departments={topicEditorDepartments}
         subsections={subsections}
+        supportSections={supportSections}
         parentId={editorParentId}
         items={items}
         defaultParty={editorDefaultParty}
+        defaultSubsectionId={editorDefaultSubsectionId}
         initial={editorInitial}
         onClose={() => {
           setEditorOpen(false)

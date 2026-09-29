@@ -284,6 +284,9 @@ export interface AdminSubsectionDto {
   departmentId: string
   label: string
   sortOrder: number
+  party?: string | null
+  isArchiveLost?: boolean
+  isArchiveArchived?: boolean
 }
 
 export interface AdminDepartmentDto {
@@ -304,7 +307,7 @@ export async function fetchAdminDepartments(): Promise<AdminDepartmentDto[]> {
 
 export async function createSubsectionOnServer(
   departmentId: string,
-  payload: { label: string },
+  payload: { label: string; party?: string | null },
 ): Promise<AdminSubsectionDto> {
   const data = await serverFetch<{ subsection: AdminSubsectionDto }>(
     `/admin/departments/${encodeURIComponent(departmentId)}/subsections`,
@@ -332,11 +335,66 @@ export async function updateSubsectionOnServer(
   return data.subsection
 }
 
-export async function deleteSubsectionOnServer(id: string): Promise<void> {
-  await serverFetch(`/admin/subsections/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
+export async function deleteSubsectionOnServer(id: string): Promise<{ movedTopics: number }> {
+  const data = await serverFetch<{ ok: boolean; movedTopics?: number }>(
+    `/admin/subsections/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+      skipRemotePull: true,
+    },
+  )
+  return { movedTopics: data.movedTopics ?? 0 }
+}
+
+export interface AdminSupportSectionDto {
+  id: string
+  label: string
+  sortOrder: number
+  systemLocked?: boolean
+}
+
+export async function fetchAdminSupportSections(): Promise<AdminSupportSectionDto[]> {
+  const data = await serverFetch<{ sections: AdminSupportSectionDto[] }>('/admin/support-sections', {
     skipRemotePull: true,
   })
+  return data.sections ?? []
+}
+
+export async function createSupportSectionOnServer(payload: {
+  label: string
+}): Promise<AdminSupportSectionDto> {
+  const data = await serverFetch<{ section: AdminSupportSectionDto }>('/admin/support-sections', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    skipRemotePull: true,
+  })
+  return data.section
+}
+
+export async function updateSupportSectionOnServer(
+  id: string,
+  payload: { label: string },
+): Promise<AdminSupportSectionDto> {
+  const data = await serverFetch<{ section: AdminSupportSectionDto }>(
+    `/admin/support-sections/${encodeURIComponent(id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+      skipRemotePull: true,
+    },
+  )
+  return data.section
+}
+
+export async function deleteSupportSectionOnServer(id: string): Promise<{ movedTopics: number }> {
+  const data = await serverFetch<{ ok: boolean; movedTopics?: number }>(
+    `/admin/support-sections/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+      skipRemotePull: true,
+    },
+  )
+  return { movedTopics: data.movedTopics ?? 0 }
 }
 
 export async function createDepartmentOnServer(payload: {

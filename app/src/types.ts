@@ -94,6 +94,23 @@ export function canEditDepartment(
   return normalizeWorkDepartmentId(userDepartmentId) === normalizeWorkDepartmentId(targetDepartmentId)
 }
 
+/** Настройки «Разделы тем»: владелец — все отделы, admin — только свой отдел. */
+export function canManageTopicSectionsForDepartment(
+  role: string | undefined | null,
+  userDepartmentId: WorkDepartmentId | DepartmentId | undefined,
+  targetDepartmentId: string,
+  opts?: { isOwner?: boolean },
+): boolean {
+  if (opts?.isOwner || isOwnerRole(role)) return true
+  if (role === 'admin') {
+    return (
+      normalizeWorkDepartmentId(userDepartmentId) ===
+      normalizeWorkDepartmentId(targetDepartmentId)
+    )
+  }
+  return false
+}
+
 export function isOwnerRole(role: string | undefined | null): boolean {
   return role === 'owner'
 }
@@ -101,8 +118,8 @@ export function isOwnerRole(role: string | undefined | null): boolean {
 /** Только для отдела «Тех. поддержка»: Поставщик / Заказчик / Ошибки / Администратор */
 export type SupportParty = 'supplier' | 'customer' | 'errors' | 'additional'
 
-/** Sidebar list filter (support has parties; all depts have archive for editors) */
-export type TopicViewFilter = SupportParty | 'all' | 'archive'
+/** Sidebar list filter (support: built-in + custom section ids from support_topic_sections) */
+export type TopicViewFilter = 'all' | 'archive' | string
 
 /** @deprecated use TopicViewFilter */
 export type SupportPartyFilter = TopicViewFilter
@@ -147,7 +164,8 @@ export function isSupportParty(value: unknown): value is SupportParty {
 }
 
 export function isTopicViewFilter(value: unknown): value is TopicViewFilter {
-  return value === 'all' || value === 'archive' || isSupportParty(value)
+  if (value === 'all' || value === 'archive') return true
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 export interface PublicUser {
@@ -276,8 +294,8 @@ export interface GuideItem {
   parent_id?: number | null
   has_children?: boolean
   /** Техподдержка: поставщик, заказчик или ошибки. Старые темы без поля = supplier */
-  party?: SupportParty
-  /** Корневые темы в разделе с подразделами */
+  party?: string
+  /** Корневая тема: id раздела (группировка тем внутри отдела) */
   subsection_id?: string | null
   /** Archived topics hidden from «Все»; visible only in Архив for editor/admin */
   archived?: boolean
@@ -309,6 +327,75 @@ export interface DepartmentSubsection {
   departmentId: string
   label: string
   sortOrder: number
+  /** Раздел (party) в отделе техподдержки; иначе null */
+  party?: string | null
+  /** Подраздел «Потерянные» в архиве (только техподдержка) */
+  isArchiveLost?: boolean
+  /** Подраздел «Архивированные» в архиве (ручная архивация) */
+  isArchiveArchived?: boolean
+}
+
+export interface SupportTopicSection {
+  id: string
+  label: string
+  sortOrder: number
+  systemLocked?: boolean
+}
+
+export function buildTopicViewFilterLabels(
+  sections: SupportTopicSection[],
+  deptSubsections: DepartmentSubsection[] = [],
+): Record<string, string> {
+  const out: Record<string, string> = { ...TOPIC_VIEW_FILTER_LABELS }
+  for (const section of sections) {
+    out[section.id] = section.label
+  }
+  for (const sub of deptSubsections) {
+    if (sub.isArchiveLost || sub.isArchiveArchived || sub.party) continue
+    out[sub.id] = sub.label
+  }
+  return out
+}
+
+export function deptTopicSectionIdsForDepartment(
+  departmentId: string,
+  subsections: DepartmentSubsection[],
+): string[] {
+  return subsections
+    .filter(
+      (s) =>
+        s.departmentId === departmentId &&
+        !s.party &&
+        !s.isArchiveLost &&
+        !s.isArchiveArchived,
+    )
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru'))
+    .map((s) => s.id)
+}
+
+/** Опции «Раздел» в редакторе темы (встроенные + пользовательские разделы). */
+export function supportPartySelectOptions(
+  sections: SupportTopicSection[],
+  currentPartyId?: string | null,
+): Array<{ id: string; label: string }> {
+  const sorted =
+    sections.length > 0
+      ? [...sections].sort(
+          (a, b) =>
+            a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru'),
+        )
+      : SUPPORT_PARTIES.map((id) => ({
+          id,
+          label: SUPPORT_PARTY_LABELS[id],
+          sortOrder: 0,
+        }))
+  const ids = new Set(sorted.map((s) => s.id))
+  const extra = typeof currentPartyId === 'string' ? currentPartyId.trim() : ''
+  const options = sorted.map(({ id, label }) => ({ id, label }))
+  if (extra && !ids.has(extra)) {
+    options.push({ id: extra, label: extra })
+  }
+  return options
 }
 
 export interface AdminDepartment {

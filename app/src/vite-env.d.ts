@@ -240,13 +240,26 @@ export interface SpravochnikApi {
   deleteAdminDepartment: (id: string) => Promise<{ movedTopics: number }>
 
   getSubsections: () => Promise<
-    Array<{ id: string; departmentId: string; label: string; sortOrder: number }>
+    Array<{
+      id: string
+      departmentId: string
+      label: string
+      sortOrder: number
+      party?: import('./types').SupportParty | null
+    }>
   >
 
   createAdminSubsection: (payload: {
     departmentId: string
     label: string
-  }) => Promise<{ id: string; departmentId: string; label: string; sortOrder: number }>
+    party?: string | null
+  }) => Promise<{
+    id: string
+    departmentId: string
+    label: string
+    sortOrder: number
+    party?: import('./types').SupportParty | null
+  }>
 
   updateAdminSubsection: (payload: {
     id: string
@@ -254,6 +267,29 @@ export interface SpravochnikApi {
   }) => Promise<{ id: string; departmentId: string; label: string; sortOrder: number }>
 
   deleteAdminSubsection: (id: string) => Promise<{ ok: boolean }>
+
+  getSupportSections: () => Promise<
+    Array<{
+      id: string
+      label: string
+      sortOrder: number
+      systemLocked?: boolean
+    }>
+  >
+
+  createAdminSupportSection: (payload: { label: string }) => Promise<{
+    id: string
+    label: string
+    sortOrder: number
+    systemLocked?: boolean
+  }>
+
+  updateAdminSupportSection: (payload: {
+    id: string
+    label: string
+  }) => Promise<{ id: string; label: string; sortOrder: number; systemLocked?: boolean }>
+
+  deleteAdminSupportSection: (id: string) => Promise<{ ok: boolean }>
 
   setServerUrl: (url: string) => Promise<{ serverUrl: string }>
 

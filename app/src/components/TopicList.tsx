@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { DepartmentSubsection, GuideItem, SupportParty } from '../types'
-import { SUPPORT_PARTIES, SUPPORT_PARTY_LABELS } from '../types'
+import type {
+  DepartmentSubsection,
+  GuideItem,
+  SupportParty,
+  SupportTopicSection,
+  TopicViewFilter,
+} from '../types'
+import { SUPPORT_PARTY_LABELS, isSupportParty } from '../types'
 import {
   buildTree,
   getAncestorIds,
@@ -83,6 +89,10 @@ interface TopicListProps {
   subsections?: DepartmentSubsection[]
   /** Support + «Все»: group root topics under party section headings */
   groupRootsByParty?: boolean
+  /** Отдел «Тех. поддержка» — разделы = party, подразделы = subsections.party */
+  supportDept?: boolean
+  supportListFilter?: TopicViewFilter
+  supportSections?: SupportTopicSection[]
   /** Support filters: root reorder only within the same party */
   rootReorderSameParty?: boolean
   reorderMode?: boolean
@@ -227,39 +237,59 @@ function autoScrollContainer(scrollEl: HTMLElement, clientY: number): void {
   }
 }
 
+const UNASSIGNED_SUBSECTION_BLOCK_ID = '__unassigned__'
+
 function groupRootsBySubsections(
   roots: GuideItem[],
   subsections: DepartmentSubsection[],
 ): Array<{ id: string; label: string; items: GuideItem[] }> {
   const byId = new Map<string, GuideItem[]>()
   for (const sub of subsections) byId.set(sub.id, [])
-  const fallbackId = subsections[0]?.id
+  const orphans: GuideItem[] = []
   for (const item of roots) {
-    const key =
-      item.subsection_id && byId.has(item.subsection_id)
-        ? item.subsection_id
-        : fallbackId
+    const key = typeof item.subsection_id === 'string' ? item.subsection_id.trim() : ''
     if (key && byId.has(key)) byId.get(key)!.push(item)
+    else orphans.push(item)
   }
-  return subsections.map((sub) => ({
+  const blocks = subsections.map((sub) => ({
     id: sub.id,
     label: sub.label,
     items: byId.get(sub.id) ?? [],
   }))
+  if (orphans.length > 0) {
+    blocks.push({ id: UNASSIGNED_SUBSECTION_BLOCK_ID, label: 'Без раздела', items: orphans })
+  }
+  return blocks
 }
 
-function groupRootsByPartySections(
-  roots: GuideItem[],
-): Array<{ party: SupportParty; items: GuideItem[] }> {
-  const byParty = new Map<SupportParty, GuideItem[]>()
-  for (const party of SUPPORT_PARTIES) byParty.set(party, [])
-  for (const item of roots) {
-    byParty.get(getItemParty(item))!.push(item)
-  }
-  return SUPPORT_PARTIES.map((party) => ({
-    party,
-    items: byParty.get(party) ?? [],
-  })).filter((section) => section.items.length > 0)
+function sortSubsections(subs: DepartmentSubsection[]): DepartmentSubsection[] {
+  return [...subs].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru'),
+  )
+}
+
+function subsectionsForPartyScope(
+  subsections: DepartmentSubsection[],
+  party: string,
+): DepartmentSubsection[] {
+  return sortSubsections(subsections.filter((s) => s.party === party))
+}
+
+function deptLevelSubsections(subsections: DepartmentSubsection[]): DepartmentSubsection[] {
+  return sortSubsections(
+    subsections.filter((s) => !s.party && !s.isArchiveLost && !s.isArchiveArchived),
+  )
+}
+
+function isDeptSectionFilter(
+  value: TopicViewFilter,
+  supportDept: boolean,
+  subsections: DepartmentSubsection[],
+): boolean {
+  if (supportDept || value === 'all' || value === 'archive') return false
+  return subsections.some(
+    (s) => s.id === value && !s.party && !s.isArchiveLost && !s.isArchiveArchived,
+  )
 }
 
 function TreeNode({
@@ -446,6 +476,9 @@ export function TopicList({
   searchFilter,
   subsections = [],
   groupRootsByParty = false,
+  supportDept = false,
+  supportListFilter = 'all',
+  supportSections = [],
   rootReorderSameParty = false,
   reorderMode = false,
   reorderPreparing = false,
@@ -764,25 +797,161 @@ export function TopicList({
   const roots = buildTree(items).filter(
     (item) => !searchFilter || searchFilter.visibleIds.has(item.id),
   )
-  const showSubsectionSections = subsections.length > 0 && !searchFilter
-  const subsectionSections = showSubsectionSections
-    ? groupRootsBySubsections(roots, subsections)
-    : []
-  const showPartySections = groupRootsByParty && !showSubsectionSections
-  const partySections = showPartySections ? groupRootsByPartySections(roots) : []
+  const treeNodeProps = {
+    items,
+    selectedId,
+    onSelect,
+    searchFilter,
+    reorderMode,
+    onReorderSiblings,
+    draggingId,
+    onReorderMouseDown: handleReorderMouseDown,
+    dragOverId,
+    flashFocusId,
+    expandFolderIds,
+    onDismissExpandFolder: dismissExpandFolder,
+  }
 
-  function renderRootItems(sectionRoots: GuideItem[]) {
-    if (groupRootsByParty) {
-      return groupRootsByPartySections(sectionRoots).map(({ party, items: partyRoots }) => (
-        <li key={party} className="topic-party-section topic-party-section--nested">
-          <div className="topic-party-section__heading">{SUPPORT_PARTY_LABELS[party]}</div>
+  function renderSubsectionBlocks(sectionRoots: GuideItem[], subs: DepartmentSubsection[]) {
+    return groupRootsBySubsections(sectionRoots, subs).map(({ id, label, items: blockRoots }) => (
+      <li key={id} className="topic-subsection-section">
+        <div className="topic-subsection-section__heading" title="Подраздел">
+          {label}
+        </div>
+        <ul className="topic-subsection-section__list">
+          {blockRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+        </ul>
+      </li>
+    ))
+  }
+
+  function sectionLabel(sectionId: string): string {
+    return (
+      supportSections.find((s) => s.id === sectionId)?.label ??
+      SUPPORT_PARTY_LABELS[sectionId as keyof typeof SUPPORT_PARTY_LABELS] ??
+      sectionId
+    )
+  }
+
+  function isPartySectionFilter(value: TopicViewFilter): value is string {
+    if (value === 'all' || value === 'archive') return false
+    if (isSupportParty(value)) return true
+    return supportSections.some((s) => s.id === value)
+  }
+
+  function renderSupportAllLayout() {
+    const sections =
+      supportSections.length > 0
+        ? supportSections
+        : (['supplier', 'customer', 'errors', 'additional'] as SupportParty[]).map((id) => ({
+            id,
+            label: sectionLabel(id),
+            sortOrder: 0,
+          }))
+    return sections.map((section) => {
+      const party = section.id
+      const partyRoots = roots.filter((item) => getItemParty(item) === party)
+      const partySubs = subsectionsForPartyScope(subsections, party as SupportParty)
+      if (partyRoots.length === 0 && partySubs.length === 0) return null
+      return (
+        <li key={party} className="topic-party-section">
+          <div className="topic-party-section__heading">{section.label}</div>
           <ul className="topic-party-section__list">
-            {partyRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+            {partySubs.length > 0 && !searchFilter
+              ? renderSubsectionBlocks(partyRoots, partySubs)
+              : partyRoots.map((item) => renderTreeNode(item, treeNodeProps))}
           </ul>
         </li>
-      ))
+      )
+    })
+  }
+
+  function renderSupportSinglePartyLayout(party: string) {
+    const partySubs = subsectionsForPartyScope(subsections, party)
+    if (partySubs.length > 0 && !searchFilter) {
+      return renderSubsectionBlocks(roots, partySubs)
     }
-    return sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))
+    return roots.map((item) => renderTreeNode(item, treeNodeProps))
+  }
+
+  function renderDeptAllLayout() {
+    const deptSubs = deptLevelSubsections(subsections)
+    if (deptSubs.length === 0) {
+      return roots.map((item) => renderTreeNode(item, treeNodeProps))
+    }
+    const blocks = groupRootsBySubsections(roots, deptSubs).filter(
+      (block) =>
+        block.id !== UNASSIGNED_SUBSECTION_BLOCK_ID || block.items.length > 0,
+    )
+    return blocks.map((block) => {
+      return (
+        <li
+          key={block.id}
+          className={
+            block.id === UNASSIGNED_SUBSECTION_BLOCK_ID
+              ? 'topic-subsection-section'
+              : 'topic-party-section'
+          }
+        >
+          <div
+            className={
+              block.id === UNASSIGNED_SUBSECTION_BLOCK_ID
+                ? 'topic-subsection-section__heading'
+                : 'topic-party-section__heading'
+            }
+          >
+            {block.label}
+          </div>
+          <ul
+            className={
+              block.id === UNASSIGNED_SUBSECTION_BLOCK_ID
+                ? 'topic-subsection-section__list'
+                : 'topic-party-section__list'
+            }
+          >
+            {block.items.map((item) => renderTreeNode(item, treeNodeProps))}
+          </ul>
+        </li>
+      )
+    })
+  }
+
+  function renderDeptSingleSectionLayout(_sectionId: string) {
+    return roots.map((item) => renderTreeNode(item, treeNodeProps))
+  }
+
+  function renderSidebarRoots() {
+    if (supportDept && groupRootsByParty) {
+      return renderSupportAllLayout()
+    }
+    if (!supportDept && groupRootsByParty) {
+      return renderDeptAllLayout()
+    }
+    if (supportDept && isPartySectionFilter(supportListFilter)) {
+      return renderSupportSinglePartyLayout(supportListFilter)
+    }
+    if (
+      !supportDept &&
+      isDeptSectionFilter(supportListFilter, supportDept, subsections)
+    ) {
+      return renderDeptSingleSectionLayout(supportListFilter)
+    }
+    if (supportDept && supportListFilter === 'archive') {
+      const archiveSubs = sortSubsections(
+        subsections.filter(
+          (s) =>
+            s.departmentId === 'support' &&
+            (s.isArchiveLost ||
+              s.isArchiveArchived ||
+              roots.some((r) => r.subsection_id === s.id)),
+        ),
+      )
+      if (archiveSubs.length > 0 && !searchFilter) {
+        return renderSubsectionBlocks(roots, archiveSubs)
+      }
+      return roots.map((item) => renderTreeNode(item, treeNodeProps))
+    }
+    return roots.map((item) => renderTreeNode(item, treeNodeProps))
   }
 
   function openContextMenu(e: React.MouseEvent) {
@@ -811,21 +980,6 @@ export function TopicList({
     onEditTopic?.(topicId)
   }
 
-  const treeNodeProps = {
-    items,
-    selectedId,
-    onSelect,
-    searchFilter,
-    reorderMode,
-    onReorderSiblings,
-    draggingId,
-    onReorderMouseDown: handleReorderMouseDown,
-    dragOverId,
-    flashFocusId,
-    expandFolderIds,
-    onDismissExpandFolder: dismissExpandFolder,
-  }
-
   if (searchFilter && roots.length === 0) {
     return <div className="empty-hint">Ничего не найдено</div>
   }
@@ -846,25 +1000,7 @@ export function TopicList({
         className={`topic-tree topic-list${reorderMode ? ' is-reorder-active' : ''}`}
         onContextMenu={openContextMenu}
       >
-        {showSubsectionSections
-          ? subsectionSections.map(({ id, label, items: sectionRoots }) => (
-              <li key={id} className="topic-subsection-section">
-                <div className="topic-subsection-section__heading">{label}</div>
-                <ul className="topic-subsection-section__list">
-                  {renderRootItems(sectionRoots)}
-                </ul>
-              </li>
-            ))
-          : showPartySections
-            ? partySections.map(({ party, items: sectionRoots }) => (
-                <li key={party} className="topic-party-section">
-                  <div className="topic-party-section__heading">{SUPPORT_PARTY_LABELS[party]}</div>
-                  <ul className="topic-party-section__list">
-                    {sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))}
-                  </ul>
-                </li>
-              ))
-            : roots.map((item) => renderTreeNode(item, treeNodeProps))}
+        {renderSidebarRoots()}
       </ul>
 
       {dragGhost &&

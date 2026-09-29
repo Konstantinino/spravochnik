@@ -29,7 +29,11 @@ export const ensureMediaFilesDownloaded = serverSync.ensureMediaFilesDownloaded
 export const peekAndPullRemoteChanges = serverSync.peekAndPullRemoteChanges
 export const scheduleRemoteChangePeek = serverSync.scheduleRemoteChangePeek
 
-export async function pullFromYandex(options?: { force?: boolean }) {
+export async function pullFromYandex(options?: {
+  force?: boolean
+  silent?: boolean
+  clearPending?: boolean
+}) {
   if (backend === 'yandex') {
     const y = await loadYandex()
     return y.pullFromYandex(options)

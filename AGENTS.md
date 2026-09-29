@@ -99,7 +99,7 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | Файл | Назначение |
 |---|---|
 | `AuthScreen.tsx` | вход, URL сервера |
-| `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, **разделы и подразделы**, телефоны support (без дубля preview), передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
+| `SettingsPage.tsx` | owner/admin: пользователи, роли, whitelist, **разделы тем** (внутри отдела; отделы — в шапке), телефоны support, передача владения, скачать Setup; **владелец** — место на сервере; журнал сессии; full pull |
 | `Viewer.tsx`, `Header.tsx` | просмотр/правка; topbar: ← Назад, **«Клиент»/«Админ»** (связанные темы), телефоны support; профиль → «Обновить»; **«Сбросить»** |
 | `SupportPhonesBar.tsx`, `lib/supportPhones.ts`, `lib/supportPhonesUi.ts` | телефоны техподдержки: формат из цифр, копирование, placement header/strip |
 | `TopicMarkdownImage.tsx` | resolve shared image paths, retry download |
@@ -107,8 +107,8 @@ Nginx: `nginx/nginx.conf` — `client_max_body_size 120M` (Setup ~80+ МБ).
 | `lib/restoreAppFocus.ts` | восстановление фокуса Electron после модалок / сброса |
 | `ParentTopicField.tsx`, `TopicLinkPicker.tsx` | родитель: combobox, поиск по названию, фильтр party; «+»: весь отдел без архива |
 | `hooks/useTopicLinkPicker.ts` | состояние пикера, dismiss после пробела |
-| `TopicList.tsx` | дерево тем, секции **party** / **подразделов** (отступ), **reorder**, ПКМ «редактировать тему/порядок» |
-| `TopicEditorModal.tsx` | обязательный выбор **подраздела**, если у раздела есть подразделы (корневая тема) |
+| `TopicList.tsx` | дерево тем, секции **party** / **разделов тем** (отступ), **reorder**, ПКМ «редактировать тему/порядок» |
+| `TopicEditorModal.tsx` | обязательный выбор **раздела**, если в отделе настроены разделы (корневая тема) |
 | `lib/data.ts` | фильтры, `reorderSiblingTopics` + party scope, `getAncestorIds`, `getItemParty`, `topicDisplayLabel` |
 | `lib/markdown.ts` | media src, ссылки тем, вложения `files/` |
 | `lib/textInsert.ts` | вставка / `+query` / обёртка выделения ссылкой |
@@ -168,7 +168,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.4.6.exe
+# → app/release/REST-INFO-Setup-1.4.7.exe
 ```
 
 ## Владелец / bootstrap
@@ -194,9 +194,12 @@ npm run dist:ascii
 12. **Первый вход в reorder:** локально проставляет `sort_index` по текущему порядку (без push до «Завершить»).
 13. **Минимальная версия клиента:** API отклоняет запись (426), если `X-Rest-Info-Client-Version` старее последнего `app_releases`; без записи в `app_releases` проверка выключена.
 14. **Admin↔client link:** пока production API без **008**, связь держится локально после push; для общей БД — деплой **008** + клиент с заголовком версии.
-15. **Динамические разделы:** миграция **009** + `/admin/departments`; без деплоя — 404 Not found при добавлении раздела. Раздел **`lost`** («Потерялись») в шапке только при наличии тем.
-16. **Подразделы:** миграция **010** + admin/sync API; корневая тема в разделе с подразделами требует `subsection_id`. Медиа: `normalizeMediaDepartmentId` принимает slug новых разделов `[a-z][a-z0-9_-]{0,47}`.
+15. **Терминология UI:** **отдел** = support/СПП/юристы (шапка); **раздел** = группировка тем внутри отдела (`department_subsections`, поле `subsection_id` в JSON/API). Не путать с CRUD `/admin/departments` (отдельные JSON-справочники на диске; в настройках не редактируются).
+16. **«Потерялись»:** отдел `lost` (009) в шапке только при наличии тем. **Разделы тем:** миграция **010**; без деплоя — 404 на `/admin/departments/:id/subsections`.
 17. **Телефоны в шапке:** блок справа (`supportPhonesUi.ts` → `header`); копирование форматированного номера.
+18. **Разделы тем (настройки):** `canManageTopicSectionsForDepartment` — owner все отделы, admin только `departmentId` пользователя (UI + `admin.ts` + IPC `admin:*-subsection` / `admin:*-support-section`).
+19. **Список «Все»:** `groupRootsByParty` для всех отделов; non-support — плашки `department_subsections`; support — party + подразделы.
+20. **Редактор темы:** корневая тема — обязательный раздел (`topicSectionPickers.ts`, `TopicEditorModal`, `Viewer`); client link только support / party `additional`.
 
 ## Правила для агента
 
@@ -209,6 +212,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.4.6** (`app/package.json`)
+- Клиент: **1.4.7** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

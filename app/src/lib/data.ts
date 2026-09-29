@@ -1,13 +1,14 @@
-import type { GuideItem, SupportParty, TopicViewFilter } from '../types'
-import { isSupportParty } from '../types'
+import type { GuideItem, TopicViewFilter } from '../types'
 
 export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[] }): GuideItem[] {
   return data.questions ?? data.templates ?? []
 }
 
 /** Legacy topics without party are treated as supplier. */
-export function getItemParty(item: GuideItem): SupportParty {
-  return isSupportParty(item.party) ? item.party : 'supplier'
+export function getItemParty(item: GuideItem): string {
+  const raw = item.party
+  if (typeof raw === 'string' && raw.trim()) return raw.trim()
+  return 'supplier'
 }
 
 export function normalizeTopicIdRef(value: unknown): number | null {
@@ -31,12 +32,19 @@ export function isArchived(item: GuideItem): boolean {
  * - archive: only archived
  * - all / supplier / customer / errors / additional: exclude archived; party filter for support
  */
-export function filterItemsByView(items: GuideItem[], filter: TopicViewFilter): GuideItem[] {
+export function filterItemsByView(
+  items: GuideItem[],
+  filter: TopicViewFilter,
+  options?: { deptSectionIds?: ReadonlySet<string> },
+): GuideItem[] {
   if (filter === 'archive') {
     return items.filter((item) => isArchived(item))
   }
   const active = items.filter((item) => !isArchived(item))
   if (filter === 'all') return active
+  if (options?.deptSectionIds?.has(filter)) {
+    return active.filter((item) => String(item.subsection_id ?? '').trim() === filter)
+  }
   return active.filter((item) => getItemParty(item) === filter)
 }
 
@@ -114,13 +122,20 @@ export function resolveReorderSiblingScope(
   parentId: number | null,
   allItems: GuideItem[],
   draggedId: number,
+  options?: { deptSectionIds?: ReadonlySet<string> },
 ): ReorderSiblingScope | undefined {
   if (parentId != null) return undefined
 
   if (listFilter === 'archive') {
     return { matchSibling: isArchived }
   }
-  if (isSupportParty(listFilter)) {
+  if (listFilter !== 'all') {
+    if (options?.deptSectionIds?.has(listFilter)) {
+      return {
+        matchSibling: (item) =>
+          !isArchived(item) && String(item.subsection_id ?? '').trim() === listFilter,
+      }
+    }
     const party = listFilter
     return {
       matchSibling: (item) => !isArchived(item) && getItemParty(item) === party,
@@ -289,7 +304,7 @@ export function filterTopicsForLinkPicker(items: GuideItem[]): GuideItem[] {
 /** Parent picker: same party only (support dept); excludes archive. */
 export function filterTopicsForParentPicker(
   items: GuideItem[],
-  party: SupportParty,
+  party: string,
 ): GuideItem[] {
   return filterTopicsForLinkPicker(items).filter((item) => getItemParty(item) === party)
 }

@@ -9,6 +9,21 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const CLIENT_VERSION_HEADER = 'x-rest-info-client-version'
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+function readAppPackageVersion() {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'),
+    )
+    return String(pkg.version ?? '').trim() || null
+  } catch {
+    return null
+  }
+}
 
 const setupPath = process.argv[2]
 const serverUrl = (process.argv[3] || process.env.RESTINFO_SERVER_URL || '').replace(/\/+$/, '')
@@ -26,8 +41,20 @@ if (!serverUrl || !adminToken) {
 
 const fileName = path.basename(setupPath)
 const versionMatch = fileName.match(/Setup-([\d.]+)\.exe/i)
-const version = versionMatch ? versionMatch[1] : process.env.RESTINFO_VERSION || '0.0.0'
+const version = versionMatch
+  ? versionMatch[1]
+  : process.env.RESTINFO_VERSION || readAppPackageVersion() || '0.0.0'
 const releaseDir = path.dirname(path.resolve(setupPath))
+/** Сервер отклоняет запись без заголовка (0.0.0). Для публикации — версия Setup или app/package.json. */
+const clientVersionHeader = versionMatch?.[1] || readAppPackageVersion() || version
+
+function uploadHeaders(extra = {}) {
+  return {
+    Authorization: `Bearer ${adminToken}`,
+    [CLIENT_VERSION_HEADER]: clientVersionHeader,
+    ...extra,
+  }
+}
 
 async function uploadUpdateFile(relativeName, localPath) {
   const buffer = fs.readFileSync(localPath)
@@ -37,7 +64,7 @@ async function uploadUpdateFile(relativeName, localPath) {
 
   const uploadRes = await fetch(`${serverUrl}/media/upload`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${adminToken}` },
+    headers: uploadHeaders(),
     body: form,
   })
 
@@ -67,10 +94,7 @@ async function main() {
 
   const releaseRes = await fetch(`${serverUrl}/admin/releases`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      'Content-Type': 'application/json',
-    },
+    headers: uploadHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       version,
       setupFilename: fileName,

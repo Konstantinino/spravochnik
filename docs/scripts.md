@@ -56,9 +56,11 @@ node scripts/upload-release.js release/REST-INFO-Setup-1.2.0.exe
 ```
 
 **Что делает:**
-1. Загружает `.exe` на сервер (`POST /media/upload`)
+1. Загружает `.exe`, `latest.yml`, `.blockmap` в `updates/*` (`POST /media/upload`)
 2. Регистрирует версию (`POST /admin/releases`)
-3. Клиенты с `serverUrl` при **наличии сети** проверяют `GET /app/update` и скачивают установщик с сервера
+3. Клиенты с `serverUrl` при **наличии сети** проверяют обновления и скачивают установщик с сервера
+
+Скрипт отправляет заголовок `X-Rest-Info-Client-Version` (версия из имени Setup или `app/package.json`). На сервере загрузка в `updates/*` для admin/owner **не** блокируется проверкой минимальной версии клиента (остальные upload — по-прежнему с 426 для старых клиентов).
 
 ---
 

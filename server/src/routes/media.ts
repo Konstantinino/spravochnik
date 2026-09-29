@@ -1,12 +1,15 @@
-import { Router } from 'express'
+import { Router, type NextFunction, type Response } from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import multer from 'multer'
 import { query, bumpGlobalVersion } from '../db/pool.js'
-import { canEditDepartment } from '../lib/auth-utils.js'
+import { canEditDepartment, isStaffRole } from '../lib/auth-utils.js'
 import { authMiddleware, requireRole, type AuthRequest } from '../middleware/auth.js'
-import { blockWritesIfClientOutdated } from '../middleware/min-client-version.js'
+import {
+  blockWritesIfClientOutdated,
+  requireCurrentClientVersion,
+} from '../middleware/min-client-version.js'
 import {
   canonicalizeMediaRelativePath,
   mediaRelativePathCandidates,
@@ -20,7 +23,20 @@ const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 
 const UPLOAD_MAX_BYTES = 120 * 1024 * 1024
 
 export const mediaRouter = Router()
-mediaRouter.use(blockWritesIfClientOutdated)
+
+function requireClientVersionUnlessUpdatesUpload(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  const relativePath = String(req.body?.relativePath ?? '')
+  const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '')
+  if (normalized.startsWith('updates/')) {
+    next()
+    return
+  }
+  void requireCurrentClientVersion(req, res, next)
+}
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -79,6 +95,7 @@ mediaRouter.post(
       next()
     })
   },
+  requireClientVersionUnlessUpdatesUpload,
   async (req: AuthRequest, res) => {
     try {
       const file = req.file
@@ -108,6 +125,10 @@ mediaRouter.post(
 
       // App installers go to UPDATES_DIR (served by GET /app/download/…), not media volume.
       if (normalized.startsWith('updates/')) {
+        if (!isStaffRole(req.user!.role)) {
+          res.status(403).json({ error: 'Публикация обновлений доступна только admin/owner' })
+          return
+        }
         const filename = path.basename(normalized)
         const destPath = path.join(UPDATES_DIR, filename)
         if (file.path !== destPath) {
@@ -204,6 +225,7 @@ mediaRouter.delete(
   '/*',
   authMiddleware,
   requireRole('editor', 'admin', 'owner'),
+  blockWritesIfClientOutdated,
   async (req: AuthRequest, res) => {
     try {
       const rel = mediaRelParam(req)

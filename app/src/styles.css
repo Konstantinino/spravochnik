@@ -1103,38 +1103,50 @@ mark.find-hit--active {
   width: 100%;
 }
 
-.viewer__textarea-stack > textarea {
-  width: 100%;
-  min-height: 320px;
+/* Caret is the transparent textarea; glyphs are the highlight behind it.
+   Padding, font metrics, wrapping and scrollbar gutter must stay identical,
+   including against `.field textarea` (higher specificity on purpose). */
+.viewer__textarea-stack > textarea.viewer__textarea,
+.viewer__textarea-highlight {
   margin: 0;
-  padding: 12px 14px;
-  padding-right: 52px;
-  border: 1px solid var(--border);
+  padding: 12px 52px 12px 14px;
+  border: 1px solid transparent;
   border-radius: 8px;
-  line-height: 1.5;
+  box-sizing: border-box;
   font: inherit;
   font-family: inherit;
   font-size: inherit;
-  box-sizing: border-box;
+  font-weight: inherit;
+  line-height: 1.5;
+  letter-spacing: normal;
+  word-spacing: normal;
+  tab-size: 8;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "kern" 0, "liga" 0, "calt" 0;
+  text-rendering: auto;
+  scrollbar-gutter: stable;
+}
+
+.viewer__textarea-stack > textarea.viewer__textarea {
+  width: 100%;
+  min-height: 320px;
   display: block;
+  position: relative;
+  z-index: 1;
+  border-color: var(--border);
+  resize: vertical;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
 }
 
 .viewer__textarea-highlight {
   position: absolute;
   inset: 0;
-  margin: 0;
-  padding: 12px 14px;
-  padding-right: 52px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  line-height: 1.5;
-  font: inherit;
-  font-family: inherit;
-  font-size: inherit;
-  box-sizing: border-box;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  word-break: break-word;
   background: #fff;
   color: var(--text);
   overflow: hidden;
@@ -1154,6 +1166,10 @@ mark.find-hit--active {
   caret-color: var(--text);
 }
 
+.viewer__textarea-stack > textarea.viewer__textarea::placeholder {
+  color: var(--muted);
+}
+
 .viewer__textarea--edit-overlay::selection {
   background: rgba(51, 144, 255, 0.45);
   color: transparent;
@@ -1166,8 +1182,13 @@ mark.find-hit--active {
 
 mark.nbsp-entity-mark {
   background: rgba(134, 239, 172, 0.55);
-  color: var(--text);
+  color: inherit;
+  margin: 0;
   padding: 0;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
   border-radius: 2px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;

@@ -2,6 +2,7 @@ import {
   Children,
   cloneElement,
   isValidElement,
+  useLayoutEffect,
   useRef,
   type ReactElement,
   type ReactNode,
@@ -48,6 +49,14 @@ export function TextareaWithNbspButton({
   function handleTextareaScroll(e: UIEvent<HTMLTextAreaElement>) {
     syncScrollFromTextarea(e.currentTarget)
   }
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    const layer = highlightRef.current
+    if (!el || !layer) return
+    layer.scrollTop = el.scrollTop
+    layer.scrollLeft = el.scrollLeft
+  }, [value, textareaRef])
 
   function insertNbsp() {
     const { next, selectStart, selectEnd } = insertNbspEntityAtCursor(

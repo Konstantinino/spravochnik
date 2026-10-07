@@ -25,7 +25,7 @@ cd app
 npm run dist:ascii
 .\scripts\publish-release.ps1
 # или явный путь:
-.\scripts\publish-release.ps1 release\REST-INFO-Setup-1.4.7.exe
+.\scripts\publish-release.ps1 release\REST-INFO-Setup-1.4.8.exe
 ```
 
 ### `scripts/server-deploy-remote.ps1`
@@ -52,7 +52,7 @@ npm run dist:ascii
 
 $env:RESTINFO_SERVER_URL = "https://restinfo.example.com"
 $env:RESTINFO_ADMIN_TOKEN = "<JWT админа>"
-node scripts/upload-release.js release/REST-INFO-Setup-1.2.0.exe
+node scripts/upload-release.js release/REST-INFO-Setup-1.4.8.exe
 ```
 
 **Что делает:**

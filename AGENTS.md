@@ -168,7 +168,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.4.7.exe
+# → app/release/REST-INFO-Setup-1.4.8.exe
 ```
 
 ## Владелец / bootstrap
@@ -212,6 +212,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.4.7** (`app/package.json`)
+- Клиент: **1.4.8** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

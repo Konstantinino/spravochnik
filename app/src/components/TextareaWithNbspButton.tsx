@@ -54,8 +54,15 @@ export function TextareaWithNbspButton({
     const el = textareaRef.current
     const layer = highlightRef.current
     if (!el || !layer) return
-    layer.scrollTop = el.scrollTop
-    layer.scrollLeft = el.scrollLeft
+    const sync = () => {
+      layer.scrollTop = el.scrollTop
+      layer.scrollLeft = el.scrollLeft
+    }
+    sync()
+    // Photo/file insert moves the caret on the next frame and the textarea
+    // scrolls to follow; catch that scroll after the selection is restored.
+    const id = requestAnimationFrame(sync)
+    return () => cancelAnimationFrame(id)
   }, [value, textareaRef])
 
   function insertNbsp() {

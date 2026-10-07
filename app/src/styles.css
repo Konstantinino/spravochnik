@@ -1103,9 +1103,10 @@ mark.find-hit--active {
   width: 100%;
 }
 
-/* Caret is the transparent textarea; glyphs are the highlight behind it.
-   Padding, font metrics, wrapping and scrollbar gutter must stay identical,
-   including against `.field textarea` (higher specificity on purpose). */
+/* Visible glyphs and the caret both come from the textarea. The highlight
+   only paints the &#160; background, so a long ![](images/…) path cannot
+   drift away from the caret. Padding, wrapping and scrollbar gutter still
+   match (and beat `.field textarea`) so that background stays put. */
 .viewer__textarea-stack > textarea.viewer__textarea,
 .viewer__textarea-highlight {
   margin: 0;
@@ -1140,7 +1141,7 @@ mark.find-hit--active {
   border-color: var(--border);
   resize: vertical;
   background: transparent;
-  color: transparent;
+  color: var(--text);
   caret-color: var(--text);
 }
 
@@ -1148,7 +1149,7 @@ mark.find-hit--active {
   position: absolute;
   inset: 0;
   background: #fff;
-  color: var(--text);
+  color: transparent;
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
@@ -1162,7 +1163,7 @@ mark.find-hit--active {
   position: relative;
   z-index: 1;
   background: transparent;
-  color: transparent;
+  color: var(--text);
   caret-color: var(--text);
 }
 
@@ -1172,17 +1173,17 @@ mark.find-hit--active {
 
 .viewer__textarea--edit-overlay::selection {
   background: rgba(51, 144, 255, 0.45);
-  color: transparent;
+  color: var(--text);
 }
 
 .viewer__textarea--edit-overlay::-moz-selection {
   background: rgba(51, 144, 255, 0.45);
-  color: transparent;
+  color: var(--text);
 }
 
 mark.nbsp-entity-mark {
   background: rgba(134, 239, 172, 0.55);
-  color: inherit;
+  color: transparent;
   margin: 0;
   padding: 0;
   border: 0;

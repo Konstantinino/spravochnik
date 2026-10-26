@@ -807,7 +807,9 @@ export default function App() {
         client_topic_id: payload.client_topic_id,
         has_children: false,
         party: payload.party,
-        ...(payload.subsection_id ? { subsection_id: payload.subsection_id } : {}),
+        ...(payload.subsection_id !== undefined
+          ? { subsection_id: payload.subsection_id }
+          : {}),
         photos: [],
         documents: [],
       },
@@ -920,20 +922,29 @@ export default function App() {
     }
   }
 
-  async function handleToggleArchive() {
+  async function handleToggleArchive(scope?: 'topic' | 'branch') {
     if (!selected || !canEdit) return
+    const topicId = selected.id
     const nextArchived = !selected.archived
-    const data = await window.spravochnik.updateItem({
-      departmentId,
-      item: {
-        ...selected,
-        archived: nextArchived,
-      },
-    })
-    setGuide(data)
-    if (nextArchived && listFilter !== 'archive') {
-      setSelectedId(null)
-      setNavHistory([])
+    pinSelectedTopic(topicId)
+    try {
+      const data = await window.spravochnik.updateItem({
+        departmentId,
+        item: {
+          ...selected,
+          archived: nextArchived,
+        },
+        promoteChildren: scope === 'topic' && nextArchived,
+      })
+      setGuide(data)
+      pinSelectedTopic(topicId)
+      if (nextArchived && listFilter !== 'archive') {
+        setSelectedId(null)
+        setNavHistory([])
+      }
+    } catch (e) {
+      releasePinnedTopic(topicId)
+      setError(e instanceof Error ? e.message : 'Не удалось изменить архив')
     }
   }
 
@@ -957,12 +968,13 @@ export default function App() {
     }
   }
 
-  async function handleDelete() {
+  async function handleDelete(scope?: 'topic' | 'branch') {
     if (!selected) return
     const deletedId = selected.id
     const data = await window.spravochnik.deleteItem({
       departmentId,
       id: deletedId,
+      scope: scope === 'topic' ? 'topic' : 'branch',
     })
     setGuide(data)
     setSelectedId(null)
@@ -994,6 +1006,8 @@ export default function App() {
             setView('main')
             void refreshDepartmentsAndLostCount()
           }}
+          initialTopicSections={subsections}
+          initialSupportSections={supportSections}
           currentUser={user}
           onCurrentUserChange={(next) => {
             if (!next) {

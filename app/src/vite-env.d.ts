@@ -60,6 +60,8 @@ export interface SpravochnikApi {
 
     item: GuideItem
 
+    promoteChildren?: boolean
+
   }) => Promise<GuideFile>
 
   pickAndSaveImage: () => Promise<{ markdownPath: string; url: string } | null>
@@ -401,7 +403,11 @@ export interface SpravochnikApi {
 
 
 
-  deleteItem: (payload: { departmentId: DepartmentId; id: number }) => Promise<GuideFile>
+  deleteItem: (payload: {
+    departmentId: DepartmentId
+    id: number
+    scope?: 'topic' | 'branch'
+  }) => Promise<GuideFile>
 
   reorderTopics: (payload: {
     departmentId: DepartmentId

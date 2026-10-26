@@ -16,10 +16,12 @@ import {
   findAdminTopicForClient,
   getChildren,
   getItemParty,
+  topicHasSubtopics,
   getLinkedClientTopicId,
   topicDisplayLabel,
 } from '../lib/data'
 import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
+import { releaseStaleFocus, restoreAppFocus } from '../lib/restoreAppFocus'
 import {
   IMAGE_SCALE_DEFAULT,
   getImageScaleForTopicImage,
@@ -44,9 +46,12 @@ import {
   wrapSelectionWithTopicLink,
 } from '../lib/textInsert'
 import {
+  SUBSECTION_NONE_OPTION_LABEL,
+  SUBSECTION_NONE_SELECT_VALUE,
   editorSubsectionsForDepartment,
   isEditableRootTopic,
-  sectionRequiredErrorMessage,
+  rootSubsectionIdForSave,
+  rootSubsectionSelectValueFromTopic,
 } from '../lib/topicSectionPickers'
 import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
@@ -77,8 +82,8 @@ interface ViewerProps {
     subsection_id?: string | null
   }) => Promise<void>
   onSaveImageDisplay: (image_display: ImageDisplayMap | undefined) => Promise<void>
-  onDelete: () => Promise<void>
-  onToggleArchive?: () => void
+  onDelete: (scope?: 'topic' | 'branch') => Promise<void>
+  onToggleArchive?: (scope?: 'topic' | 'branch') => void | Promise<void>
   onAddSubtopic: () => void
   showLocalReset?: boolean
   onLocalReset?: () => void
@@ -207,6 +212,7 @@ export function Viewer({
   const [subsectionId, setSubsectionId] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [branchAction, setBranchAction] = useState<null | 'archive' | 'delete'>(null)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const {
@@ -315,8 +321,7 @@ export function Viewer({
     setAttachClientLink(linkedClient != null)
     setParty(getItemParty(item))
     const subs = editorSubsectionsForDepartment(subsections, departmentId, getItemParty(item))
-    const sid = String(item.subsection_id ?? '').trim()
-    setSubsectionId(sid && subs.some((s) => s.id === sid) ? sid : subs[0]?.id ?? '')
+    setSubsectionId(rootSubsectionSelectValueFromTopic(item.subsection_id, subs))
   }, [
     editing,
     item?.id,
@@ -360,8 +365,7 @@ export function Viewer({
     setAttachClientLink(linkedClient != null)
     setParty(getItemParty(item))
     const subs = editorSubsectionsForDepartment(subsections, departmentId, getItemParty(item))
-    const sid = String(item.subsection_id ?? '').trim()
-    setSubsectionId(sid && subs.some((s) => s.id === sid) ? sid : subs[0]?.id ?? '')
+    setSubsectionId(rootSubsectionSelectValueFromTopic(item.subsection_id, subs))
     onEditStart?.(structuredClone(item))
     setEditing(true)
     onStartEditRequestHandled?.()
@@ -414,8 +418,7 @@ export function Viewer({
     setParty(next)
     setAttachParent(false)
     setParentId(null)
-    const nextSubs = editorSubsectionsForDepartment(subsections, departmentId, next)
-    setSubsectionId(nextSubs[0]?.id ?? '')
+    setSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
     if (next !== 'additional') {
       setAttachClientLink(false)
       setClientTopicId(null)
@@ -460,8 +463,8 @@ export function Viewer({
     }
   }
 
-  const children = useMemo(
-    () => (item ? getChildren(items, item.id) : []),
+  const hasSubtopics = useMemo(
+    () => (item ? topicHasSubtopics(items, item.id) : false),
     [item, items],
   )
 
@@ -511,6 +514,11 @@ export function Viewer({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
+      if (branchAction) {
+        setBranchAction(null)
+        restoreAppFocus()
+        return
+      }
       if (linkPicker || scaleEditor) return
       if (findOpen) {
         closeFind()
@@ -543,6 +551,7 @@ export function Viewer({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [
+    branchAction,
     linkPicker,
     scaleEditor,
     findOpen,
@@ -586,12 +595,6 @@ export function Viewer({
       setError('Выберите клиентскую тему или снимите галочку')
       return
     }
-    if (showSubsectionPicker && !subsectionId) {
-      setError(
-        sectionRequiredErrorMessage(departmentId, targetDeptSubsections.length > 0),
-      )
-      return
-    }
     setSaving(true)
     setError(null)
     try {
@@ -606,7 +609,9 @@ export function Viewer({
               : null
             : undefined,
         party: showParty ? party : undefined,
-        ...(showSubsectionPicker ? { subsection_id: subsectionId } : {}),
+        ...(showSubsectionPicker
+          ? { subsection_id: rootSubsectionIdForSave(subsectionId) }
+          : {}),
       })
       setEditing(false)
     } catch (e) {
@@ -618,12 +623,52 @@ export function Viewer({
     }
   }
 
+  const hasChildTopics = getChildren(allItems, current.id).length > 0
+
+  function openBranchAction(kind: 'archive' | 'delete') {
+    releaseStaleFocus()
+    setBranchAction(kind)
+  }
+
+  function closeBranchAction() {
+    setBranchAction(null)
+    restoreAppFocus()
+  }
+
+  async function confirmBranchAction(scope: 'topic' | 'branch') {
+    const action = branchAction
+    if (!action) return
+    setBranchAction(null)
+    if (action === 'delete') {
+      setDeleting(true)
+      setError(null)
+      try {
+        await onDelete(scope)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ошибка удаления')
+      } finally {
+        setDeleting(false)
+        restoreAppFocus()
+      }
+      return
+    }
+    try {
+      await onToggleArchive?.(scope)
+    } finally {
+      restoreAppFocus()
+    }
+  }
+
   async function handleDelete() {
-    if (!window.confirm(`Удалить тему «${current.question}»? Подтемы тоже будут удалены.`)) return
+    if (hasChildTopics) {
+      openBranchAction('delete')
+      return
+    }
+    if (!window.confirm(`Удалить тему «${current.question}»?`)) return
     setDeleting(true)
     setError(null)
     try {
-      await onDelete()
+      await onDelete('branch')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка удаления')
     } finally {
@@ -1029,7 +1074,17 @@ export function Viewer({
                     Добавить подтему
                   </button>
                   {onToggleArchive && (
-                    <button type="button" className="btn btn-secondary" onClick={onToggleArchive}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        if (!current.archived && hasChildTopics) {
+                          openBranchAction('archive')
+                          return
+                        }
+                        void onToggleArchive()
+                      }}
+                    >
                       {current.archived ? 'Из архива' : 'В архив'}
                     </button>
                   )}
@@ -1165,15 +1220,6 @@ export function Viewer({
         </div>
       )}
 
-      {children.length > 0 && !editing && item && (
-        <ViewerChildrenTree
-          parentId={item.id}
-          items={items}
-          currentId={current.id}
-          onNavigateToTopic={onNavigateToTopic}
-        />
-      )}
-
       {editing ? (
         <div className="viewer__editor">
           {showPartyPicker && (
@@ -1197,9 +1243,11 @@ export function Viewer({
               <span>{departmentId === 'support' ? 'Подраздел' : 'Раздел'}</span>
               <select
                 value={subsectionId}
-                required
                 onChange={(e) => setSubsectionId(e.target.value)}
               >
+                <option value={SUBSECTION_NONE_SELECT_VALUE}>
+                  {SUBSECTION_NONE_OPTION_LABEL}
+                </option>
                 {targetDeptSubsections.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
@@ -1310,7 +1358,11 @@ export function Viewer({
               {markdownForDisplay(current.answer)}
             </ReactMarkdown>
           ) : (
-            <p className="muted">Нет текста в теме</p>
+            <p className="muted">
+              {hasSubtopics
+                ? 'Текст этой темы пока пуст. Нажмите «Изменить», чтобы добавить описание — подтемы останутся ниже.'
+                : 'Нет текста в теме'}
+            </p>
           )}
 
           {localLegacy.length > 0 && (
@@ -1320,6 +1372,18 @@ export function Viewer({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {hasSubtopics && item && (
+        <div className="viewer__subtopics">
+          <div className="viewer__subtopics-heading">Подтемы</div>
+          <ViewerChildrenTree
+            parentId={item.id}
+            items={items}
+            currentId={current.id}
+            onNavigateToTopic={onNavigateToTopic}
+          />
         </div>
       )}
         </article>
@@ -1411,6 +1475,75 @@ export function Viewer({
           onApply={() => void closeScaleEditor(true)}
           onClose={() => void closeScaleEditor(true)}
         />
+      )}
+
+      {branchAction && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={closeBranchAction}
+        >
+          <div
+            className="modal local-reset-modal branch-action-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="branch-action-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal__header">
+              <h2 id="branch-action-title">
+                {branchAction === 'archive' ? 'В архив' : 'Удалить тему'}
+              </h2>
+              <button type="button" className="btn btn-ghost" onClick={closeBranchAction} aria-label="Закрыть">
+                ✕
+              </button>
+            </div>
+            <div className="modal__body">
+              <p>
+                У темы «{topicDisplayLabel(current)}» есть подтемы. Можно{' '}
+                {branchAction === 'archive' ? 'архивировать' : 'удалить'} только её — подтемы перейдут
+                к родительской теме, а если родителя нет, останутся в корне раздела. Либо{' '}
+                {branchAction === 'archive' ? 'в архив уйдёт' : 'будет удалена'} вся ветка.
+              </p>
+            </div>
+            <div className="branch-action-modal__choices">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void confirmBranchAction('topic')}
+              >
+                <span className="branch-action-modal__choice-title">Только эту тему</span>
+                <span className="branch-action-modal__choice-hint">
+                  Подтемы поднимутся к родителю или в корень раздела
+                </span>
+              </button>
+              <button
+                type="button"
+                className={branchAction === 'delete' ? 'btn btn-danger' : 'btn btn-secondary'}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void confirmBranchAction('branch')}
+              >
+                <span className="branch-action-modal__choice-title">Всю ветку</span>
+                <span className="branch-action-modal__choice-hint">
+                  {branchAction === 'archive'
+                    ? 'Тема и все вложенные подтемы уйдут в архив'
+                    : 'Тема и все вложенные подтемы будут удалены'}
+                </span>
+              </button>
+            </div>
+            <div className="modal__actions local-reset-modal__actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={closeBranchAction}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {lightboxSrc && (

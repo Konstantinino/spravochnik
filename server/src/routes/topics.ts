@@ -478,10 +478,16 @@ topicsRouter.put(
           : current.sort_index
 
       const updated = await withTransaction(async (client) => {
+        const requestedSubsection =
+          item.subsection_id !== undefined
+            ? item.subsection_id
+            : item.subsectionId !== undefined
+              ? item.subsectionId
+              : current.subsection_id
         let subsectionId = await resolveTopicSubsectionId(
           dept,
           parentId,
-          item.subsection_id ?? item.subsectionId ?? current.subsection_id,
+          requestedSubsection,
           client,
           party,
         )

@@ -33,6 +33,10 @@ import {
   normalizeTelDigits,
   type SupportPhoneLine,
 } from '../lib/supportPhones'
+import {
+  formatSubsectionDividerLine,
+  normalizeSubsectionLabelInput,
+} from '../lib/subsectionDividerLabel'
 
 function assignableRoles(actorIsOwner: boolean): UserRole[] {
   return actorIsOwner ? ['user', 'editor', 'admin'] : ['user', 'editor']
@@ -58,6 +62,16 @@ function levelLabel(level: SessionLogLevel): string {
   if (level === 'error') return 'Ошибка'
   if (level === 'warn') return 'Предупр.'
   return 'Инфо'
+}
+
+function SubsectionDividerPreview({ raw }: { raw: string }) {
+  const clean = normalizeSubsectionLabelInput(raw)
+  if (!clean) return null
+  return (
+    <span className="subsection-divider-preview muted" title="Как в списке тем">
+      {formatSubsectionDividerLine(raw)}
+    </span>
+  )
 }
 
 function formatTopicSectionsApiError(e: unknown): string {
@@ -131,9 +145,18 @@ interface SettingsPageProps {
   onBack: () => void
   currentUser: PublicUser
   onCurrentUserChange: (user: PublicUser | null) => void
+  /** Уже загружены в главном экране — показываем подразделы сразу, без ожидания reload(). */
+  initialTopicSections?: DepartmentSubsection[]
+  initialSupportSections?: SupportTopicSection[]
 }
 
-export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: SettingsPageProps) {
+export function SettingsPage({
+  onBack,
+  currentUser,
+  onCurrentUserChange,
+  initialTopicSections = [],
+  initialSupportSections = [],
+}: SettingsPageProps) {
   const [users, setUsers] = useState<PublicUser[]>([])
   const [whitelist, setWhitelist] = useState<WhitelistEntry[]>([])
   const [newEmail, setNewEmail] = useState('')
@@ -165,8 +188,10 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   const [supportPhones, setSupportPhones] = useState<SupportPhoneLine[]>(DEFAULT_SUPPORT_PHONES)
   const [savingSupportPhones, setSavingSupportPhones] = useState(false)
   const [workDepts, setWorkDepts] = useState<Department[]>(WORK_DEPARTMENTS)
-  const [topicSections, setTopicSections] = useState<DepartmentSubsection[]>([])
-  const [supportSections, setSupportSections] = useState<SupportTopicSection[]>([])
+  const [topicSections, setTopicSections] =
+    useState<DepartmentSubsection[]>(initialTopicSections)
+  const [supportSections, setSupportSections] =
+    useState<SupportTopicSection[]>(initialSupportSections)
   const [sectionsOfficeId, setSectionsOfficeId] = useState<WorkDepartmentId>('support')
   const [addingNewSection, setAddingNewSection] = useState(false)
   const [addingSubsectionParty, setAddingSubsectionParty] = useState<string | null>(null)
@@ -238,8 +263,12 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
 
   async function reloadDepartmentsConfig() {
     if (!actorIsStaff) return
-    try {
-      const localGuideDepts = await window.spravochnik.getDepartments()
+    const [localGuideDepts, subs, support] = await Promise.all([
+      window.spravochnik.getDepartments().catch(() => null),
+      window.spravochnik.getSubsections().catch(() => null),
+      window.spravochnik.getSupportSections().catch(() => null),
+    ])
+    if (localGuideDepts) {
       setWorkDepts(
         workDepartmentsFrom(
           localGuideDepts.map((d) => ({
@@ -250,19 +279,13 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
           })),
         ),
       )
-    } catch {
+    } else {
       setWorkDepts(WORK_DEPARTMENTS)
     }
-    try {
-      setTopicSections(await window.spravochnik.getSubsections())
-    } catch {
-      setTopicSections([])
-    }
-    try {
-      setSupportSections(await window.spravochnik.getSupportSections())
-    } catch {
-      setSupportSections([])
-    }
+    if (subs) setTopicSections(subs)
+    else setTopicSections([])
+    if (support) setSupportSections(support)
+    else setSupportSections([])
   }
 
   async function createSupportSectionRow() {
@@ -334,7 +357,7 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   }
 
   async function createTopicSection() {
-    const label = newSectionLabel.trim()
+    const label = normalizeSubsectionLabelInput(newSectionLabel)
     if (!label) {
       setTopicSectionsError(
         sectionsOfficeId === 'support' ? 'Введите название подраздела' : 'Введите название раздела',
@@ -401,7 +424,7 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   }
 
   async function saveTopicSectionLabel(id: string) {
-    const label = editingSectionLabel.trim()
+    const label = normalizeSubsectionLabelInput(editingSectionLabel)
     if (!label) {
       setError('Введите название раздела')
       return
@@ -480,6 +503,7 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
   }
 
   useEffect(() => {
+    if (actorIsStaff) void reloadDepartmentsConfig()
     void reload().catch((e) => setError(e instanceof Error ? e.message : 'Ошибка загрузки'))
     void reloadSessionLogs()
     void window.spravochnik.getLatestRelease().then(setLatestRelease).catch(() => undefined)
@@ -1211,12 +1235,15 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
                             >
                               <span className="departments-settings__id muted" aria-hidden="true" />
                               {editing ? (
-                                <input
-                                  type="text"
-                                  value={editingSectionLabel}
-                                  onChange={(e) => setEditingSectionLabel(e.target.value)}
-                                  aria-label="Название подраздела"
-                                />
+                                <div className="departments-settings__field-stack">
+                                  <input
+                                    type="text"
+                                    value={editingSectionLabel}
+                                    onChange={(e) => setEditingSectionLabel(e.target.value)}
+                                    aria-label="Название подраздела"
+                                  />
+                                  <SubsectionDividerPreview raw={editingSectionLabel} />
+                                </div>
                               ) : (
                                 <span className="departments-settings__label">{section.label}</span>
                               )}
@@ -1272,14 +1299,17 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
                             ref={topicSectionsAddRef}
                             className="departments-settings__row departments-settings__row--nested departments-settings__row--editor"
                           >
-                            <input
-                              type="text"
-                              value={newSectionLabel}
-                              onChange={(e) => setNewSectionLabel(e.target.value)}
-                              placeholder="Название подраздела"
-                              aria-label="Название нового подраздела"
-                              autoFocus
-                            />
+                            <div className="departments-settings__field-stack">
+                              <input
+                                type="text"
+                                value={newSectionLabel}
+                                onChange={(e) => setNewSectionLabel(e.target.value)}
+                                placeholder="Название подраздела"
+                                aria-label="Название нового подраздела"
+                                autoFocus
+                              />
+                              <SubsectionDividerPreview raw={newSectionLabel} />
+                            </div>
                             <div className="departments-settings__actions">
                               <button
                                 type="button"
@@ -1364,12 +1394,15 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
                         <li key={section.id} className="departments-settings__row">
                           <span className="departments-settings__id muted" aria-hidden="true" />
                           {editing ? (
-                            <input
-                              type="text"
-                              value={editingSectionLabel}
-                              onChange={(e) => setEditingSectionLabel(e.target.value)}
-                              aria-label="Название раздела"
-                            />
+                            <div className="departments-settings__field-stack">
+                              <input
+                                type="text"
+                                value={editingSectionLabel}
+                                onChange={(e) => setEditingSectionLabel(e.target.value)}
+                                aria-label="Название раздела"
+                              />
+                              <SubsectionDividerPreview raw={editingSectionLabel} />
+                            </div>
                           ) : (
                             <span className="departments-settings__label">{section.label}</span>
                           )}
@@ -1425,14 +1458,17 @@ export function SettingsPage({ onBack, currentUser, onCurrentUserChange }: Setti
                   ref={topicSectionsAddRef}
                   className="departments-settings__row departments-settings__row--editor"
                 >
-                  <input
-                    type="text"
-                    value={newSectionLabel}
-                    onChange={(e) => setNewSectionLabel(e.target.value)}
-                    placeholder="Название раздела"
-                    aria-label="Название нового раздела"
-                    autoFocus
-                  />
+                  <div className="departments-settings__field-stack">
+                    <input
+                      type="text"
+                      value={newSectionLabel}
+                      onChange={(e) => setNewSectionLabel(e.target.value)}
+                      placeholder="Название раздела"
+                      aria-label="Название нового раздела"
+                      autoFocus
+                    />
+                    <SubsectionDividerPreview raw={newSectionLabel} />
+                  </div>
                   <div className="departments-settings__actions">
                     <button
                       type="button"

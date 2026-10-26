@@ -23,6 +23,17 @@ type SubsectionRow = {
   is_archive_archived?: boolean
 }
 
+/** Как в клиенте: без декоративных «-» по краям, первая буква заглавная. */
+export function normalizeSubsectionLabelInput(raw: string): string {
+  const stripped = raw.trim().replace(/^[\s-]+/, '').replace(/[\s-]+$/, '').trim()
+  if (!stripped) return ''
+  const chars = [...stripped]
+  const first = chars[0]
+  if (!first) return stripped
+  chars[0] = first.toLocaleUpperCase('ru-RU')
+  return chars.join('')
+}
+
 function slugifyLabel(label: string): string {
   const slug = label
     .trim()
@@ -222,12 +233,16 @@ export async function resolveTopicSubsectionId(
     )
     const inherited = parentRes.rows[0]?.subsection_id
     if (inherited && subs.some((s) => s.id === inherited)) return inherited
-    return subs[0]!.id
+    return null
   }
 
+  if (requested === null) return null
+
   const id = typeof requested === 'string' ? requested.trim() : ''
+  if (!id) return null
+
   const pickMsg = departmentId === 'support' ? 'Выберите подраздел' : 'Выберите раздел'
-  if (!id || !subs.some((s) => s.id === id)) {
+  if (!subs.some((s) => s.id === id)) {
     const err = new Error(pickMsg)
     ;(err as Error & { status: number }).status = 400
     throw err
@@ -274,7 +289,7 @@ export function subsectionToClient(row: SubsectionRecord) {
   return {
     id: row.id,
     departmentId: row.departmentId,
-    label: row.label,
+    label: normalizeSubsectionLabelInput(row.label),
     sortOrder: row.sortOrder,
     party: row.party,
     isArchiveLost: row.isArchiveLost,

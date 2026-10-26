@@ -1,6 +1,11 @@
 export const ARCHIVE_LOST_SUBSECTION_ID = 'support__archive__lost'
 export const ARCHIVE_ARCHIVED_SUBSECTION_ID = 'support__archive__archived'
 
+export function isSupportArchiveSubsectionId(subsectionId: unknown): boolean {
+  const sid = String(subsectionId ?? '').trim()
+  return sid === ARCHIVE_ARCHIVED_SUBSECTION_ID || sid === ARCHIVE_LOST_SUBSECTION_ID
+}
+
 export function applySupportArchiveSubsectionToRow(
   row: Record<string, unknown>,
   nextArchived: boolean,

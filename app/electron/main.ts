@@ -143,6 +143,7 @@ import {
   ARCHIVE_LOST_SUBSECTION_ID,
   applySupportArchiveSubsectionToRow,
   clearGuideTopicSubsectionId,
+  isSupportArchiveSubsectionId,
   moveGuideTopicsToArchiveLost,
 } from '../src/lib/archiveLost'
 import {
@@ -164,6 +165,7 @@ import {
 } from './updates'
 import { downloadMediaImage } from './media-download'
 import { normalizeSupportPhones } from '../src/lib/supportPhones'
+import { normalizeSubsectionLabelInput } from '../src/lib/subsectionDividerLabel'
 import {
   migrateLegacyLocalMedia,
   normalizeMediaDepartmentId,
@@ -274,6 +276,96 @@ function rootSubsectionsForTopic(
     return all.filter((s) => (s.party ?? null) === p)
   }
   return all.filter((s) => !s.party)
+}
+
+function rowParentId(row: Record<string, unknown>): number | null {
+  return typeof row.parent_id === 'number' ? row.parent_id : null
+}
+
+function rowSortIndex(row: Record<string, unknown>): number | null {
+  return typeof row.sort_index === 'number' && Number.isFinite(row.sort_index)
+    ? row.sort_index
+    : null
+}
+
+function compareTopicRows(a: Record<string, unknown>, b: Record<string, unknown>): number {
+  const ai = rowSortIndex(a)
+  const bi = rowSortIndex(b)
+  if (ai != null && bi != null && ai !== bi) return ai - bi
+  if (ai != null && bi == null) return -1
+  if (ai == null && bi != null) return 1
+  return String(a.question ?? '').localeCompare(String(b.question ?? ''), 'ru', {
+    sensitivity: 'base',
+  })
+}
+
+/** Прямые подтемы поднимаются к родителю темы. У корня — остаются корнем того же раздела. */
+function promoteDirectChildren(list: Array<Record<string, unknown>>, topicId: number): number[] {
+  const topic = list.find((row) => row.id === topicId)
+  if (!topic) return []
+  const oldParentId = rowParentId(topic)
+  const children = list
+    .filter((row) => rowParentId(row) === topicId && typeof row.id === 'number')
+    .sort(compareTopicRows)
+  if (children.length === 0) return []
+
+  const parent = oldParentId != null ? list.find((row) => row.id === oldParentId) : undefined
+  const sectionSubsection =
+    typeof topic.subsection_id === 'string' ? topic.subsection_id.trim() : ''
+  const sectionParty = typeof topic.party === 'string' ? topic.party.trim() : ''
+
+  let maxSort = -1
+  for (const row of list) {
+    if (row.id === topicId || children.some((child) => child.id === row.id)) continue
+    if (rowParentId(row) !== oldParentId) continue
+    const sortIndex = rowSortIndex(row)
+    if (sortIndex != null && sortIndex > maxSort) maxSort = sortIndex
+  }
+
+  children.forEach((child, index) => {
+    child.sort_index = maxSort + 1 + index
+    if (oldParentId == null) {
+      child.parent_id = null
+      if (sectionSubsection) child.subsection_id = sectionSubsection
+      if (sectionParty) child.party = sectionParty
+    } else {
+      child.parent_id = oldParentId
+      if (parent) {
+        const parentSubsection =
+          typeof parent.subsection_id === 'string' ? parent.subsection_id.trim() : ''
+        if (parentSubsection) child.subsection_id = parentSubsection
+        const parentParty = typeof parent.party === 'string' ? parent.party.trim() : ''
+        if (parentParty) child.party = parentParty
+      }
+    }
+  })
+
+  return children.map((child) => child.id as number)
+}
+
+async function pushPromotedTopicRows(
+  departmentId: DepartmentId,
+  rows: Array<Record<string, unknown>>,
+): Promise<'ok' | 'offline'> {
+  for (let i = 0; i < rows.length; i++) {
+    const result = await tryPushTopicOnline('update', departmentId, rows[i])
+    if (result.ok) continue
+    if (result.offline) {
+      for (const rest of rows.slice(i)) {
+        queueOperation({
+          type: 'update_topic',
+          departmentId,
+          payload: rest,
+        })
+      }
+      markOfflinePending()
+      return 'offline'
+    }
+    throw new Error(
+      `Конфликт: тема уже изменена на сервере (${result.conflict?.title ?? 'подтема'})`,
+    )
+  }
+  return 'ok'
 }
 
 function normalizeClientTopicId(value: unknown): number | null {
@@ -1249,7 +1341,7 @@ function registerIpc(): void {
     'admin:create-subsection',
     async (_e, payload: { departmentId: string; label: string; party?: string | null }) => {
       requireManageTopicSections(payload.departmentId)
-      const label = payload.label.trim()
+      const label = normalizeSubsectionLabelInput(payload.label)
       if (!label) throw new Error('Укажите название')
       const settings = readSettings()
       const localFallback = (): StoredSubsection => {
@@ -1324,7 +1416,9 @@ function registerIpc(): void {
       requireRole(getCurrentUser(), STAFF_ROLES)
       const existing = readStoredSubsections().find((s) => s.id === payload.id)
       if (existing) requireManageTopicSections(existing.departmentId)
-      const updated = await updateSubsectionOnServer(payload.id, { label: payload.label })
+      const label = normalizeSubsectionLabelInput(payload.label)
+      if (!label) throw new Error('Укажите название')
+      const updated = await updateSubsectionOnServer(payload.id, { label })
       mergeSubsectionPatch(updated)
       return updated
     },
@@ -1743,12 +1837,16 @@ function registerIpc(): void {
       const pickSubMsg =
         payload.departmentId === 'support' ? 'Выберите подраздел' : 'Выберите раздел'
       if (deptSubs.length > 0 && newItem.parent_id == null) {
-        const subId =
-          typeof payload.item.subsection_id === 'string' ? payload.item.subsection_id.trim() : ''
-        if (!subId || !deptSubs.some((s) => s.id === subId)) {
-          throw new Error(pickSubMsg)
+        const raw = payload.item.subsection_id
+        if (raw !== undefined && raw !== null) {
+          const subId = String(raw).trim()
+          if (subId) {
+            if (!deptSubs.some((s) => s.id === subId)) {
+              throw new Error(pickSubMsg)
+            }
+            newItem.subsection_id = subId
+          }
         }
-        newItem.subsection_id = subId
       } else if (newItem.parent_id != null && deptSubs.length > 0) {
         const parent = list.find((item) => item.id === newItem.parent_id)
         if (parent?.subsection_id) newItem.subsection_id = parent.subsection_id
@@ -1826,6 +1924,8 @@ function registerIpc(): void {
           documents?: { file_id: string; file_name: string }[]
           image_display?: Record<string, number>
         }
+        /** Архив только этой темы: прямые подтемы поднимаются на уровень выше, ветка не архивируется. */
+        promoteChildren?: boolean
       },
     ) => {
       requireEditDepartment(payload.departmentId)
@@ -1879,20 +1979,32 @@ function registerIpc(): void {
         payload.departmentId === 'support'
           ? normalizeSupportPartyId(payload.item.party, normalizeSupportPartyId(list[idx].party))
           : undefined
+      const oldArchived = Boolean(list[idx].archived)
+      const nextArchived =
+        payload.item.archived !== undefined ? Boolean(payload.item.archived) : oldArchived
+      const unarchivingRoot = !nextArchived && oldArchived && newParentId == null
       const deptSubs = rootSubsectionsForTopic(payload.departmentId, topicParty)
       const pickSubMsg =
         payload.departmentId === 'support' ? 'Выберите подраздел' : 'Выберите раздел'
       let nextSubsectionId: string | undefined
       if (deptSubs.length > 0) {
         if (newParentId == null) {
-          const subId =
-            payload.item.subsection_id !== undefined
-              ? String(payload.item.subsection_id ?? '').trim()
-              : String(list[idx].subsection_id ?? '').trim()
-          if (!subId || !deptSubs.some((s) => s.id === subId)) {
-            throw new Error(pickSubMsg)
+          if (unarchivingRoot) {
+            // Служебный subsection архива не входит в party-подразделы — снимется в applySupportArchiveSubsectionToRow.
+          } else if (payload.item.subsection_id !== undefined) {
+            const subId = String(payload.item.subsection_id ?? '').trim()
+            if (subId) {
+              if (
+                !deptSubs.some((s) => s.id === subId) &&
+                !isSupportArchiveSubsectionId(subId)
+              ) {
+                throw new Error(pickSubMsg)
+              }
+              if (!isSupportArchiveSubsectionId(subId)) {
+                nextSubsectionId = subId
+              }
+            }
           }
-          nextSubsectionId = subId
         } else {
           const parent = list.find((item) => item.id === newParentId)
           if (typeof parent?.subsection_id === 'string' && parent.subsection_id.trim()) {
@@ -1917,8 +2029,17 @@ function registerIpc(): void {
             }
           : {}),
       }
-      if (nextSubsectionId) list[idx].subsection_id = nextSubsectionId
-      else if (deptSubs.length > 0 && newParentId != null && !list[idx].subsection_id) {
+      if (
+        deptSubs.length > 0 &&
+        newParentId == null &&
+        !unarchivingRoot &&
+        payload.item.subsection_id !== undefined &&
+        !String(payload.item.subsection_id ?? '').trim()
+      ) {
+        delete list[idx].subsection_id
+      } else if (nextSubsectionId) {
+        list[idx].subsection_id = nextSubsectionId
+      } else if (deptSubs.length > 0 && newParentId != null && !list[idx].subsection_id) {
         delete list[idx].subsection_id
       }
       if (payload.departmentId === 'support') {
@@ -1929,9 +2050,9 @@ function registerIpc(): void {
         )
       }
 
-      const oldArchived = Boolean(list[idx].archived)
-      const nextArchived =
-        payload.item.archived !== undefined ? Boolean(payload.item.archived) : oldArchived
+      const promoteChildren = Boolean(payload.promoteChildren) && nextArchived && !oldArchived
+      const promotedIds = promoteChildren ? promoteDirectChildren(list, payload.item.id) : []
+
       if (payload.departmentId === 'support') {
         ensureArchiveArchivedSubsectionLocal()
         ensureArchiveLostSubsectionLocal()
@@ -1963,7 +2084,7 @@ function registerIpc(): void {
         return [...seen]
       }
 
-      if (nextArchived !== oldArchived) {
+      if (!promoteChildren && nextArchived !== oldArchived) {
         for (const id of collectDescendants(payload.item.id)) {
           const row = list.find((r) => r.id === id)
           if (!row) continue
@@ -2030,6 +2151,23 @@ function registerIpc(): void {
 
       const settings = readSettings()
       if (settings.serverUrl.trim()) {
+        if (promotedIds.length > 0) {
+          const promotedRows = promotedIds
+            .map((id) => reconciled.find((row) => row.id === id))
+            .filter((row): row is NonNullable<typeof row> => row != null)
+          const childPush = await pushPromotedTopicRows(
+            payload.departmentId,
+            promotedRows as Array<Record<string, unknown>>,
+          )
+          if (childPush === 'offline') {
+            queueOperation({
+              type: 'update_topic',
+              departmentId: payload.departmentId,
+              payload: savedItem as Record<string, unknown>,
+            })
+            return readGuideFile(dept.fileName)
+          }
+        }
         const result = await tryPushTopicOnline(
           'update',
           payload.departmentId,
@@ -2115,6 +2253,8 @@ function registerIpc(): void {
       payload: {
         departmentId: DepartmentId
         id: number
+        /** topic — удалить только её, подтемы поднять; branch — удалить всю ветку. */
+        scope?: 'topic' | 'branch'
       },
     ) => {
       requireRole(getCurrentUser(), STAFF_ROLES)
@@ -2124,6 +2264,9 @@ function registerIpc(): void {
       const list = (data[listKey] as Array<Record<string, unknown>>) || []
       const target = list.find((item) => item.id === payload.id)
       if (!target) throw new Error('Тема не найдена')
+
+      const promotedIds =
+        payload.scope === 'topic' ? promoteDirectChildren(list, payload.id) : []
 
       const toRemove = new Set<number>()
       const collect = (id: number) => {
@@ -2138,7 +2281,7 @@ function registerIpc(): void {
 
       const next = list.filter((item) => typeof item.id !== 'number' || !toRemove.has(item.id))
 
-      data[listKey] = reconcileHasChildren(
+      const reconciled = reconcileHasChildren(
         next as Array<{
           id: number
           parent_id?: number | null
@@ -2146,11 +2289,29 @@ function registerIpc(): void {
           archived?: boolean
         }>,
       )
+      data[listKey] = reconciled
       writeGuideFile(dept.fileName, data)
       removeLocalTopicMedia(payload.departmentId, [...toRemove])
 
       const settings = readSettings()
       if (settings.serverUrl.trim()) {
+        if (promotedIds.length > 0) {
+          const promotedRows = promotedIds
+            .map((id) => reconciled.find((row) => row.id === id))
+            .filter((row): row is NonNullable<typeof row> => row != null)
+          const childPush = await pushPromotedTopicRows(
+            payload.departmentId,
+            promotedRows as Array<Record<string, unknown>>,
+          )
+          if (childPush === 'offline') {
+            queueOperation({
+              type: 'delete_topic',
+              departmentId: payload.departmentId,
+              payload: { id: payload.id },
+            })
+            return readGuideFile(dept.fileName)
+          }
+        }
         const result = await tryPushTopicOnline('delete', payload.departmentId, {
           id: payload.id,
         })

@@ -88,6 +88,11 @@ export function getChildren(items: GuideItem[], parentId: number): GuideItem[] {
     .sort(compareTopicsForList)
 }
 
+/** Non-archived direct subtopics (sidebar / viewer). */
+export function topicHasSubtopics(items: GuideItem[], topicId: number): boolean {
+  return getChildren(items, topicId).length > 0
+}
+
 /** Assign sort_index 0..n-1 within each sibling group (keeps current list order). */
 export function ensureSortIndexes(items: GuideItem[]): GuideItem[] {
   const byParent = new Map<string, GuideItem[]>()

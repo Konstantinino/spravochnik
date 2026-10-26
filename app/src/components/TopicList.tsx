@@ -16,6 +16,10 @@ import {
   topicDisplayLabel,
 } from '../lib/data'
 import type { TopicSearchFilter } from '../lib/search'
+import {
+  formatSubsectionDividerLine,
+  normalizeSubsectionLabelInput,
+} from '../lib/subsectionDividerLabel'
 
 /** Matches default `.topic-item` horizontal margin */
 const BASE_MARGIN_X = 8
@@ -79,6 +83,15 @@ function highlightTitle(text: string, tokens: string[]): ReactNode {
   }
   if (cursor < text.length) parts.push(text.slice(cursor))
   return parts
+}
+
+function SubsectionDivider({ label }: { label: string }) {
+  const line = formatSubsectionDividerLine(label)
+  return (
+    <div className="topic-subsection-divider" title={normalizeSubsectionLabelInput(label) || 'Подраздел'}>
+      <span className="topic-subsection-divider__label">{line}</span>
+    </div>
+  )
 }
 
 interface TopicListProps {
@@ -257,7 +270,7 @@ function groupRootsBySubsections(
     items: byId.get(sub.id) ?? [],
   }))
   if (orphans.length > 0) {
-    blocks.push({ id: UNASSIGNED_SUBSECTION_BLOCK_ID, label: 'Без раздела', items: orphans })
+    blocks.push({ id: UNASSIGNED_SUBSECTION_BLOCK_ID, label: '', items: orphans })
   }
   return blocks
 }
@@ -813,16 +826,23 @@ export function TopicList({
   }
 
   function renderSubsectionBlocks(sectionRoots: GuideItem[], subs: DepartmentSubsection[]) {
-    return groupRootsBySubsections(sectionRoots, subs).map(({ id, label, items: blockRoots }) => (
-      <li key={id} className="topic-subsection-section">
-        <div className="topic-subsection-section__heading" title="Подраздел">
-          {label}
-        </div>
-        <ul className="topic-subsection-section__list">
-          {blockRoots.map((item) => renderTreeNode(item, treeNodeProps))}
-        </ul>
-      </li>
-    ))
+    const blocks = groupRootsBySubsections(sectionRoots, subs)
+    const unassigned =
+      blocks.find((b) => b.id === UNASSIGNED_SUBSECTION_BLOCK_ID)?.items ?? []
+    const withSubsection = blocks.filter(
+      (b) => b.id !== UNASSIGNED_SUBSECTION_BLOCK_ID && b.items.length > 0,
+    )
+    return [
+      ...unassigned.map((item) => renderTreeNode(item, treeNodeProps)),
+      ...withSubsection.map(({ id, label, items: blockRoots }) => (
+        <li key={id} className="topic-subsection-section">
+          <SubsectionDivider label={label} />
+          <ul className="topic-subsection-section__list">
+            {blockRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+          </ul>
+        </li>
+      )),
+    ]
   }
 
   function sectionLabel(sectionId: string): string {
@@ -857,7 +877,7 @@ export function TopicList({
         <li key={party} className="topic-party-section">
           <div className="topic-party-section__heading">{section.label}</div>
           <ul className="topic-party-section__list">
-            {partySubs.length > 0 && !searchFilter
+            {partySubs.length > 0
               ? renderSubsectionBlocks(partyRoots, partySubs)
               : partyRoots.map((item) => renderTreeNode(item, treeNodeProps))}
           </ul>
@@ -868,7 +888,7 @@ export function TopicList({
 
   function renderSupportSinglePartyLayout(party: string) {
     const partySubs = subsectionsForPartyScope(subsections, party)
-    if (partySubs.length > 0 && !searchFilter) {
+    if (partySubs.length > 0) {
       return renderSubsectionBlocks(roots, partySubs)
     }
     return roots.map((item) => renderTreeNode(item, treeNodeProps))
@@ -879,41 +899,23 @@ export function TopicList({
     if (deptSubs.length === 0) {
       return roots.map((item) => renderTreeNode(item, treeNodeProps))
     }
-    const blocks = groupRootsBySubsections(roots, deptSubs).filter(
-      (block) =>
-        block.id !== UNASSIGNED_SUBSECTION_BLOCK_ID || block.items.length > 0,
+    const blocks = groupRootsBySubsections(roots, deptSubs)
+    const unassigned =
+      blocks.find((b) => b.id === UNASSIGNED_SUBSECTION_BLOCK_ID)?.items ?? []
+    const withSubsection = blocks.filter(
+      (b) => b.id !== UNASSIGNED_SUBSECTION_BLOCK_ID && b.items.length > 0,
     )
-    return blocks.map((block) => {
-      return (
-        <li
-          key={block.id}
-          className={
-            block.id === UNASSIGNED_SUBSECTION_BLOCK_ID
-              ? 'topic-subsection-section'
-              : 'topic-party-section'
-          }
-        >
-          <div
-            className={
-              block.id === UNASSIGNED_SUBSECTION_BLOCK_ID
-                ? 'topic-subsection-section__heading'
-                : 'topic-party-section__heading'
-            }
-          >
-            {block.label}
-          </div>
-          <ul
-            className={
-              block.id === UNASSIGNED_SUBSECTION_BLOCK_ID
-                ? 'topic-subsection-section__list'
-                : 'topic-party-section__list'
-            }
-          >
+    return [
+      ...unassigned.map((item) => renderTreeNode(item, treeNodeProps)),
+      ...withSubsection.map((block) => (
+        <li key={block.id} className="topic-subsection-section">
+          <SubsectionDivider label={block.label} />
+          <ul className="topic-subsection-section__list">
             {block.items.map((item) => renderTreeNode(item, treeNodeProps))}
           </ul>
         </li>
-      )
-    })
+      )),
+    ]
   }
 
   function renderDeptSingleSectionLayout(_sectionId: string) {
@@ -946,7 +948,7 @@ export function TopicList({
               roots.some((r) => r.subsection_id === s.id)),
         ),
       )
-      if (archiveSubs.length > 0 && !searchFilter) {
+      if (archiveSubs.length > 0) {
         return renderSubsectionBlocks(roots, archiveSubs)
       }
       return roots.map((item) => renderTreeNode(item, treeNodeProps))

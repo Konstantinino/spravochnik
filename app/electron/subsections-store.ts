@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { normalizeSubsectionLabelInput } from '../src/lib/subsectionDividerLabel'
 import { getUserDataRoot } from './paths.js'
 function normalizePartyField(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -29,7 +30,7 @@ function normalizeStoredSubsection(s: StoredSubsection): StoredSubsection {
   return {
     id: String(s.id),
     departmentId: String(s.departmentId),
-    label: String(s.label),
+    label: normalizeSubsectionLabelInput(String(s.label)),
     sortOrder: Number.isFinite(s.sortOrder) ? Number(s.sortOrder) : 0,
     party,
     isArchiveLost: Boolean(s.isArchiveLost) || String(s.id) === 'support__archive__lost',

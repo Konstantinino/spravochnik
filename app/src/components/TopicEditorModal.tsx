@@ -14,9 +14,12 @@ import {
   getItemParty,
 } from '../lib/data'
 import {
+  SUBSECTION_NONE_OPTION_LABEL,
+  SUBSECTION_NONE_SELECT_VALUE,
   editorSubsectionsForDepartment,
   isEditableRootTopic,
-  sectionRequiredErrorMessage,
+  rootSubsectionIdForSave,
+  rootSubsectionSelectValueFromTopic,
 } from '../lib/topicSectionPickers'
 import {
   formatFileMarkdownLink,
@@ -159,11 +162,9 @@ export function TopicEditorModal({
       initialParty,
     )
     const initialSub =
-      mode === 'edit' && initial?.subsection_id
-        ? initial.subsection_id
-        : defaultSubsectionId && subsForDept.some((s) => s.id === defaultSubsectionId)
-          ? defaultSubsectionId
-          : subsForDept[0]?.id ?? ''
+      mode === 'edit' && initial
+        ? rootSubsectionSelectValueFromTopic(initial.subsection_id, subsForDept)
+        : SUBSECTION_NONE_SELECT_VALUE
     setTargetSubsectionId(initialSub)
     const initialParent =
       mode === 'edit' ? (initial?.parent_id ?? null) : parentId
@@ -218,8 +219,7 @@ export function TopicEditorModal({
     setParty(next)
     setAttachParent(false)
     setSelectedParentId(null)
-    const nextSubs = editorSubsectionsForDepartment(subsections, targetDept, next)
-    setTargetSubsectionId(nextSubs[0]?.id ?? '')
+    setTargetSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
     if (next !== 'additional') {
       setAttachClientLink(false)
       setSelectedClientTopicId(null)
@@ -361,12 +361,6 @@ export function TopicEditorModal({
       setError('Выберите клиентскую тему или снимите галочку')
       return
     }
-    if (showSubsectionPicker && !targetSubsectionId) {
-      setError(
-        sectionRequiredErrorMessage(targetDept, targetDeptSubsections.length > 0),
-      )
-      return
-    }
     setSaving(true)
     setError(null)
     try {
@@ -375,7 +369,9 @@ export function TopicEditorModal({
         question: question.trim(),
         answer,
         parent_id: attachParent ? selectedParentId : null,
-        ...(showSubsectionPicker ? { subsection_id: targetSubsectionId } : {}),
+        ...(showSubsectionPicker
+          ? { subsection_id: rootSubsectionIdForSave(targetSubsectionId) }
+          : {}),
         client_topic_id:
           showParty && party === 'additional'
             ? attachClientLink
@@ -425,8 +421,7 @@ export function TopicEditorModal({
                 onChange={(e) => {
                   const next = e.target.value as DepartmentId
                   setTargetDept(next)
-                  const nextSubs = editorSubsectionsForDepartment(subsections, next, party)
-                  setTargetSubsectionId(nextSubs[0]?.id ?? '')
+                  setTargetSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
                   if (next !== 'support') {
                     setSelectedParentId(null)
                     setAttachParent(false)
@@ -464,9 +459,11 @@ export function TopicEditorModal({
               <span>{targetDept === 'support' ? 'Подраздел' : 'Раздел'}</span>
               <select
                 value={targetSubsectionId}
-                required
                 onChange={(e) => setTargetSubsectionId(e.target.value)}
               >
+                <option value={SUBSECTION_NONE_SELECT_VALUE}>
+                  {SUBSECTION_NONE_OPTION_LABEL}
+                </option>
                 {targetDeptSubsections.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}

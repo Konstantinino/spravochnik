@@ -31,6 +31,7 @@ import {
   getSubsectionById,
   listSubsections,
   nextSubsectionSortOrder,
+  normalizeSubsectionLabelInput,
   subsectionToClient,
 } from '../lib/subsections.js'
 import {
@@ -823,7 +824,7 @@ adminRouter.post('/departments/:deptId/subsections', async (req: AuthRequest, re
       res.status(403).json({ error: 'В этот отдел нельзя добавить раздел тем' })
       return
     }
-    const label = String(req.body?.label ?? '').trim()
+    const label = normalizeSubsectionLabelInput(String(req.body?.label ?? ''))
     if (!label) {
       res.status(400).json({ error: 'Укажите название подраздела' })
       return
@@ -889,7 +890,7 @@ adminRouter.put('/subsections/:id', async (req: AuthRequest, res) => {
       return
     }
     if (!denyTopicSectionsUnlessAllowed(req, res, existing.departmentId)) return
-    const label = String(req.body?.label ?? '').trim()
+    const label = normalizeSubsectionLabelInput(String(req.body?.label ?? ''))
     if (!label) {
       res.status(400).json({ error: 'Укажите название раздела' })
       return

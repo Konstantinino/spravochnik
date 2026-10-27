@@ -58,18 +58,25 @@ const upload = multer({
   limits: { fileSize: UPLOAD_MAX_BYTES },
 })
 
-function mediaRelParam(req: { params: Record<string, unknown>; path: string }): string {
-  const fromParams = req.params['0']
-  if (typeof fromParams === 'string' && fromParams) return fromParams.replace(/^\/+/, '')
-  if (Array.isArray(fromParams) && typeof fromParams[0] === 'string' && fromParams[0]) {
-    return fromParams[0].replace(/^\/+/, '')
+function paramCapture(params: Record<string, unknown>): string {
+  // Express/path-to-regexp may put the /* splat in "0" or "" depending on version.
+  for (const key of ['0', ''] as const) {
+    const v = params[key]
+    if (typeof v === 'string' && v) return v.replace(/^\/+/, '')
+    if (Array.isArray(v) && typeof v[0] === 'string' && v[0]) return v[0].replace(/^\/+/, '')
   }
+  return ''
+}
+
+function mediaRelParam(req: { params: Record<string, unknown>; path: string; url?: string }): string {
+  const fromParams = paramCapture(req.params)
+  if (fromParams) return fromParams
   // Inside app.use('/media', …) remainder is e.g. /media/support/… or /support/…
-  const remainder = req.path.replace(/^\/+/, '')
+  const remainder = (req.path || '').replace(/^\/+/, '')
   if (remainder.startsWith('media/')) return remainder
-  const prefix = 'media/'
-  if (req.path.startsWith('/' + prefix)) return req.path.slice(('/' + prefix).length)
-  return remainder
+  if (remainder) return remainder
+  const urlPath = (req.url || '').split('?')[0] || ''
+  return urlPath.replace(/^\/+/, '')
 }
 
 function ensureMediaDir(): void {
@@ -205,25 +212,150 @@ mediaRouter.get('/manifest/all', async (_req, res) => {
   }
 })
 
-mediaRouter.get('/*', (req, res) => {
+function resolveMediaFileForRequest(normalized: string): string | null {
+  let filePath = resolveExistingMediaFile(MEDIA_DIR, normalized)
+  // Accept /media/support/… (mount already provides /media) as alias of storage key media/support/…
+  if (!filePath && normalized && !normalized.startsWith('media/')) {
+    filePath = resolveExistingMediaFile(MEDIA_DIR, `media/${normalized}`)
+  }
+  return filePath
+}
+
+const EXT_CONTENT_TYPE: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+}
+
+function sendMediaFile(res: Response, filePath: string): void {
+  const ext = path.extname(filePath).toLowerCase()
+  const type = EXT_CONTENT_TYPE[ext] || 'application/octet-stream'
+  let stat: fs.Stats
+  try {
+    stat = fs.statSync(filePath)
+  } catch (err) {
+    console.error('media stat failed', filePath, err)
+    res.status(500).json({ error: 'Ошибка чтения файла', code: (err as NodeJS.ErrnoException).code })
+    return
+  }
+  if (!stat.isFile()) {
+    res.status(404).json({ error: 'Файл не найден' })
+    return
+  }
+  res.setHeader('Content-Type', type)
+  res.setHeader('Content-Length', String(stat.size))
+  res.setHeader('Cache-Control', 'public, max-age=86400')
+  const stream = fs.createReadStream(filePath)
+  stream.on('error', (err) => {
+    console.error('media stream failed', filePath, err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Ошибка чтения файла', code: (err as NodeJS.ErrnoException).code })
+      return
+    }
+    res.destroy(err)
+  })
+  stream.pipe(res)
+}
+
+/** JSON probe for ops: media volume top-level listing. */
+mediaRouter.get('/_stat', (_req, res) => {
   try {
     ensureMediaDir()
-    const rel = mediaRelParam(req)
-    const normalized = rel.replace(/\\/g, '/').replace(/^\/+/, '')
+    const top = fs.readdirSync(MEDIA_DIR).slice(0, 80)
+    res.json({ mediaDir: MEDIA_DIR, top })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка', detail: String(err) })
+  }
+})
+
+/** JSON probe for ops: does the file resolve on disk / is it readable? */
+mediaRouter.get('/_stat/*', (req, res) => {
+  try {
+    ensureMediaDir()
+    // path is /_stat/<rel> inside the /media mount
+    const normalized = req.path
+      .replace(/^\/_stat\/?/, '')
+      .replace(/^\/+/, '')
+      .replace(/\\/g, '/')
+    if (!normalized || normalized.includes('..')) {
+      res.status(400).json({ error: 'Недопустимый путь', path: req.path })
+      return
+    }
+    const candidates = mediaRelativePathCandidates(
+      normalized.startsWith('media/') ? normalized : `media/${normalized}`,
+    )
+    const resolved = resolveMediaFileForRequest(normalized)
+    let readable: boolean | null = null
+    let size: number | null = null
+    let readError: string | null = null
+    if (resolved) {
+      try {
+        fs.accessSync(resolved, fs.constants.R_OK)
+        readable = true
+        size = fs.statSync(resolved).size
+      } catch (err) {
+        readable = false
+        readError = (err as NodeJS.ErrnoException).code || String(err)
+      }
+    }
+    res.json({
+      mediaDir: MEDIA_DIR,
+      requested: normalized,
+      resolved,
+      readable,
+      size,
+      readError,
+      candidates: candidates.map((c) => ({
+        rel: c,
+        abs: path.join(MEDIA_DIR, ...c.split('/')),
+        exists: fs.existsSync(path.join(MEDIA_DIR, ...c.split('/'))),
+        absStripped: c.startsWith('media/')
+          ? path.join(MEDIA_DIR, ...c.slice('media/'.length).split('/'))
+          : null,
+        existsStripped: c.startsWith('media/')
+          ? fs.existsSync(path.join(MEDIA_DIR, ...c.slice('media/'.length).split('/')))
+          : null,
+      })),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка' })
+  }
+})
+
+// Use RegExp so nested paths are taken from req.path (avoids brittle /* splat params).
+mediaRouter.get(/.*/, (req, res, next) => {
+  try {
+    const normalized = req.path.replace(/^\/+/, '').replace(/\\/g, '/')
+    if (
+      !normalized ||
+      normalized === 'manifest/all' ||
+      normalized === '_stat' ||
+      normalized.startsWith('_stat/') ||
+      normalized === 'upload'
+    ) {
+      next()
+      return
+    }
     if (normalized.includes('..')) {
       res.status(400).json({ error: 'Недопустимый путь' })
       return
     }
-    let filePath = resolveExistingMediaFile(MEDIA_DIR, normalized)
-    // Accept /media/support/… (mount already provides /media) as alias of storage key media/support/…
-    if (!filePath && normalized && !normalized.startsWith('media/')) {
-      filePath = resolveExistingMediaFile(MEDIA_DIR, `media/${normalized}`)
-    }
+    ensureMediaDir()
+    const filePath = resolveMediaFileForRequest(normalized)
     if (!filePath) {
-      res.status(404).json({ error: 'Файл не найден' })
+      res.status(404).json({ error: 'Файл не найден', path: normalized })
       return
     }
-    res.sendFile(filePath)
+    sendMediaFile(res, filePath)
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })
@@ -231,15 +363,14 @@ mediaRouter.get('/*', (req, res) => {
 })
 
 mediaRouter.delete(
-  '/*',
+  /.*/,
   authMiddleware,
   requireRole('editor', 'admin', 'owner'),
   blockWritesIfClientOutdated,
   async (req: AuthRequest, res) => {
     try {
-      const rel = mediaRelParam(req)
-      const normalized = rel.replace(/\\/g, '/').replace(/^\/+/, '')
-      if (normalized.includes('..')) {
+      const normalized = req.path.replace(/^\/+/, '').replace(/\\/g, '/')
+      if (!normalized || normalized.includes('..')) {
         res.status(400).json({ error: 'Недопустимый путь' })
         return
       }

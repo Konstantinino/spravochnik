@@ -864,8 +864,19 @@ adminRouter.post('/departments/:deptId/subsections', async (req: AuthRequest, re
       }
       party = rawParty
     } else if (req.body?.party != null && String(req.body.party).trim()) {
-      res.status(400).json({ error: 'Подразделы привязаны только к отделу техподдержки' })
-      return
+      const parentId = String(req.body.party).trim()
+      const parent = await getSubsectionById(parentId)
+      if (
+        !parent ||
+        parent.departmentId !== departmentId ||
+        parent.party ||
+        parent.isArchiveLost ||
+        parent.isArchiveArchived
+      ) {
+        res.status(400).json({ error: 'Укажите раздел' })
+        return
+      }
+      party = parentId
     }
     let createdId: string | null = null
     await withTransaction(async (client) => {
@@ -1072,6 +1083,22 @@ adminRouter.delete('/subsections/:id', async (req: AuthRequest, res) => {
         )
         movedTopics = res.rowCount ?? 0
       } else {
+        const isTopLevel = !existing.party
+        if (isTopLevel) {
+          const nested = await client.query<{ id: string }>(
+            `SELECT id FROM department_subsections
+              WHERE department_id = $1 AND party = $2`,
+            [existing.departmentId, id],
+          )
+          for (const row of nested.rows) {
+            await client.query(
+              `UPDATE topics SET subsection_id = NULL
+                WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
+              [existing.departmentId, row.id],
+            )
+            await client.query(`DELETE FROM department_subsections WHERE id = $1`, [row.id])
+          }
+        }
         const others = await client.query<{ id: string }>(
           `SELECT id FROM department_subsections
             WHERE department_id = $1 AND id <> $2 AND party IS NULL

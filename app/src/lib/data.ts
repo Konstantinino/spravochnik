@@ -1,4 +1,5 @@
-import type { GuideItem, TopicViewFilter } from '../types'
+import type { DepartmentSubsection, GuideItem, TopicViewFilter } from '../types'
+import { topicMatchesDeptSection } from './deptTopicSections'
 
 export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[] }): GuideItem[] {
   return data.questions ?? data.templates ?? []
@@ -35,7 +36,10 @@ export function isArchived(item: GuideItem): boolean {
 export function filterItemsByView(
   items: GuideItem[],
   filter: TopicViewFilter,
-  options?: { deptSectionIds?: ReadonlySet<string> },
+  options?: {
+    deptSectionIds?: ReadonlySet<string>
+    deptSubsections?: DepartmentSubsection[]
+  },
 ): GuideItem[] {
   if (filter === 'archive') {
     return items.filter((item) => isArchived(item))
@@ -43,7 +47,8 @@ export function filterItemsByView(
   const active = items.filter((item) => !isArchived(item))
   if (filter === 'all') return active
   if (options?.deptSectionIds?.has(filter)) {
-    return active.filter((item) => String(item.subsection_id ?? '').trim() === filter)
+    const subs = options.deptSubsections ?? []
+    return active.filter((item) => topicMatchesDeptSection(item, filter, subs))
   }
   return active.filter((item) => getItemParty(item) === filter)
 }

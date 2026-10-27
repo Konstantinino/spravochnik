@@ -20,6 +20,7 @@ import {
   rootReorderRequiresSameParty,
 } from './lib/data'
 import { buildTopicSearchFilter } from './lib/search'
+import { deptNestedSubsections, isDeptTopLevelSectionFilter } from './lib/deptTopicSections'
 import {
   installInputFocusGuard,
   releaseStaleFocus,
@@ -409,8 +410,9 @@ export default function App() {
     () =>
       filterItemsByView(items, listFilter, {
         deptSectionIds: departmentId === 'support' ? undefined : deptTopicSectionIdSet,
+        deptSubsections: departmentId === 'support' ? undefined : subsections,
       }),
-    [items, listFilter, departmentId, deptTopicSectionIdSet],
+    [items, listFilter, departmentId, deptTopicSectionIdSet, subsections],
   )
 
   const filterOptions: TopicViewFilter[] = useMemo(() => {
@@ -1026,8 +1028,16 @@ export default function App() {
       )
       return sub?.id
     }
-    return deptTopicSectionIdSet.has(listFilter) ? listFilter : undefined
+    if (!deptTopicSectionIdSet.has(listFilter)) return undefined
+    const nested = deptNestedSubsections(subsections, departmentId, listFilter)
+    return nested.length > 0 ? undefined : listFilter
   })()
+
+  const editorDefaultDeptSectionId =
+    departmentId !== 'support' &&
+    isDeptTopLevelSectionFilter(listFilter, departmentId, subsections)
+      ? listFilter
+      : undefined
 
   return (
     <div
@@ -1119,6 +1129,7 @@ export default function App() {
             onClose={closeTopic}
             onNavigateToTopic={navigateToTopic}
             onEditStart={handleEditStart}
+            sidebarListFilter={listFilter}
             onSave={handleInlineSave}
             onSaveImageDisplay={handleSaveImageDisplay}
             onDelete={handleDelete}
@@ -1153,6 +1164,7 @@ export default function App() {
         items={items}
         defaultParty={editorDefaultParty}
         defaultSubsectionId={editorDefaultSubsectionId}
+        defaultDeptSectionId={editorDefaultDeptSectionId}
         initial={editorInitial}
         onClose={() => {
           setEditorOpen(false)

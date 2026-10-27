@@ -212,7 +212,7 @@ function filterSubsectionsForTopicScope(
   if (departmentId === 'support') {
     return subs.filter((s) => s.party === party)
   }
-  return subs.filter((s) => !s.party)
+  return subs.filter((s) => !s.isArchiveLost && !s.isArchiveArchived)
 }
 
 export async function resolveTopicSubsectionId(
@@ -250,6 +250,17 @@ export async function resolveTopicSubsectionId(
     const err = new Error(pickMsg)
     ;(err as Error & { status: number }).status = 400
     throw err
+  }
+  if (departmentId !== 'support') {
+    const picked = subs.find((s) => s.id === id)
+    if (picked && !picked.party) {
+      const hasNested = subs.some((s) => s.party === id)
+      if (hasNested) {
+        const err = new Error('Выберите подраздел')
+        ;(err as Error & { status: number }).status = 400
+        throw err
+      }
+    }
   }
   return id
 }

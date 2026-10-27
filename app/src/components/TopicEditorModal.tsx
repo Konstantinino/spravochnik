@@ -20,6 +20,11 @@ import {
   getItemParty,
 } from '../lib/data'
 import {
+  departmentHasNestedSubsections,
+  deptSectionIdForTopicSubsection,
+  deptTopLevelSections,
+} from '../lib/deptTopicSections'
+import {
   SUBSECTION_NONE_OPTION_LABEL,
   SUBSECTION_NONE_SELECT_VALUE,
   editorArchiveSectionActive,
@@ -63,6 +68,8 @@ interface TopicEditorModalProps {
   defaultParty?: string
   /** Раздел темы из фильтра sidebar (СПП, юристы и т.д.) */
   defaultSubsectionId?: string
+  /** Корневой раздел отдела (СПП и др.), если в sidebar выбран «Все». */
+  defaultDeptSectionId?: string
   initial?: GuideItem | null
   onClose: () => void
   onSave: (payload: {
@@ -96,6 +103,7 @@ export function TopicEditorModal({
   items,
   defaultParty = 'supplier',
   defaultSubsectionId,
+  defaultDeptSectionId,
   initial,
   onClose,
   onSave,
@@ -104,6 +112,7 @@ export function TopicEditorModal({
   const [answer, setAnswer] = useState('')
   const [targetDept, setTargetDept] = useState<DepartmentId>(departmentId)
   const [targetSubsectionId, setTargetSubsectionId] = useState('')
+  const [deptSectionId, setDeptSectionId] = useState('')
   const [party, setParty] = useState(defaultParty)
   const [attachParent, setAttachParent] = useState(false)
   const [selectedParentId, setSelectedParentId] = useState<number | null>(null)
@@ -145,15 +154,32 @@ export function TopicEditorModal({
   const topicArchived = mode === 'edit' && Boolean(initial?.archived)
   const archiveSection = editorArchiveSectionActive(targetDept, topicArchived, party)
 
+  const editorDeptSectionId = useMemo(() => {
+    if (showParty) return null
+    if (defaultDeptSectionId) return defaultDeptSectionId
+    const picked = deptSectionId.trim()
+    return picked || null
+  }, [showParty, defaultDeptSectionId, deptSectionId])
+
   const targetDeptSubsections = useMemo(
     () =>
       editorSubsectionsForDepartment(subsections, targetDept, party, {
         archiveSection,
+        deptSectionId: showParty ? null : editorDeptSectionId,
       }),
-    [subsections, targetDept, party, archiveSection],
+    [subsections, targetDept, party, archiveSection, showParty, editorDeptSectionId],
   )
 
   const showPartyPicker = showParty && isRootTopic && !topicArchived
+  const showDeptSectionPicker =
+    !showParty &&
+    isRootTopic &&
+    departmentHasNestedSubsections(subsections, targetDept) &&
+    !defaultDeptSectionId
+  const deptSectionOptions = useMemo(
+    () => deptTopLevelSections(subsections, targetDept),
+    [subsections, targetDept],
+  )
   const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
   const showArchiveSectionReadonly = isRootTopic && topicArchived
 
@@ -192,16 +218,24 @@ export function TopicEditorModal({
       Boolean(initial?.archived),
       initialPartySelect,
     )
+    const nextDeptSection =
+      defaultDeptSectionId?.trim() ||
+      (mode === 'edit' && initial
+        ? deptSectionIdForTopicSubsection(initial.subsection_id, subsections) ?? ''
+        : '')
+    setDeptSectionId(nextDeptSection)
     const subsForDept = editorSubsectionsForDepartment(
       subsections,
       departmentId,
       mode === 'edit' && initial ? getItemParty(initial) : defaultParty,
-      { archiveSection: initialArchiveSection },
+      { archiveSection: initialArchiveSection, deptSectionId: nextDeptSection || null },
     )
     const initialSub =
       mode === 'edit' && initial
         ? rootSubsectionSelectValueFromTopic(initial.subsection_id, subsForDept)
-        : SUBSECTION_NONE_SELECT_VALUE
+        : defaultSubsectionId
+          ? rootSubsectionSelectValueFromTopic(defaultSubsectionId, subsForDept)
+          : SUBSECTION_NONE_SELECT_VALUE
     setTargetSubsectionId(initialSub)
     const initialParent =
       mode === 'edit' ? (initial?.parent_id ?? null) : parentId
@@ -224,6 +258,7 @@ export function TopicEditorModal({
     mode,
     defaultParty,
     defaultSubsectionId,
+    defaultDeptSectionId,
     clearPicker,
     subsections,
   ])
@@ -506,9 +541,34 @@ export function TopicEditorModal({
             </label>
           )}
 
+          {showDeptSectionPicker && (
+            <label className="field">
+              <span>Раздел</span>
+              <select
+                value={deptSectionId}
+                required
+                onChange={(e) => {
+                  setDeptSectionId(e.target.value)
+                  setTargetSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
+                }}
+              >
+                <option value={SUBSECTION_NONE_SELECT_VALUE}>
+                  {SUBSECTION_NONE_OPTION_LABEL}
+                </option>
+                {deptSectionOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           {showSubsectionPicker && (
             <label className="field">
-              <span>{targetDept === 'support' ? 'Подраздел' : 'Раздел'}</span>
+              <span>
+                {targetDept === 'support' || showDeptSectionPicker ? 'Подраздел' : 'Раздел'}
+              </span>
               <select
                 value={targetSubsectionId}
                 onChange={(e) => setTargetSubsectionId(e.target.value)}

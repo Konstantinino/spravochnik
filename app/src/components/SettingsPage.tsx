@@ -402,7 +402,10 @@ export function SettingsPage({
       const created = await window.spravochnik.createAdminSubsection({
         departmentId: sectionsOfficeId,
         label,
-        party: sectionsOfficeId === 'support' ? addingSubsectionParty : null,
+        party:
+          sectionsOfficeId === 'support' || addingSubsectionParty
+            ? addingSubsectionParty
+            : null,
       })
       setTopicSections((prev) => {
         const without = prev.filter((s) => s.id !== created.id)
@@ -416,7 +419,11 @@ export function SettingsPage({
       setNewSectionLabel('')
       setAddingNewSection(false)
       setAddingSubsectionParty(null)
-      setInfo(sectionsOfficeId === 'support' ? 'Подраздел добавлен' : 'Раздел добавлен')
+      setInfo(
+        sectionsOfficeId === 'support' || addingSubsectionParty
+          ? 'Подраздел добавлен'
+          : 'Раздел добавлен',
+      )
       clearTopicSectionsNotice()
       await reloadDepartmentsConfig()
     } catch (e) {
@@ -469,7 +476,9 @@ export function SettingsPage({
       !window.confirm(
         sectionsOfficeId === 'support'
           ? `Удалить подраздел «${label}»? Темы из него останутся в том же разделе списка (Поставщик, Заказчик и т.д.), без группировки по подразделу.`
-          : `Удалить раздел «${label}»? Темы, привязанные к нему, останутся в отделе без раздела.`,
+          : topicSections.find((s) => s.id === id)?.party
+            ? `Удалить подраздел «${label}»? Темы из него останутся в том же разделе списка без группировки по подразделу.`
+            : `Удалить раздел «${label}»? Темы, привязанные к нему, останутся в отделе без раздела.`,
       )
     ) {
       return
@@ -1163,7 +1172,8 @@ export function SettingsPage({
               <strong>Отделы</strong> (техподдержка, СПП, юристы…) переключаются в шапке. В «Тех.
               поддержке» <strong>разделы</strong> — Поставщик, Заказчик, Ошибки, Администратор (системные).
               К каждому разделу можно добавить <strong>подразделы</strong>; если они есть, корневую тему
-              нужно отнести к подразделу. В остальных отделах настраиваются только разделы без подуровня.
+              нужно отнести к подразделу. В остальных отделах (СПП, юристы…) тоже можно добавить
+              подразделы кнопкой «Добавить» у раздела.
             </p>
             <label className="field topic-sections-settings__office">
               <span>Отдел</span>
@@ -1464,71 +1474,203 @@ export function SettingsPage({
                         a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru'),
                     )
                     .map((section) => {
-                      const editing = editingSectionId === section.id
+                      const sectionSubs = topicSections
+                        .filter(
+                          (s) =>
+                            s.departmentId === sectionsOfficeId &&
+                            (s.party ?? null) === section.id,
+                        )
+                        .sort(
+                          (a, b) =>
+                            a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru'),
+                        )
+                      const editingSection = editingSectionId === section.id
                       return (
-                        <li key={section.id} className="departments-settings__row">
-                          <span className="departments-settings__id muted" aria-hidden="true" />
-                          {editing ? (
-                            <div className="departments-settings__field-stack">
-                              <input
-                                type="text"
-                                value={editingSectionLabel}
-                                onChange={(e) => setEditingSectionLabel(e.target.value)}
-                                aria-label="Название раздела"
-                              />
-                              <DeptSectionListPreview raw={editingSectionLabel} />
-                            </div>
-                          ) : (
-                            <span className="departments-settings__label">{section.label}</span>
-                          )}
-                          <div className="departments-settings__actions">
-                            {!editing ? (
-                              <button
-                                type="button"
-                                className="btn btn-ghost"
-                                onClick={() => {
-                                  setEditingSectionId(section.id)
-                                  setEditingSectionLabel(section.label)
-                                  setAddingNewSection(false)
-                                }}
-                              >
-                                Изменить
-                              </button>
+                        <Fragment key={section.id}>
+                          <li className="departments-settings__row">
+                            <span className="departments-settings__id muted" aria-hidden="true" />
+                            {editingSection ? (
+                              <div className="departments-settings__field-stack">
+                                <input
+                                  type="text"
+                                  value={editingSectionLabel}
+                                  onChange={(e) => setEditingSectionLabel(e.target.value)}
+                                  aria-label="Название раздела"
+                                />
+                                <DeptSectionListPreview raw={editingSectionLabel} />
+                              </div>
                             ) : (
-                              <>
+                              <span className="departments-settings__label">{section.label}</span>
+                            )}
+                            <div className="departments-settings__actions">
+                              {!editingSection ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  disabled={
+                                    savingSection ||
+                                    (addingNewSection &&
+                                      addingSubsectionParty != null &&
+                                      addingSubsectionParty !== section.id)
+                                  }
+                                  onClick={() => beginAddSubsection(section.id)}
+                                >
+                                  Добавить
+                                </button>
+                              ) : null}
+                              {!editingSection ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  onClick={() => {
+                                    setEditingSectionId(section.id)
+                                    setEditingSectionLabel(section.label)
+                                    setAddingNewSection(false)
+                                    setAddingSubsectionParty(null)
+                                  }}
+                                >
+                                  Изменить
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    disabled={savingSection}
+                                    onClick={() => void saveTopicSectionLabel(section.id)}
+                                  >
+                                    Сохранить
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    onClick={() => setEditingSectionId(null)}
+                                  >
+                                    Отмена
+                                  </button>
+                                </>
+                              )}
+                              {!editingSection ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-danger"
+                                  disabled={savingSection}
+                                  onClick={() => void removeTopicSection(section.id, section.label)}
+                                >
+                                  Удалить
+                                </button>
+                              ) : null}
+                            </div>
+                          </li>
+                          {sectionSubs.map((sub) => {
+                            const editing = editingSectionId === sub.id
+                            return (
+                              <li
+                                key={sub.id}
+                                className="departments-settings__row departments-settings__row--nested"
+                              >
+                                <span className="departments-settings__id muted" aria-hidden="true" />
+                                {editing ? (
+                                  <div className="departments-settings__field-stack">
+                                    <input
+                                      type="text"
+                                      value={editingSectionLabel}
+                                      onChange={(e) => setEditingSectionLabel(e.target.value)}
+                                      aria-label="Название подраздела"
+                                    />
+                                    <SubsectionDividerPreview raw={editingSectionLabel} />
+                                  </div>
+                                ) : (
+                                  <span className="departments-settings__label">{sub.label}</span>
+                                )}
+                                <div className="departments-settings__actions">
+                                  {!editing ? (
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      onClick={() => {
+                                        setEditingSectionId(sub.id)
+                                        setEditingSectionLabel(sub.label)
+                                        setAddingNewSection(false)
+                                        setAddingSubsectionParty(null)
+                                      }}
+                                    >
+                                      Изменить
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        disabled={savingSection}
+                                        onClick={() => void saveTopicSectionLabel(sub.id)}
+                                      >
+                                        Сохранить
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost"
+                                        onClick={() => setEditingSectionId(null)}
+                                      >
+                                        Отмена
+                                      </button>
+                                    </>
+                                  )}
+                                  {!editing ? (
+                                    <button
+                                      type="button"
+                                      className="btn btn-danger"
+                                      disabled={savingSection}
+                                      onClick={() => void removeTopicSection(sub.id, sub.label)}
+                                    >
+                                      Удалить
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </li>
+                            )
+                          })}
+                          {addingNewSection && addingSubsectionParty === section.id ? (
+                            <li className="departments-settings__row departments-settings__row--nested departments-settings__row--editor">
+                              <div className="departments-settings__field-stack">
+                                <input
+                                  type="text"
+                                  value={newSectionLabel}
+                                  onChange={(e) => setNewSectionLabel(e.target.value)}
+                                  placeholder="Название подраздела"
+                                  aria-label="Название нового подраздела"
+                                  autoFocus
+                                />
+                                <SubsectionDividerPreview raw={newSectionLabel} />
+                              </div>
+                              <div className="departments-settings__actions">
                                 <button
                                   type="button"
                                   className="btn btn-primary"
                                   disabled={savingSection}
-                                  onClick={() => void saveTopicSectionLabel(section.id)}
+                                  onClick={() => void createTopicSection()}
                                 >
                                   Сохранить
                                 </button>
                                 <button
                                   type="button"
                                   className="btn btn-ghost"
-                                  onClick={() => setEditingSectionId(null)}
+                                  onClick={() => {
+                                    setAddingNewSection(false)
+                                    setAddingSubsectionParty(null)
+                                    setNewSectionLabel('')
+                                  }}
                                 >
                                   Отмена
                                 </button>
-                              </>
-                            )}
-                            {!editing ? (
-                              <button
-                                type="button"
-                                className="btn btn-danger"
-                                disabled={savingSection}
-                                onClick={() => void removeTopicSection(section.id, section.label)}
-                              >
-                                Удалить
-                              </button>
-                            ) : null}
-                          </div>
-                        </li>
+                              </div>
+                            </li>
+                          ) : null}
+                        </Fragment>
                       )
                     })
                 : null}
-              {sectionsOfficeId !== 'support' && addingNewSection ? (
+              {sectionsOfficeId !== 'support' && addingNewSection && !addingSubsectionParty ? (
                 <li
                   ref={topicSectionsAddRef}
                   className="departments-settings__row departments-settings__row--editor"

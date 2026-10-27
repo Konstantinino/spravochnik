@@ -1,4 +1,5 @@
 import type { DepartmentId, DepartmentSubsection, GuideItem } from '../types'
+import { assignableSubsectionsForDeptEditor } from './deptTopicSections'
 import { getItemParty } from './data'
 import { normalizeSubsectionLabelInput } from './subsectionDividerLabel'
 
@@ -84,7 +85,7 @@ export function editorSubsectionsForDepartment(
   subsections: DepartmentSubsection[],
   departmentId: DepartmentId,
   party: string,
-  options?: { archiveSection?: boolean },
+  options?: { archiveSection?: boolean; deptSectionId?: string | null },
 ): DepartmentSubsection[] {
   const forDept = subsections.filter((s) => s.departmentId === departmentId)
   const scoped =
@@ -97,8 +98,10 @@ export function editorSubsectionsForDepartment(
               !s.isArchiveLost &&
               !s.isArchiveArchived,
           )
-        : forDept.filter(
-            (s) => !s.party && !s.isArchiveLost && !s.isArchiveArchived,
+        : assignableSubsectionsForDeptEditor(
+            forDept,
+            departmentId,
+            options?.deptSectionId ?? null,
           )
   return sortSubsectionsForEditor(scoped).map((s) => ({
     ...s,
@@ -109,7 +112,9 @@ export function editorSubsectionsForDepartment(
 export function sectionRequiredErrorMessage(
   departmentId: DepartmentId,
   hasSubsectionLevel: boolean,
+  hasNestedUnderSection?: boolean,
 ): string {
   if (departmentId === 'support' && hasSubsectionLevel) return 'Выберите подраздел'
+  if (departmentId !== 'support' && hasNestedUnderSection) return 'Выберите подраздел'
   return 'Выберите раздел'
 }

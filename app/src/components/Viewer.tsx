@@ -7,7 +7,14 @@ import type {
   GuideItem,
   ImageDisplayMap,
   SupportTopicSection,
+  TopicViewFilter,
 } from '../types'
+import {
+  departmentHasNestedSubsections,
+  deptSectionIdForTopicSubsection,
+  deptTopLevelSections,
+  isDeptTopLevelSectionFilter,
+} from '../lib/deptTopicSections'
 import { supportPartySelectOptions, TOPIC_VIEW_FILTER_LABELS } from '../types'
 import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
@@ -100,6 +107,7 @@ interface ViewerProps {
   reorderMode?: boolean
   supportSections?: SupportTopicSection[]
   subsections?: DepartmentSubsection[]
+  sidebarListFilter?: TopicViewFilter
 }
 
 type ImgMenuState = {
@@ -206,6 +214,7 @@ export function Viewer({
   startEditRequest = null,
   onStartEditRequestHandled,
   reorderMode = false,
+  sidebarListFilter = 'all',
 }: ViewerProps) {
   const [editing, setEditing] = useState(false)
   const [question, setQuestion] = useState('')
@@ -216,6 +225,7 @@ export function Viewer({
   const [clientTopicId, setClientTopicId] = useState<number | null>(null)
   const [party, setParty] = useState('supplier')
   const [subsectionId, setSubsectionId] = useState('')
+  const [deptSectionId, setDeptSectionId] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [branchAction, setBranchAction] = useState<null | 'archive' | 'delete'>(null)
@@ -334,6 +344,11 @@ export function Viewer({
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
     setParty(editorPartySelectValue(departmentId, item))
+    const nextDeptSection =
+      isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
+        ? sidebarListFilter
+        : deptSectionIdForTopicSubsection(item.subsection_id, subsections) ?? ''
+    setDeptSectionId(nextDeptSection)
     const archiveSection = editorArchiveSectionActive(
       departmentId,
       Boolean(item.archived),
@@ -343,7 +358,7 @@ export function Viewer({
       subsections,
       departmentId,
       getItemParty(item),
-      { archiveSection },
+      { archiveSection, deptSectionId: nextDeptSection || null },
     )
     setSubsectionId(rootSubsectionSelectValueFromTopic(item.subsection_id, subs))
   }, [
@@ -358,6 +373,7 @@ export function Viewer({
     item?.subsection_id,
     subsections,
     departmentId,
+    sidebarListFilter,
   ])
 
   useEffect(() => {
@@ -389,6 +405,11 @@ export function Viewer({
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
     setParty(editorPartySelectValue(departmentId, item))
+    const nextDeptSection =
+      isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
+        ? sidebarListFilter
+        : deptSectionIdForTopicSubsection(item.subsection_id, subsections) ?? ''
+    setDeptSectionId(nextDeptSection)
     const archiveSection = editorArchiveSectionActive(
       departmentId,
       Boolean(item.archived),
@@ -398,7 +419,7 @@ export function Viewer({
       subsections,
       departmentId,
       getItemParty(item),
-      { archiveSection },
+      { archiveSection, deptSectionId: nextDeptSection || null },
     )
     setSubsectionId(rootSubsectionSelectValueFromTopic(item.subsection_id, subs))
     onEditStart?.(structuredClone(item))
@@ -442,16 +463,35 @@ export function Viewer({
     party,
   )
 
+  const editorDeptSectionId = useMemo(() => {
+    if (showParty) return null
+    if (isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)) {
+      return sidebarListFilter
+    }
+    const picked = deptSectionId.trim() || null
+    return picked
+  }, [showParty, sidebarListFilter, departmentId, subsections, deptSectionId])
+
   const targetDeptSubsections = useMemo(
     () =>
       editorSubsectionsForDepartment(subsections, departmentId, party, {
         archiveSection,
+        deptSectionId: editorDeptSectionId,
       }),
-    [subsections, departmentId, party, archiveSection],
+    [subsections, departmentId, party, archiveSection, editorDeptSectionId],
   )
 
   const topicArchived = Boolean(item?.archived)
   const showPartyPicker = showParty && isRootTopic && !topicArchived
+  const showDeptSectionPicker =
+    !showParty &&
+    isRootTopic &&
+    departmentHasNestedSubsections(subsections, departmentId) &&
+    sidebarListFilter === 'all'
+  const deptSectionOptions = useMemo(
+    () => deptTopLevelSections(subsections, departmentId),
+    [subsections, departmentId],
+  )
   const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
   const showArchiveSectionReadonly = isRootTopic && topicArchived
 
@@ -1296,6 +1336,28 @@ export function Viewer({
               </select>
             </label>
           )}
+          {showDeptSectionPicker && (
+            <label className="field">
+              <span>Раздел</span>
+              <select
+                value={deptSectionId}
+                required
+                onChange={(e) => {
+                  setDeptSectionId(e.target.value)
+                  setSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
+                }}
+              >
+                <option value={SUBSECTION_NONE_SELECT_VALUE}>
+                  {SUBSECTION_NONE_OPTION_LABEL}
+                </option>
+                {deptSectionOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {showArchiveSectionReadonly && (
             <label className="field">
               <span>Раздел</span>
@@ -1306,7 +1368,11 @@ export function Viewer({
           )}
           {showSubsectionPicker && (
             <label className="field">
-              <span>{departmentId === 'support' ? 'Подраздел' : 'Раздел'}</span>
+              <span>
+                {departmentId === 'support' || showDeptSectionPicker
+                  ? 'Подраздел'
+                  : 'Раздел'}
+              </span>
               <select
                 value={subsectionId}
                 onChange={(e) => setSubsectionId(e.target.value)}

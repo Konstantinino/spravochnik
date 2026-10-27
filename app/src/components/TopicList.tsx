@@ -17,6 +17,11 @@ import {
 } from '../lib/data'
 import type { TopicSearchFilter } from '../lib/search'
 import {
+  deptNestedSubsections,
+  deptTopLevelSections,
+  topicMatchesDeptSection,
+} from '../lib/deptTopicSections'
+import {
   formatSubsectionDividerLine,
   normalizeSubsectionLabelInput,
 } from '../lib/subsectionDividerLabel'
@@ -300,10 +305,11 @@ function subsectionsForPartyScope(
   return sortSubsections(subsections.filter((s) => s.party === party))
 }
 
-function deptLevelSubsections(subsections: DepartmentSubsection[]): DepartmentSubsection[] {
-  return sortSubsections(
-    subsections.filter((s) => !s.party && !s.isArchiveLost && !s.isArchiveArchived),
-  )
+function deptLevelSubsections(
+  subsections: DepartmentSubsection[],
+  departmentId: string,
+): DepartmentSubsection[] {
+  return sortSubsections(deptTopLevelSections(subsections, departmentId))
 }
 
 function isDeptSectionFilter(
@@ -921,30 +927,47 @@ export function TopicList({
   }
 
   function renderDeptAllLayout() {
-    const deptSubs = deptLevelSubsections(subsections)
-    if (deptSubs.length === 0) {
+    const deptId = subsections.find((s) => s.departmentId)?.departmentId ?? ''
+    const sections = deptLevelSubsections(subsections, deptId)
+    if (sections.length === 0) {
       return roots.map((item) => renderTreeNode(item, treeNodeProps))
     }
-    const blocks = groupRootsBySubsections(roots, deptSubs)
-    const unassigned =
-      blocks.find((b) => b.id === UNASSIGNED_SUBSECTION_BLOCK_ID)?.items ?? []
-    const withSubsection = blocks.filter(
-      (b) => b.id !== UNASSIGNED_SUBSECTION_BLOCK_ID && b.items.length > 0,
+    const unassigned = roots.filter(
+      (item) =>
+        !sections.some((sec) => topicMatchesDeptSection(item, sec.id, subsections)),
     )
     return [
       ...unassigned.map((item) => renderTreeNode(item, treeNodeProps)),
-      ...withSubsection.map((block) => (
-        <li key={block.id} className="topic-party-section">
-          <DeptSectionHeading label={block.label} />
-          <ul className="topic-party-section__list">
-            {block.items.map((item) => renderTreeNode(item, treeNodeProps))}
-          </ul>
-        </li>
-      )),
+      ...sections
+        .map((section) => {
+          const sectionRoots = roots.filter((item) =>
+            topicMatchesDeptSection(item, section.id, subsections),
+          )
+          if (sectionRoots.length === 0) return null
+          const nestedSubs = sortSubsections(
+            deptNestedSubsections(subsections, deptId, section.id),
+          )
+          return (
+            <li key={section.id} className="topic-party-section">
+              <DeptSectionHeading label={section.label} />
+              <ul className="topic-party-section__list">
+                {nestedSubs.length > 0
+                  ? renderSubsectionBlocks(sectionRoots, nestedSubs)
+                  : sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+              </ul>
+            </li>
+          )
+        })
+        .filter(Boolean),
     ]
   }
 
-  function renderDeptSingleSectionLayout(_sectionId: string) {
+  function renderDeptSingleSectionLayout(sectionId: string) {
+    const deptId = subsections.find((s) => s.departmentId)?.departmentId ?? ''
+    const nestedSubs = sortSubsections(deptNestedSubsections(subsections, deptId, sectionId))
+    if (nestedSubs.length > 0) {
+      return renderSubsectionBlocks(roots, nestedSubs)
+    }
     return roots.map((item) => renderTreeNode(item, treeNodeProps))
   }
 

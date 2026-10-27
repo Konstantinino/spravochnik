@@ -279,7 +279,7 @@ function rootSubsectionsForTopic(
     const p = normalizeSupportPartyId(party)
     return all.filter((s) => (s.party ?? null) === p)
   }
-  return all.filter((s) => !s.party)
+  return all.filter((s) => !s.isArchiveLost && !s.isArchiveArchived)
 }
 
 function rowParentId(row: Record<string, unknown>): number | null {
@@ -1436,7 +1436,7 @@ function registerIpc(): void {
           label,
           sortOrder,
           party:
-            payload.departmentId === 'support' && typeof payload.party === 'string'
+            typeof payload.party === 'string' && payload.party.trim()
               ? payload.party.trim()
               : null,
         }

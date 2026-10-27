@@ -271,10 +271,14 @@ topicsRouter.post(
       if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
 
-      const lock = await acquireTopicOrderLock(dept, req.user!.id, req.user!.name)
+      const clientId =
+        typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+      const lock = await acquireTopicOrderLock(dept, req.user!.id, req.user!.name, clientId)
       if (!lock.ok) {
         res.status(423).json({
-          error: 'Порядок тем редактируется другим пользователем',
+          error: lock.lockedByName
+            ? `Порядок уже редактирует: ${lock.lockedByName}`
+            : 'Порядок уже редактируется в другом окне или приложении',
           lockedBy: lock.lockedBy,
           lockedByName: lock.lockedByName,
         })
@@ -301,7 +305,9 @@ topicsRouter.post(
       }
       if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
-      await releaseTopicOrderLock(dept, req.user!.id)
+      const clientId =
+        typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+      await releaseTopicOrderLock(dept, req.user!.id, clientId)
       res.json({ ok: true })
     } catch (err) {
       console.error(err)
@@ -323,7 +329,9 @@ topicsRouter.post(
       }
       if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
-      await renewTopicOrderLock(dept, req.user!.id)
+      const clientId =
+        typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+      await renewTopicOrderLock(dept, req.user!.id, clientId)
       res.json({ ok: true })
     } catch (err) {
       console.error(err)
@@ -346,7 +354,9 @@ topicsRouter.put(
       if (rejectLostDepartmentWrite(dept, res)) return
       if (rejectForeignDepartmentEdit(req, dept, res)) return
 
-      const orderLock = await requireTopicOrderLock(dept, req.user!.id)
+      const clientId =
+        typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+      const orderLock = await requireTopicOrderLock(dept, req.user!.id, clientId)
       if (!orderLock.ok) {
         res.status(423).json({
           error: orderLock.lockedByName

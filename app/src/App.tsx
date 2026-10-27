@@ -657,7 +657,7 @@ export default function App() {
     reorderLockBannerTimerRef.current = setTimeout(() => {
       setReorderLockBanner(null)
       reorderLockBannerTimerRef.current = null
-    }, 1000)
+    }, 4000)
   }
 
   const handleSidebarEditRequestHandled = useCallback(() => {
@@ -674,8 +674,11 @@ export default function App() {
       setGuide(result.guide)
 
       if (!result.ok) {
+        const lockedBy = result.lockedByName?.trim()
         flashReorderLockBanner(
-          result.error ?? 'Порядок уже редактируется другим пользователем',
+          lockedBy
+            ? `Порядок уже редактирует: ${lockedBy}`
+            : (result.error ?? 'Порядок уже редактируется в другом окне или приложении'),
         )
         return
       }

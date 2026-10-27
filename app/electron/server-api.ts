@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { app } from 'electron'
 import { readSettings, normalizeServerUrl } from './auth-store'
 
@@ -235,16 +236,35 @@ export async function renewTopicLock(departmentId: string, topicId: number): Pro
   })
 }
 
+/** Stable per app process — blocks same user reordering in web + desktop at once. */
+let topicOrderClientId: string | null = null
+
+export function getTopicOrderClientId(): string {
+  if (!topicOrderClientId) {
+    topicOrderClientId = randomUUID()
+  }
+  return topicOrderClientId
+}
+
 export async function lockTopicOrder(departmentId: string): Promise<void> {
-  await serverFetch(`/departments/${departmentId}/topic-order/lock`, { method: 'POST' })
+  await serverFetch(`/departments/${departmentId}/topic-order/lock`, {
+    method: 'POST',
+    body: JSON.stringify({ clientId: getTopicOrderClientId() }),
+  })
 }
 
 export async function unlockTopicOrder(departmentId: string): Promise<void> {
-  await serverFetch(`/departments/${departmentId}/topic-order/unlock`, { method: 'POST' })
+  await serverFetch(`/departments/${departmentId}/topic-order/unlock`, {
+    method: 'POST',
+    body: JSON.stringify({ clientId: getTopicOrderClientId() }),
+  })
 }
 
 export async function renewTopicOrderLock(departmentId: string): Promise<void> {
-  await serverFetch(`/departments/${departmentId}/topic-order/renew-lock`, { method: 'POST' })
+  await serverFetch(`/departments/${departmentId}/topic-order/renew-lock`, {
+    method: 'POST',
+    body: JSON.stringify({ clientId: getTopicOrderClientId() }),
+  })
 }
 
 export async function fetchDepartmentTopics(

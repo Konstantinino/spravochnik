@@ -40,6 +40,21 @@ import {
 } from './guide-store'
 import { getStoredServerUrl, mediaAbsoluteUrl, setStoredServerUrl } from './server-url'
 
+const REORDER_CLIENT_STORAGE_KEY = 'rest-info-topic-order-client-id'
+
+function getTopicOrderClientId(): string {
+  try {
+    let id = sessionStorage.getItem(REORDER_CLIENT_STORAGE_KEY)
+    if (!id) {
+      id = crypto.randomUUID()
+      sessionStorage.setItem(REORDER_CLIENT_STORAGE_KEY, id)
+    }
+    return id
+  } catch {
+    return crypto.randomUUID()
+  }
+}
+
 let currentUser: PublicUser | null = null
 let syncStatus: SyncStatus = {
   code: 'no_server',
@@ -260,18 +275,9 @@ const api: SpravochnikApi = {
 
   reorderTopics: async (payload) => {
     const dept = payload.departmentId
-    const data = departmentGuide(dept)
-    const listKey = listKeyForDept(dept)
-    const list = [...((data[listKey] as GuideItem[] | undefined) ?? [])]
-    const indexById = new Map(payload.items.map((e) => [e.id, e.sort_index]))
-    for (const item of list) {
-      const sortIndex = indexById.get(item.id)
-      if (sortIndex !== undefined) item.sort_index = sortIndex
-    }
-    setDepartmentGuide(dept, { [listKey]: list })
     await apiFetch(`/departments/${dept}/topic-order`, {
       method: 'PUT',
-      body: JSON.stringify({ items: payload.items }),
+      body: JSON.stringify({ items: payload.items, clientId: getTopicOrderClientId() }),
     })
     return refreshDepartmentFromServer(dept)
   },
@@ -818,15 +824,21 @@ const api: SpravochnikApi = {
 
   lockTopicOrder: async (payload) => {
     try {
-      await apiFetch(`/departments/${payload.departmentId}/topic-order/lock`, { method: 'POST' })
+      await apiFetch(`/departments/${payload.departmentId}/topic-order/lock`, {
+        method: 'POST',
+        body: JSON.stringify({ clientId: getTopicOrderClientId() }),
+      })
       return { ok: true }
     } catch (e) {
       if (e instanceof ApiError && e.status === 423) {
         const body = e.body as { lockedByName?: string }
+        const name = body?.lockedByName?.trim()
         return {
           ok: false,
-          lockedByName: body?.lockedByName,
-          error: e.message,
+          lockedByName: name,
+          error: name
+            ? `Порядок уже редактирует: ${name}`
+            : 'Порядок уже редактируется в другом окне или приложении',
         }
       }
       return { ok: false, error: e instanceof Error ? e.message : 'Ошибка блокировки порядка' }
@@ -834,13 +846,17 @@ const api: SpravochnikApi = {
   },
 
   unlockTopicOrder: async (payload) => {
-    await apiFetch(`/departments/${payload.departmentId}/topic-order/unlock`, { method: 'POST' })
+    await apiFetch(`/departments/${payload.departmentId}/topic-order/unlock`, {
+      method: 'POST',
+      body: JSON.stringify({ clientId: getTopicOrderClientId() }),
+    })
     return { ok: true }
   },
 
   renewTopicOrderLock: async (payload) => {
     await apiFetch(`/departments/${payload.departmentId}/topic-order/renew-lock`, {
       method: 'POST',
+      body: JSON.stringify({ clientId: getTopicOrderClientId() }),
     })
     return { ok: true }
   },

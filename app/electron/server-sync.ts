@@ -50,6 +50,7 @@ import { appendSessionLog } from './session-log'
 import {
   ServerApiError,
   downloadMediaFile,
+  getTopicOrderClientId,
   isServerReachable,
   lockTopicOrder,
   serverFetch,
@@ -780,7 +781,7 @@ async function replayOperation(op: PendingOperation): Promise<void> {
       try {
         await serverFetch(`/departments/${deptId}/topic-order`, {
           method: 'PUT',
-          body: JSON.stringify({ items }),
+          body: JSON.stringify({ items, clientId: getTopicOrderClientId() }),
         })
       } finally {
         await unlockTopicOrder(deptId).catch(() => undefined)
@@ -1040,7 +1041,7 @@ export async function tryPushReorderOnline(
   try {
     await serverFetch(`/departments/${departmentId}/topic-order`, {
       method: 'PUT',
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({ items, clientId: getTopicOrderClientId() }),
     })
     return { ok: true }
   } catch (e) {

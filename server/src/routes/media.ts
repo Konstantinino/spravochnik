@@ -23,7 +23,7 @@ const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 
 const UPLOAD_MAX_BYTES = 120 * 1024 * 1024
 
 /** Bumped when media GET handling changes — visible via GET /media/status */
-export const MEDIA_HANDLER_VERSION = '2026-10-27-v3'
+export const MEDIA_HANDLER_VERSION = '2026-10-27-v4'
 
 export const mediaRouter = Router()
 
@@ -122,9 +122,20 @@ function sendMediaFile(res: Response, filePath: string): void {
     res.status(404).json({ error: 'Файл не найден' })
     return
   }
+  res.setHeader('Cache-Control', 'public, max-age=86400')
+  // Prefer buffered send for typical photos/docs — more reliable behind nginx than pipe.
+  if (stat.size <= 25 * 1024 * 1024) {
+    try {
+      const buf = fs.readFileSync(filePath)
+      res.status(200).type(type).send(buf)
+    } catch (err) {
+      console.error('media read failed', filePath, err)
+      res.status(500).json({ error: 'Ошибка чтения файла', code: (err as NodeJS.ErrnoException).code })
+    }
+    return
+  }
   res.setHeader('Content-Type', type)
   res.setHeader('Content-Length', String(stat.size))
-  res.setHeader('Cache-Control', 'public, max-age=86400')
   const stream = fs.createReadStream(filePath)
   stream.on('error', (err) => {
     console.error('media stream failed', filePath, err)
@@ -257,7 +268,7 @@ mediaRouter.get('/manifest/all', async (_req, res) => {
 })
 
 /** Always-JSON status (no wildcards) — use this to verify deploy. */
-mediaRouter.get('/status', (_req, res) => {
+mediaRouter.get('/status', (req, res) => {
   try {
     ensureMediaDir()
     let top: string[] = []
@@ -272,11 +283,44 @@ mediaRouter.get('/status', (_req, res) => {
       })
       return
     }
+
+    const sampleRaw = typeof req.query.file === 'string' ? req.query.file.trim() : ''
+    const samplePath = sampleRaw.replace(/\\/g, '/').replace(/^\/+/, '')
+    let sample: Record<string, unknown> | null = null
+    if (samplePath && !samplePath.includes('..')) {
+      const resolved = resolveMediaFileForRequest(samplePath)
+      if (!resolved) {
+        sample = { requested: samplePath, resolved: null, exists: false }
+      } else {
+        try {
+          fs.accessSync(resolved, fs.constants.R_OK)
+          const buf = fs.readFileSync(resolved)
+          sample = {
+            requested: samplePath,
+            resolved,
+            exists: true,
+            readable: true,
+            size: buf.length,
+            magicHex: buf.subarray(0, 8).toString('hex'),
+          }
+        } catch (err) {
+          sample = {
+            requested: samplePath,
+            resolved,
+            exists: true,
+            readable: false,
+            error: (err as NodeJS.ErrnoException).code || String(err),
+          }
+        }
+      }
+    }
+
     res.json({
       ok: true,
       handler: MEDIA_HANDLER_VERSION,
       mediaDir: MEDIA_DIR,
       top,
+      sample,
     })
   } catch (err) {
     console.error(err)

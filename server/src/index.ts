@@ -68,7 +68,7 @@ async function main(): Promise<void> {
       features: { adminDepartments: true },
       web: { dist: WEB_DIST || null, index: webIndex, assets: webAssets },
       media: { dir: MEDIA_DIR, top: mediaTop },
-      build: '2026-10-27-webmedia-v3',
+      build: '2026-10-27-webmedia-v4',
     })
   })
 

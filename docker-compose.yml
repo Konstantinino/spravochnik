@@ -33,11 +33,14 @@ services:
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-kostya.alone18@yandex.ru}
       MEDIA_DIR: /data/media
       UPDATES_DIR: /data/updates
+      WEB_DIST: /data/web
       PORT: 3000
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
     volumes:
       - media_data:/data/media
       - updates_data:/data/updates
+      - ./web/dist:/data/web:ro
       - ./import:/import:ro
     ports:
       - "3000:3000"

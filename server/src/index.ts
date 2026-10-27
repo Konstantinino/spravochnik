@@ -15,6 +15,8 @@ import { updatesRouter } from './routes/updates.js'
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 const MEDIA_DIR = process.env.MEDIA_DIR ?? path.join(process.cwd(), 'data', 'media')
 const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 'updates')
+/** Optional browser SPA (web/dist). Used when front nginx proxies everything to the API. */
+const WEB_DIST = process.env.WEB_DIST?.trim() || ''
 
 async function main(): Promise<void> {
   fs.mkdirSync(MEDIA_DIR, { recursive: true })
@@ -54,6 +56,19 @@ async function main(): Promise<void> {
   app.use('/media', mediaRouter)
   app.use('/sync', syncRouter)
   app.use('/app', updatesRouter)
+
+  if (WEB_DIST && fs.existsSync(WEB_DIST)) {
+    const indexHtml = path.join(WEB_DIST, 'index.html')
+    app.use(express.static(WEB_DIST, { index: false, maxAge: '1h' }))
+    app.get(/^(?!\/(auth|admin|departments|media|sync|app|health)(\/|$)).*/, (req, res, next) => {
+      if (!fs.existsSync(indexHtml)) {
+        next()
+        return
+      }
+      res.sendFile(indexHtml)
+    })
+    console.log(`Serving web SPA from ${WEB_DIST}`)
+  }
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' })

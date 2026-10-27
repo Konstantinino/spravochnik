@@ -18,6 +18,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./web/dist:/usr/share/nginx/html:ro
       - media_data:/data/media:ro
       - updates_data:/data/updates:ro
     networks:

@@ -60,11 +60,16 @@ const upload = multer({
 
 function mediaRelParam(req: { params: Record<string, unknown>; path: string }): string {
   const fromParams = req.params['0']
-  if (typeof fromParams === 'string') return fromParams
-  if (Array.isArray(fromParams) && typeof fromParams[0] === 'string') return fromParams[0]
-  const prefix = '/media/'
-  if (req.path.startsWith(prefix)) return req.path.slice(prefix.length)
-  return ''
+  if (typeof fromParams === 'string' && fromParams) return fromParams.replace(/^\/+/, '')
+  if (Array.isArray(fromParams) && typeof fromParams[0] === 'string' && fromParams[0]) {
+    return fromParams[0].replace(/^\/+/, '')
+  }
+  // Inside app.use('/media', …) remainder is e.g. /media/support/… or /support/…
+  const remainder = req.path.replace(/^\/+/, '')
+  if (remainder.startsWith('media/')) return remainder
+  const prefix = 'media/'
+  if (req.path.startsWith('/' + prefix)) return req.path.slice(('/' + prefix).length)
+  return remainder
 }
 
 function ensureMediaDir(): void {
@@ -209,7 +214,11 @@ mediaRouter.get('/*', (req, res) => {
       res.status(400).json({ error: 'Недопустимый путь' })
       return
     }
-    const filePath = resolveExistingMediaFile(MEDIA_DIR, normalized)
+    let filePath = resolveExistingMediaFile(MEDIA_DIR, normalized)
+    // Accept /media/support/… (mount already provides /media) as alias of storage key media/support/…
+    if (!filePath && normalized && !normalized.startsWith('media/')) {
+      filePath = resolveExistingMediaFile(MEDIA_DIR, `media/${normalized}`)
+    }
     if (!filePath) {
       res.status(404).json({ error: 'Файл не найден' })
       return

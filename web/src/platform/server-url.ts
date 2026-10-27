@@ -38,8 +38,9 @@ export function mediaAbsoluteUrl(relativePath: string): string {
   const base = getApiBase()
   const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '')
   if (normalized.startsWith('http://') || normalized.startsWith('https://')) return normalized
-  // API mount is /media/…; storage keys are usually media/{dept}/…
-  const path = normalized.startsWith('media/') ? `/${normalized}` : `/media/${normalized}`
+  // Same as Electron: GET /media/{relativePath}, and relativePath already starts with media/
+  // → /media/media/{dept}/… (API mount + storage key). Do not collapse the double media/.
+  const path = `/media/${normalized}`
   if (!base) return path
   return `${base}${path}`
 }

@@ -2570,6 +2570,12 @@ mark.find-hit--active {
   text-overflow: ellipsis;
 }
 
+.dept-section-list-preview {
+  display: block;
+  margin-top: 4px;
+  pointer-events: auto;
+}
+
 .departments-settings__group-label {
   padding: 6px 0 2px;
   font-size: 0.78rem;

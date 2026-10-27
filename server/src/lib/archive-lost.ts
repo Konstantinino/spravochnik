@@ -4,6 +4,11 @@ import { query } from '../db/pool.js'
 export const ARCHIVE_LOST_SUBSECTION_ID = 'support__archive__lost'
 export const ARCHIVE_ARCHIVED_SUBSECTION_ID = 'support__archive__archived'
 
+export function isSupportArchiveSubsectionId(subsectionId: unknown): boolean {
+  const sid = String(subsectionId ?? '').trim()
+  return sid === ARCHIVE_ARCHIVED_SUBSECTION_ID || sid === ARCHIVE_LOST_SUBSECTION_ID
+}
+
 type Client = pg.PoolClient
 
 export async function ensureArchiveArchivedSubsection(client?: Client): Promise<string> {
@@ -43,8 +48,7 @@ export function resolveSupportArchiveSubsectionId(
 ): string | null {
   if (archived && !wasArchived) return archivedBucketId
   if (!archived && wasArchived) {
-    const cur = currentSubsectionId?.trim() ?? ''
-    if (cur === archivedBucketId || cur === ARCHIVE_LOST_SUBSECTION_ID) return null
+    return null
   }
   return resolvedSubsectionId
 }

@@ -886,11 +886,13 @@ export default function App() {
     const nextArchived = !selected.archived
     pinSelectedTopic(topicId)
     try {
+      const wasArchived = Boolean(selected.archived)
       const data = await window.spravochnik.updateItem({
         departmentId,
         item: {
           ...selected,
           archived: nextArchived,
+          ...(wasArchived && !nextArchived ? { subsection_id: null } : {}),
         },
         promoteChildren: scope === 'topic' && nextArchived,
       })
@@ -899,6 +901,9 @@ export default function App() {
       if (nextArchived && listFilter !== 'archive') {
         setSelectedId(null)
         setNavHistory([])
+      } else if (!nextArchived && wasArchived && listFilter === 'archive') {
+        setListFilter('all')
+        if (user) saveListFilter(user.id, departmentId, 'all')
       }
     } catch (e) {
       releasePinnedTopic(topicId)

@@ -80,6 +80,19 @@ function SubsectionDividerPreview({ raw }: { raw: string }) {
   )
 }
 
+function DeptSectionListPreview({ raw }: { raw: string }) {
+  const clean = normalizeSubsectionLabelInput(raw)
+  if (!clean) return null
+  return (
+    <span
+      className="dept-section-list-preview topic-party-section__heading"
+      title="Как заголовок раздела в списке тем"
+    >
+      {clean}
+    </span>
+  )
+}
+
 function formatTopicSectionsApiError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e)
   const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
@@ -1463,7 +1476,7 @@ export function SettingsPage({
                                 onChange={(e) => setEditingSectionLabel(e.target.value)}
                                 aria-label="Название раздела"
                               />
-                              <SubsectionDividerPreview raw={editingSectionLabel} />
+                              <DeptSectionListPreview raw={editingSectionLabel} />
                             </div>
                           ) : (
                             <span className="departments-settings__label">{section.label}</span>
@@ -1529,7 +1542,7 @@ export function SettingsPage({
                       aria-label="Название нового раздела"
                       autoFocus
                     />
-                    <SubsectionDividerPreview raw={newSectionLabel} />
+                    <DeptSectionListPreview raw={newSectionLabel} />
                   </div>
                   <div className="departments-settings__actions">
                     <button

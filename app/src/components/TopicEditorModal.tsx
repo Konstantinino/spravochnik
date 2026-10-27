@@ -153,10 +153,9 @@ export function TopicEditorModal({
     [subsections, targetDept, party, archiveSection],
   )
 
-  const showPartyPicker = showParty && isRootTopic
+  const showPartyPicker = showParty && isRootTopic && !topicArchived
   const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
-  const showArchiveSectionReadonly =
-    !showPartyPicker && isRootTopic && topicArchived
+  const showArchiveSectionReadonly = isRootTopic && topicArchived
 
   const partySelectOptions = useMemo(
     () =>
@@ -273,7 +272,7 @@ export function TopicEditorModal({
     try {
       const result = await window.spravochnik.saveTopicImage(imageOwnerPayload())
       if (!result) return
-      const markdown = `\n\n${formatSharedImageMarkdown(result.markdownPath)}\n\n`
+      const markdown = formatSharedImageMarkdown(result.markdownPath)
       const sel = resolvedTextareaSelection()
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current, sel)
       setAnswer(next)
@@ -373,7 +372,7 @@ export function TopicEditorModal({
         setError('В буфере нет изображения')
         return
       }
-      const markdown = `\n\n${formatSharedImageMarkdown(result.markdownPath)}\n\n`
+      const markdown = formatSharedImageMarkdown(result.markdownPath)
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
       clearPicker()

@@ -94,6 +94,16 @@ function SubsectionDivider({ label }: { label: string }) {
   )
 }
 
+/** Корневые «разделы» отдела (СПП, юристы…) — как party в техподдержке, не как подраздел. */
+function DeptSectionHeading({ label }: { label: string }) {
+  const text = normalizeSubsectionLabelInput(label) || label
+  return (
+    <div className="topic-party-section__heading" title={text || 'Раздел'}>
+      {text}
+    </div>
+  )
+}
+
 interface TopicListProps {
   items: GuideItem[]
   selectedId: number | null
@@ -924,9 +934,9 @@ export function TopicList({
     return [
       ...unassigned.map((item) => renderTreeNode(item, treeNodeProps)),
       ...withSubsection.map((block) => (
-        <li key={block.id} className="topic-subsection-section">
-          <SubsectionDivider label={block.label} />
-          <ul className="topic-subsection-section__list">
+        <li key={block.id} className="topic-party-section">
+          <DeptSectionHeading label={block.label} />
+          <ul className="topic-party-section__list">
             {block.items.map((item) => renderTreeNode(item, treeNodeProps))}
           </ul>
         </li>

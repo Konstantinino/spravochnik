@@ -450,10 +450,10 @@ export function Viewer({
     [subsections, departmentId, party, archiveSection],
   )
 
-  const showPartyPicker = showParty && isRootTopic
+  const topicArchived = Boolean(item?.archived)
+  const showPartyPicker = showParty && isRootTopic && !topicArchived
   const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
-  const showArchiveSectionReadonly =
-    !showParty && isRootTopic && Boolean(item?.archived)
+  const showArchiveSectionReadonly = isRootTopic && topicArchived
 
   const partySelectOptions = useMemo(
     () =>
@@ -740,7 +740,7 @@ export function Viewer({
         departmentId,
       })
       if (!result) return
-      const markdown = `\n\n${formatSharedImageMarkdown(result.markdownPath)}\n\n`
+      const markdown = formatSharedImageMarkdown(result.markdownPath)
       const sel = resolvedTextareaSelection()
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current, sel)
       setAnswer(next)
@@ -813,7 +813,7 @@ export function Viewer({
         setError('В буфере нет изображения')
         return
       }
-      const markdown = `\n\n${formatSharedImageMarkdown(result.markdownPath)}\n\n`
+      const markdown = formatSharedImageMarkdown(result.markdownPath)
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
       clearPicker()

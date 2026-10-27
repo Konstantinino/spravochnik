@@ -47,7 +47,7 @@ export async function insertPastedImageReferenceAsync(
       contextTopicId: topicId,
     })
   }
-  const snippet = `\n\n${formatSharedImageMarkdown(markdownPath)}\n\n`
+  const snippet = formatSharedImageMarkdown(markdownPath)
   return insertAtCursor(value, snippet, el)
 }
 

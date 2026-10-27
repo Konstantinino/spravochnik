@@ -11,6 +11,7 @@ import {
 } from '../lib/departments.js'
 import {
   ensureArchiveArchivedSubsection,
+  isSupportArchiveSubsectionId,
   resolveSupportArchiveSubsectionId,
 } from '../lib/archive-lost.js'
 import { resolveTopicSubsectionId } from '../lib/subsections.js'
@@ -488,12 +489,20 @@ topicsRouter.put(
           : current.sort_index
 
       const updated = await withTransaction(async (client) => {
-        const requestedSubsection =
+        let requestedSubsection: unknown =
           item.subsection_id !== undefined
             ? item.subsection_id
             : item.subsectionId !== undefined
               ? item.subsectionId
               : current.subsection_id
+        if (
+          dept === 'support' &&
+          !archived &&
+          current.archived &&
+          isSupportArchiveSubsectionId(requestedSubsection)
+        ) {
+          requestedSubsection = null
+        }
         let subsectionId = await resolveTopicSubsectionId(
           dept,
           parentId,
@@ -560,6 +569,11 @@ topicsRouter.put(
       await releaseTopicLock(dept, topicId, req.user!.id)
       res.json({ topic: rowToGuideItem(updated), version: updated.version })
     } catch (err) {
+      const status = (err as { status?: number }).status
+      if (status === 400) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'Некорректные данные' })
+        return
+      }
       console.error(err)
       res.status(500).json({ error: 'Ошибка обновления' })
     }

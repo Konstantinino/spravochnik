@@ -1,5 +1,6 @@
 import type pg from 'pg'
 import { query } from '../db/pool.js'
+import { isSupportArchiveSubsectionId } from './archive-lost.js'
 export interface SubsectionRecord {
   id: string
   departmentId: string
@@ -243,6 +244,9 @@ export async function resolveTopicSubsectionId(
 
   const pickMsg = departmentId === 'support' ? 'Выберите подраздел' : 'Выберите раздел'
   if (!subs.some((s) => s.id === id)) {
+    if (departmentId === 'support' && isSupportArchiveSubsectionId(id)) {
+      return id
+    }
     const err = new Error(pickMsg)
     ;(err as Error & { status: number }).status = 400
     throw err

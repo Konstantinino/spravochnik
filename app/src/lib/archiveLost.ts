@@ -18,10 +18,7 @@ export function applySupportArchiveSubsectionToRow(
   }
   if (!nextArchived && wasArchived) {
     delete row.archived
-    const sid = String(row.subsection_id ?? '').trim()
-    if (sid === ARCHIVE_ARCHIVED_SUBSECTION_ID || sid === ARCHIVE_LOST_SUBSECTION_ID) {
-      delete row.subsection_id
-    }
+    delete row.subsection_id
   }
 }
 

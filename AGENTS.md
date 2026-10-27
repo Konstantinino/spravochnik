@@ -15,7 +15,8 @@
 | Компонент | Путь | Стек |
 |---|---|---|
 | PC-клиент | `app/` | Electron 35, React 19, Vite, TypeScript |
-| Сервер API | `server/` | Node 20, Express, PostgreSQL, JWT |
+| Веб-клиент | `web/` | Vite SPA, общий UI из `app/src`, httpOnly cookie |
+| Сервер API | `server/` | Node 20, Express, PostgreSQL, JWT (+ cookie-auth для веба) |
 | Docker | `docker-compose.yml` | postgres:16 + api |
 | Данные для деплоя | `REST-INFO-export/` | JSON + media (в `.gitignore`) |
 
@@ -74,7 +75,8 @@ graphify update .
 | Файл | Назначение |
 |---|---|
 | `index.ts` | Express app, роуты |
-| `routes/auth.ts` | login, register, JWT |
+| `routes/auth.ts` | login/register (Bearer JWT); **`/login-web`**, **`/register-web`**, **`/logout-web`** (httpOnly cookie) |
+| `lib/web-session.ts` | cookie сессии для браузерного клиента |
 | `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`**, **`GET/POST/PUT/DELETE /admin/departments`**, **подразделы** (`/admin/departments/:id/subsections`, `/admin/subsections/:id`) |
 | `lib/departments.ts` | CRUD разделов, `lost`, `sort_order`, `system_locked` |
 | `lib/subsections.ts` | CRUD подразделов, `resolveTopicSubsectionId` |
@@ -168,7 +170,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.4.9.exe
+# → app/release/REST-INFO-Setup-1.5.0.exe
 ```
 
 ## Владелец / bootstrap
@@ -212,6 +214,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.4.9** (`app/package.json`)
+- Клиент: **1.5.0** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

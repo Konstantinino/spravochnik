@@ -9,9 +9,10 @@
     "skipLibCheck": true,
     "noEmit": true,
     "isolatedModules": true,
+    "baseUrl": ".",
     "paths": {
       "@app/*": ["../app/src/*"]
     }
   },
-  "include": ["src", "../app/src"]
+  "include": ["src"]
 }

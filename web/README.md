@@ -41,6 +41,10 @@ Vite проксирует `/auth`, `/media`, … на API, cookie работае
 
 ```powershell
 cd web
+npm install
 npm run build
 # dist/ → nginx root
 ```
+
+`npm run build` = только Vite (так и нужно на сервере: UI тянется из `../app/src`, без установки `app/node_modules`).  
+Локальная проверка типов: `npm run typecheck` (удобнее с установленным `app/`).

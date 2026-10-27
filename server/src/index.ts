@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runMigrations } from './migrate.js'
@@ -29,11 +30,14 @@ async function main(): Promise<void> {
   await ensureOwnerRole()
 
   const app = express()
+  const corsOrigin = process.env.CORS_ORIGIN?.trim()
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN ?? '*',
+      origin: corsOrigin || '*',
+      credentials: Boolean(corsOrigin),
     }),
   )
+  app.use(cookieParser())
   app.use(express.json({ limit: '10mb' }))
 
   app.get('/health', (_req, res) => {

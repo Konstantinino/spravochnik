@@ -5,7 +5,7 @@ export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[
 }
 
 /** Legacy topics without party are treated as supplier. */
-export function getItemParty(item: GuideItem): string {
+export function getItemParty(item: Pick<GuideItem, 'party'>): string {
   const raw = item.party
   if (typeof raw === 'string' && raw.trim()) return raw.trim()
   return 'supplier'

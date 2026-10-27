@@ -1,10 +1,12 @@
 # REST INFO — статус проекта (handoff)
 
-Обновлено: 2026-10-07
+Обновлено: 2026-10-27
 
 ## Текущая фаза
 
 **v2 реализована.** Яндекс.Диск выведен из основного потока (sync + updates). Ожидается production-deploy серверным программистом.
+
+**Веб-клиент (`web/`)** снова в `main`: Vite SPA + cookie-auth (`/auth/login-web`, `/auth/register-web`, `/auth/logout-web`). UI общий с десктопом (`@app`). Без офлайна; данные только с API. Dev: см. [web/README.md](../web/README.md), план — [WEB-VERSION-PLAN.md](WEB-VERSION-PLAN.md).
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 

@@ -28,6 +28,7 @@ export const ensureTopicMediaDownloaded = serverSync.ensureTopicMediaDownloaded
 export const ensureMediaFilesDownloaded = serverSync.ensureMediaFilesDownloaded
 export const peekAndPullRemoteChanges = serverSync.peekAndPullRemoteChanges
 export const scheduleRemoteChangePeek = serverSync.scheduleRemoteChangePeek
+export const tryAutoPushPending = serverSync.tryAutoPushPending
 
 export async function pullFromYandex(options?: {
   force?: boolean

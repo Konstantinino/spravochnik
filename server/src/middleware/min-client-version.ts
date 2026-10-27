@@ -2,27 +2,9 @@ import type { Request, Response, NextFunction } from 'express'
 import {
   CLIENT_VERSION_HEADER,
   compareVersions,
-  getLatestAppReleaseVersion,
-  normalizeVersionLabel,
   parseClientVersionHeader,
+  requiredClientVersion,
 } from '../lib/app-version.js'
-
-let cachedMinVersion: { value: string | null; expiresAt: number } | null = null
-const CACHE_MS = 30_000
-
-async function requiredClientVersion(): Promise<string | null> {
-  const envMin = process.env.MIN_CLIENT_VERSION?.trim()
-  if (envMin) return normalizeVersionLabel(envMin)
-
-  const now = Date.now()
-  if (cachedMinVersion && cachedMinVersion.expiresAt > now) {
-    return cachedMinVersion.value
-  }
-  const latest = await getLatestAppReleaseVersion()
-  const value = latest ? normalizeVersionLabel(latest) : null
-  cachedMinVersion = { value, expiresAt: now + CACHE_MS }
-  return value
-}
 
 /** Reject writes from clients older than latest app_releases (or MIN_CLIENT_VERSION). */
 export async function requireCurrentClientVersion(

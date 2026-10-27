@@ -59,6 +59,8 @@ export interface SettingsData {
   windowBounds?: SavedWindowBounds
   /** Cached support dept phone bar (synced from server when online). */
   supportPhones?: Array<{ label: string; display: string; tel: string }>
+  /** Cached support dept email bar (synced from server when online). */
+  supportEmails?: Array<{ label: string; email: string }>
 }
 
 export interface PublicUser {

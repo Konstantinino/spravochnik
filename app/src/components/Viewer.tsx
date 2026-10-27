@@ -8,7 +8,8 @@ import type {
   ImageDisplayMap,
   SupportTopicSection,
 } from '../types'
-import { supportPartySelectOptions } from '../types'
+import { supportPartySelectOptions, TOPIC_VIEW_FILTER_LABELS } from '../types'
+import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
   filterTopicsForClientLinkPicker,
   filterTopicsForLinkPicker,
@@ -34,6 +35,8 @@ import {
   formatTopicMarkdownLink,
   parseImageRefFromClipboard,
   markdownForDisplay,
+  markdownForEdit,
+  markdownFromEdit,
   mediaSrcFromMarkdownUrl,
   isAllowedMarkdownImageSrc,
   parseFileAttachmentHref,
@@ -42,12 +45,16 @@ import {
 import {
   focusCursor,
   insertAtCursor,
+  type TextareaSelection,
   insertPastedImageReferenceAsync,
   wrapSelectionWithTopicLink,
 } from '../lib/textInsert'
 import {
   SUBSECTION_NONE_OPTION_LABEL,
   SUBSECTION_NONE_SELECT_VALUE,
+  editorArchiveSectionActive,
+  editorPartyForSave,
+  editorPartySelectValue,
   editorSubsectionsForDepartment,
   isEditableRootTopic,
   rootSubsectionIdForSave,
@@ -58,7 +65,6 @@ import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ImageScaleDialog } from './ImageScaleDialog'
 import { TopicMarkdownImage } from './TopicMarkdownImage'
 import { ParentTopicField } from './ParentTopicField'
-import { TextareaWithNbspButton } from './TextareaWithNbspButton'
 import { TopicLinkPicker } from './TopicLinkPicker'
 
 interface ViewerProps {
@@ -226,7 +232,15 @@ export function Viewer({
     setPickerQuery,
   } = useTopicLinkPicker(textareaRef)
 
-  usePreserveTextareaFocus(editing, textareaRef)
+  const textareaSelectionRef = usePreserveTextareaFocus(editing, textareaRef)
+
+  function resolvedTextareaSelection(): TextareaSelection {
+    const el = textareaRef.current
+    if (el && document.activeElement === el) {
+      return { start: el.selectionStart, end: el.selectionEnd }
+    }
+    return textareaSelectionRef.current
+  }
 
   const [findOpen, setFindOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
@@ -313,14 +327,24 @@ export function Viewer({
   useEffect(() => {
     if (!item || editing) return
     setQuestion(item.question)
-    setAnswer(item.answer ?? '')
+    setAnswer(markdownForEdit(item.answer ?? ''))
     setParentId(item.parent_id ?? null)
     setAttachParent(item.parent_id != null)
     const linkedClient = item.client_topic_id ?? null
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
-    setParty(getItemParty(item))
-    const subs = editorSubsectionsForDepartment(subsections, departmentId, getItemParty(item))
+    setParty(editorPartySelectValue(departmentId, item))
+    const archiveSection = editorArchiveSectionActive(
+      departmentId,
+      Boolean(item.archived),
+      editorPartySelectValue(departmentId, item),
+    )
+    const subs = editorSubsectionsForDepartment(
+      subsections,
+      departmentId,
+      getItemParty(item),
+      { archiveSection },
+    )
     setSubsectionId(rootSubsectionSelectValueFromTopic(item.subsection_id, subs))
   }, [
     editing,
@@ -330,6 +354,7 @@ export function Viewer({
     item?.parent_id,
     item?.client_topic_id,
     item?.party,
+    item?.archived,
     item?.subsection_id,
     subsections,
     departmentId,
@@ -357,14 +382,24 @@ export function Viewer({
     setFindCount(0)
     setError(null)
     setQuestion(item.question)
-    setAnswer(item.answer ?? '')
+    setAnswer(markdownForEdit(item.answer ?? ''))
     setParentId(item.parent_id ?? null)
     setAttachParent(item.parent_id != null)
     const linkedClient = item.client_topic_id ?? null
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
-    setParty(getItemParty(item))
-    const subs = editorSubsectionsForDepartment(subsections, departmentId, getItemParty(item))
+    setParty(editorPartySelectValue(departmentId, item))
+    const archiveSection = editorArchiveSectionActive(
+      departmentId,
+      Boolean(item.archived),
+      editorPartySelectValue(departmentId, item),
+    )
+    const subs = editorSubsectionsForDepartment(
+      subsections,
+      departmentId,
+      getItemParty(item),
+      { archiveSection },
+    )
     setSubsectionId(rootSubsectionSelectValueFromTopic(item.subsection_id, subs))
     onEditStart?.(structuredClone(item))
     setEditing(true)
@@ -401,17 +436,31 @@ export function Viewer({
     item?.parent_id ?? null,
   )
 
+  const archiveSection = editorArchiveSectionActive(
+    departmentId,
+    Boolean(item?.archived),
+    party,
+  )
+
   const targetDeptSubsections = useMemo(
-    () => editorSubsectionsForDepartment(subsections, departmentId, party),
-    [subsections, departmentId, party],
+    () =>
+      editorSubsectionsForDepartment(subsections, departmentId, party, {
+        archiveSection,
+      }),
+    [subsections, departmentId, party, archiveSection],
   )
 
   const showPartyPicker = showParty && isRootTopic
   const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
+  const showArchiveSectionReadonly =
+    !showParty && isRootTopic && Boolean(item?.archived)
 
   const partySelectOptions = useMemo(
-    () => supportPartySelectOptions(supportSections, party),
-    [supportSections, party],
+    () =>
+      supportPartySelectOptions(supportSections, party, {
+        includeArchive: Boolean(item?.archived),
+      }),
+    [supportSections, party, item?.archived],
   )
 
   function handlePartyChange(next: string) {
@@ -446,12 +495,13 @@ export function Viewer({
   )
 
   const showClientPartButton =
+    ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED &&
     showParty &&
     linkedClientTopicId != null &&
     allItems.some((i) => Number(i.id) === linkedClientTopicId)
 
   const linkedAdminTopic = useMemo(() => {
-    if (!item || !showParty) return null
+    if (!ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED || !item || !showParty) return null
     return findAdminTopicForClient(allItems, item.id)
   }, [allItems, item, showParty])
 
@@ -504,7 +554,7 @@ export function Viewer({
     if (!item) return
     setEditing(false)
     setQuestion(item.question)
-    setAnswer(item.answer ?? '')
+    setAnswer(markdownForEdit(item.answer ?? ''))
     setParentId(item.parent_id ?? null)
     setAttachParent(item.parent_id != null)
     setParty(getItemParty(item))
@@ -591,7 +641,13 @@ export function Viewer({
       setError('Выберите родительскую тему или снимите галочку')
       return
     }
-    if (showParty && party === 'additional' && attachClientLink && clientTopicId == null) {
+    if (
+      ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED &&
+      showParty &&
+      party === 'additional' &&
+      attachClientLink &&
+      clientTopicId == null
+    ) {
       setError('Выберите клиентскую тему или снимите галочку')
       return
     }
@@ -600,15 +656,15 @@ export function Viewer({
     try {
       await onSave({
         question: question.trim(),
-        answer,
+        answer: markdownFromEdit(answer),
         parent_id: attachParent ? parentId : null,
         client_topic_id:
-          showParty && party === 'additional'
+          ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED && showParty && party === 'additional'
             ? attachClientLink
               ? clientTopicId
               : null
             : undefined,
-        party: showParty ? party : undefined,
+        party: showParty ? editorPartyForSave(party, departmentId, current) : undefined,
         ...(showSubsectionPicker
           ? { subsection_id: rootSubsectionIdForSave(subsectionId) }
           : {}),
@@ -685,7 +741,8 @@ export function Viewer({
       })
       if (!result) return
       const markdown = `\n\n![](${result.markdownPath})`
-      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      const sel = resolvedTextareaSelection()
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current, sel)
       setAnswer(next)
       focusCursor(textareaRef.current, cursor)
     } catch (e) {
@@ -702,7 +759,8 @@ export function Viewer({
       })
       if (!result) return
       const markdown = `\n\n${formatFileMarkdownLink(result.originalName, result.markdownPath)}\n\n`
-      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      const sel = resolvedTextareaSelection()
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current, sel)
       setAnswer(next)
       focusCursor(textareaRef.current, cursor)
     } catch (e) {
@@ -1107,7 +1165,7 @@ export function Viewer({
                       closeFind()
                       setError(null)
                       setQuestion(current.question)
-                      setAnswer(current.answer ?? '')
+                      setAnswer(markdownForEdit(current.answer ?? ''))
                       setParentId(current.parent_id ?? null)
                       setAttachParent(current.parent_id != null)
                       const linkedClient = current.client_topic_id ?? null
@@ -1172,6 +1230,18 @@ export function Viewer({
           </button>
         )}
       </div>
+
+      {hasSubtopics && item && (
+        <div className="viewer__subtopics">
+          <div className="viewer__subtopics-heading">Подтемы</div>
+          <ViewerChildrenTree
+            parentId={item.id}
+            items={items}
+            currentId={current.id}
+            onNavigateToTopic={onNavigateToTopic}
+          />
+        </div>
+      )}
 
       {findOpen && !editing && (
         <div className="viewer-find">
@@ -1238,6 +1308,14 @@ export function Viewer({
               </select>
             </label>
           )}
+          {showArchiveSectionReadonly && (
+            <label className="field">
+              <span>Раздел</span>
+              <select value="archive" disabled aria-readonly="true">
+                <option value="archive">{TOPIC_VIEW_FILTER_LABELS.archive}</option>
+              </select>
+            </label>
+          )}
           {showSubsectionPicker && (
             <label className="field">
               <span>{departmentId === 'support' ? 'Подраздел' : 'Раздел'}</span>
@@ -1245,9 +1323,11 @@ export function Viewer({
                 value={subsectionId}
                 onChange={(e) => setSubsectionId(e.target.value)}
               >
-                <option value={SUBSECTION_NONE_SELECT_VALUE}>
-                  {SUBSECTION_NONE_OPTION_LABEL}
-                </option>
+                {!archiveSection ? (
+                  <option value={SUBSECTION_NONE_SELECT_VALUE}>
+                    {SUBSECTION_NONE_OPTION_LABEL}
+                  </option>
+                ) : null}
                 {targetDeptSubsections.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
@@ -1264,7 +1344,7 @@ export function Viewer({
             parentId={parentId}
             onParentIdChange={handleParentIdChange}
           />
-          {showParty && party === 'additional' && (
+          {ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED && showParty && party === 'additional' && (
             <ParentTopicField
               items={clientLinkPickerItems}
               excludeId={current.id}
@@ -1277,25 +1357,19 @@ export function Viewer({
               pickAnyTopic
             />
           )}
-          <TextareaWithNbspButton
+          <textarea
+            ref={textareaRef}
+            className="viewer__textarea"
             value={answer}
-            onValueChange={setAnswer}
-            textareaRef={textareaRef}
-          >
-            <textarea
-              ref={textareaRef}
-              className="viewer__textarea"
-              value={answer}
-              onChange={handleAnswerChange}
-              onKeyDown={handleAnswerKeyDown}
-              onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
-              onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
-              onPaste={(e) => void handleAnswerPaste(e)}
-              onCopy={handleAnswerCopy}
-              rows={16}
-              placeholder="Текст ответа (Markdown). «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
-            />
-          </TextareaWithNbspButton>
+            onChange={handleAnswerChange}
+            onKeyDown={handleAnswerKeyDown}
+            onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+            onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+            onPaste={(e) => void handleAnswerPaste(e)}
+            onCopy={handleAnswerCopy}
+            rows={16}
+            placeholder="Текст ответа (Markdown). «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
+          />
           <TopicLinkPicker
             open={linkPicker}
             items={linkPickerItems}
@@ -1306,10 +1380,20 @@ export function Viewer({
           />
           <div className="viewer__editor-toolbar">
             <div className="viewer__editor-insert">
-              <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void insertPhoto()}
+              >
                 Вставить фото
               </button>
-              <button type="button" className="btn btn-secondary" onClick={() => void insertFile()}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void insertFile()}
+              >
                 Вставить файл
               </button>
             </div>
@@ -1360,7 +1444,7 @@ export function Viewer({
           ) : (
             <p className="muted">
               {hasSubtopics
-                ? 'Текст этой темы пока пуст. Нажмите «Изменить», чтобы добавить описание — подтемы останутся ниже.'
+                ? 'Текст этой темы пока пуст. Нажмите «Изменить», чтобы добавить описание — подтемы перечислены выше.'
                 : 'Нет текста в теме'}
             </p>
           )}
@@ -1372,18 +1456,6 @@ export function Viewer({
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {hasSubtopics && item && (
-        <div className="viewer__subtopics">
-          <div className="viewer__subtopics-heading">Подтемы</div>
-          <ViewerChildrenTree
-            parentId={item.id}
-            items={items}
-            currentId={current.id}
-            onNavigateToTopic={onNavigateToTopic}
-          />
         </div>
       )}
         </article>

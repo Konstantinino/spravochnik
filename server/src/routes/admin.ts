@@ -39,6 +39,11 @@ import {
   readSupportPhonesFromDb,
   writeSupportPhonesToDb,
 } from '../lib/support-phones.js'
+import {
+  normalizeSupportEmails,
+  readSupportEmailsFromDb,
+  writeSupportEmailsToDb,
+} from '../lib/support-emails.js'
 import { requireCurrentClientVersion } from '../middleware/min-client-version.js'
 import {
   moveTopicsToArchiveLostByParty,
@@ -667,6 +672,27 @@ adminRouter.put('/support-phones', async (req: AuthRequest, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка сохранения телефонов' })
+  }
+})
+
+adminRouter.get('/support-emails', async (_req, res) => {
+  try {
+    const emails = await readSupportEmailsFromDb()
+    res.json({ emails })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка чтения почт' })
+  }
+})
+
+adminRouter.put('/support-emails', async (req: AuthRequest, res) => {
+  try {
+    const emails = normalizeSupportEmails(req.body?.emails)
+    const saved = await writeSupportEmailsToDb(emails)
+    res.json({ emails: saved })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка сохранения почт' })
   }
 })
 

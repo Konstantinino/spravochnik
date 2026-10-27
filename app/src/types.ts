@@ -191,6 +191,7 @@ export type SyncStatusCode =
   | 'syncing'
   | 'uploading'
   | 'up_to_date'
+  | 'client_outdated'
   | 'pending'
   | 'offline_pending'
   | 'busy'
@@ -377,6 +378,7 @@ export function deptTopicSectionIdsForDepartment(
 export function supportPartySelectOptions(
   sections: SupportTopicSection[],
   currentPartyId?: string | null,
+  options?: { includeArchive?: boolean },
 ): Array<{ id: string; label: string }> {
   const sorted =
     sections.length > 0
@@ -391,11 +393,14 @@ export function supportPartySelectOptions(
         }))
   const ids = new Set(sorted.map((s) => s.id))
   const extra = typeof currentPartyId === 'string' ? currentPartyId.trim() : ''
-  const options = sorted.map(({ id, label }) => ({ id, label }))
+  const out = sorted.map(({ id, label }) => ({ id, label }))
   if (extra && !ids.has(extra)) {
-    options.push({ id: extra, label: extra })
+    out.push({ id: extra, label: extra })
   }
-  return options
+  if (options?.includeArchive && !out.some((o) => o.id === 'archive')) {
+    out.push({ id: 'archive', label: TOPIC_VIEW_FILTER_LABELS.archive })
+  }
+  return out
 }
 
 export interface AdminDepartment {

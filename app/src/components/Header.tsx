@@ -5,7 +5,7 @@ import {
   canSwitchDepartment,
   isStaffRole,
 } from '../types'
-import { SupportPhonesBar } from './SupportPhonesBar'
+import { SupportContactBars } from './SupportContactBars'
 import { SUPPORT_PHONES_PLACEMENT } from '../lib/supportPhonesUi'
 
 interface HeaderProps {
@@ -15,10 +15,7 @@ interface HeaderProps {
   onOpenSettings: () => void
   user: PublicUser
   syncStatus: SyncStatus
-  canEdit: boolean
   onLogout: () => void
-  onPush: () => void
-  pushing: boolean
   interactionLocked?: boolean
 }
 
@@ -29,10 +26,7 @@ export function Header({
   onOpenSettings,
   user,
   syncStatus,
-  canEdit,
   onLogout,
-  onPush,
-  pushing,
   interactionLocked = false,
 }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -62,7 +56,11 @@ export function Header({
     }
   }, [])
 
-  const showSync = canEdit && syncStatus.hasPendingChanges && !pushing && !interactionLocked
+  const syncLabel =
+    syncStatus.code === 'pending' || syncStatus.code === 'offline_pending'
+      ? 'Актуально'
+      : syncStatus.label
+
   const updateReady = Boolean(updateInfo?.available && updateInfo.version)
   const updateBusy = Boolean(
     installing ||
@@ -100,21 +98,19 @@ export function Header({
       </div>
 
       <div className="app-header__sync" title={syncStatus.detail || syncStatus.label}>
-        <span className="app-header__sync-label">{syncStatus.label}</span>
-        {showSync && (
-          <button
-            type="button"
-            className="btn btn-header-sync"
-            onClick={onPush}
-            title="Отправить изменения на сервер"
-          >
-            Синхронизировать
-          </button>
-        )}
+        <span
+          className={
+            syncStatus.code === 'client_outdated'
+              ? 'app-header__sync-label app-header__sync-label--outdated'
+              : 'app-header__sync-label'
+          }
+        >
+          {syncLabel}
+        </span>
       </div>
 
       {departmentId === 'support' && SUPPORT_PHONES_PLACEMENT === 'header' ? (
-        <SupportPhonesBar placement="header" />
+        <SupportContactBars placement="header" />
       ) : null}
 
       <label className="app-header__dept">

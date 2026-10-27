@@ -279,6 +279,29 @@ export async function saveSupportPhonesOnServer(
   return data.phones ?? []
 }
 
+export interface SupportEmailLineDto {
+  label: string
+  email: string
+}
+
+export async function fetchSupportEmails(): Promise<SupportEmailLineDto[]> {
+  const data = await serverFetch<{ emails: SupportEmailLineDto[] }>('/app/support-emails', {
+    skipRemotePull: true,
+  })
+  return data.emails ?? []
+}
+
+export async function saveSupportEmailsOnServer(
+  emails: SupportEmailLineDto[],
+): Promise<SupportEmailLineDto[]> {
+  const data = await serverFetch<{ emails: SupportEmailLineDto[] }>('/admin/support-emails', {
+    method: 'PUT',
+    body: JSON.stringify({ emails }),
+    skipRemotePull: true,
+  })
+  return data.emails ?? []
+}
+
 export interface AdminSubsectionDto {
   id: string
   departmentId: string

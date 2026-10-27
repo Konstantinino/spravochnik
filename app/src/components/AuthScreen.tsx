@@ -93,7 +93,14 @@ function ServerUrlForm({
             Без него нельзя войти — данные и аккаунты хранятся на сервере.
           </p>
           {syncStatus && (
-            <div className="auth-sync" title={syncStatus.detail || syncStatus.label}>
+            <div
+              className={
+                syncStatus.code === 'client_outdated'
+                  ? 'auth-sync auth-sync--outdated'
+                  : 'auth-sync'
+              }
+              title={syncStatus.detail || syncStatus.label}
+            >
               {syncStatus.label}
             </div>
           )}
@@ -309,7 +316,14 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         <p className="auth-card__sub">Корпоративный справочник</p>
 
         {syncStatus && (
-          <div className="auth-sync" title={syncStatus.detail || syncStatus.label}>
+          <div
+            className={
+              syncStatus.code === 'client_outdated'
+                ? 'auth-sync auth-sync--outdated'
+                : 'auth-sync'
+            }
+            title={syncStatus.detail || syncStatus.label}
+          >
             {syncStatus.label}
           </div>
         )}

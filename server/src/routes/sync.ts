@@ -4,6 +4,7 @@ import { listDepartments } from '../lib/departments.js'
 import { listSubsections, subsectionToClient } from '../lib/subsections.js'
 import { listSupportSections, supportSectionToClient } from '../lib/support-sections.js'
 import { rowToGuideItem, type TopicRow } from '../lib/topics.js'
+import { requiredClientVersion } from '../lib/app-version.js'
 import { authMiddleware, optionalAuth, type AuthRequest } from '../middleware/auth.js'
 
 export const syncRouter = Router()
@@ -14,6 +15,7 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
     const full = req.query.full === 'true' || !since
 
     const globalVersion = await getGlobalVersion()
+    const minClientVersion = await requiredClientVersion()
 
     if (full) {
       const topicsResult = await query<TopicRow>(
@@ -74,6 +76,7 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
       res.json({
         full: true,
         globalVersion,
+        minClientVersion,
         syncedAt: new Date().toISOString(),
         departments: departmentRows.map((d) => ({
           id: d.id,
@@ -173,6 +176,7 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
     res.json({
       full: false,
       globalVersion,
+      minClientVersion,
       syncedAt: new Date().toISOString(),
       departments: departmentRows.map((d) => ({
         id: d.id,
@@ -198,7 +202,8 @@ syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
 syncRouter.get('/status', authMiddleware, async (_req, res) => {
   try {
     const globalVersion = await getGlobalVersion()
-    res.json({ globalVersion, serverTime: new Date().toISOString() })
+    const minClientVersion = await requiredClientVersion()
+    res.json({ globalVersion, minClientVersion, serverTime: new Date().toISOString() })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка' })

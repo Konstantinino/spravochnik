@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { app } from 'electron'
 import {
   getDepartments,
   departmentById,
@@ -56,7 +57,7 @@ import {
   unlockTopicOrder,
   uploadMediaFile,
 } from './server-api'
-import { checkForUpdates } from './updates'
+import { checkForUpdates, compareVersions } from './updates'
 
 export type SyncStatusCode =
   | 'idle'
@@ -66,6 +67,7 @@ export type SyncStatusCode =
   | 'syncing'
   | 'uploading'
   | 'up_to_date'
+  | 'client_outdated'
   | 'pending'
   | 'offline_pending'
   | 'busy'
@@ -111,8 +113,50 @@ let currentStatus: SyncStatus = {
 
 let pendingConflicts: SyncConflictInfo[] = []
 let pullInFlight = 0
+let remoteMinClientVersion: string | null = null
 
 const PULL_LOADING_LABEL = 'Загрузка данных…'
+const OUTDATED_VERSION_LABEL = 'Устаревшая версия'
+
+function noteRemoteMinClientVersion(min: unknown): void {
+  if (typeof min === 'string' && min.trim()) {
+    remoteMinClientVersion = min.trim().replace(/^v/i, '')
+  }
+}
+
+function localAppVersion(): string {
+  try {
+    const v = app.getVersion()?.trim()
+    if (v) return v.replace(/^v/i, '')
+  } catch {
+    /* not in Electron main */
+  }
+  return '0.0.0'
+}
+
+function isLocalClientOutdated(): boolean {
+  if (!remoteMinClientVersion) return false
+  return compareVersions(localAppVersion(), remoteMinClientVersion) < 0
+}
+
+function emitUpToDateOrOutdated(extra?: Partial<SyncStatus>): SyncStatus {
+  if (isLocalClientOutdated()) {
+    const min = remoteMinClientVersion
+    return emit({
+      code: 'client_outdated',
+      label: OUTDATED_VERSION_LABEL,
+      detail: min
+        ? `Требуется ${min} или новее (сейчас ${localAppVersion()})`
+        : undefined,
+      ...extra,
+    })
+  }
+  return emit({
+    code: 'up_to_date',
+    label: 'Актуально',
+    ...extra,
+  })
+}
 
 function hasUnsyncedLocalWork(): boolean {
   const settings = readSettings()
@@ -454,6 +498,7 @@ async function downloadMissingMedia(
 interface SyncChangesResponse {
   full: boolean
   globalVersion: number
+  minClientVersion?: string | null
   syncedAt: string
   departments?: Array<{
     id: string
@@ -537,11 +582,8 @@ export async function pullFromServer(options?: {
     if (options?.silent) {
       if (shouldSkipRemotePull()) return getSyncStatus()
     } else {
-      return emit({
-        code: 'pending',
-        label: 'Есть локальные изменения',
-        detail: 'Сначала синхронизируйте локальные изменения',
-      })
+      void tryAutoPushPending()
+      return refreshStatusFromSettings()
     }
   }
 
@@ -558,6 +600,7 @@ export async function pullFromServer(options?: {
     const changes = await serverFetch<SyncChangesResponse>(`/sync/changes${query}`, {
       skipRemotePull: true,
     })
+    noteRemoteMinClientVersion(changes.minClientVersion)
 
     emit({ code: 'syncing', label: PULL_LOADING_LABEL })
 
@@ -676,11 +719,7 @@ export async function pullFromServer(options?: {
       }
     }
     return finishPullStatus(() =>
-      emit({
-        code: 'up_to_date',
-        label: 'Актуально',
-        ...(hasContent ? { lastPulledAt: changes.syncedAt } : {}),
-      }),
+      emitUpToDateOrOutdated(hasContent ? { lastPulledAt: changes.syncedAt } : {}),
     )
   } catch (e) {
     if (options?.silent) {
@@ -806,10 +845,11 @@ async function replayOperation(op: PendingOperation): Promise<void> {
 function syncErrorFromClientOutdated(e: ServerApiError): SyncStatus | null {
   if (e.status !== 426) return null
   const body = e.body as { minVersion?: string; error?: string } | null
+  noteRemoteMinClientVersion(body?.minVersion)
   const min = body?.minVersion ? ` (нужна ${body.minVersion}+)` : ''
   return {
-    code: 'error',
-    label: 'Нужно обновить приложение',
+    code: 'client_outdated',
+    label: OUTDATED_VERSION_LABEL,
     detail: body?.error ?? `Установите последнюю версию REST INFO${min}`,
     hasPendingChanges: readSettings().hasPendingChanges,
   }
@@ -887,8 +927,10 @@ export async function pushToServer(): Promise<SyncStatus> {
     clearPendingOperations()
 
     const pullResult = await pullFromServer({ force: true })
-    if (pullResult.code === 'up_to_date') {
-      return emit({ code: 'up_to_date', label: 'Актуально' })
+    if (pullResult.code === 'up_to_date' || pullResult.code === 'client_outdated') {
+      return emitUpToDateOrOutdated(
+        pullResult.lastPulledAt ? { lastPulledAt: pullResult.lastPulledAt } : {},
+      )
     }
     return pullResult
   } catch (e) {
@@ -938,16 +980,14 @@ export async function resolveSyncConflicts(
 
 export function markLocalChange(): SyncStatus {
   setPendingChanges(true)
-  return emit({ code: 'pending', label: 'Есть локальные изменения' })
+  void tryAutoPushPending()
+  return refreshStatusFromSettings()
 }
 
 export function markOfflinePending(): SyncStatus {
   setPendingChanges(true)
-  return emit({
-    code: 'offline_pending',
-    label: 'Сохранено локально',
-    detail: 'Нет связи с сервером — синхронизируйте позже',
-  })
+  void tryAutoPushPending()
+  return refreshStatusFromSettings()
 }
 
 async function flushPendingMedia(): Promise<void> {
@@ -1124,17 +1164,32 @@ export function refreshStatusFromSettings(): SyncStatus {
   if (currentStatus.code === 'conflict' && (currentStatus.conflicts?.length ?? 0) > 0) {
     return getSyncStatus()
   }
-  if (hasUnsyncedLocalWork()) {
-    return emit({ code: 'pending', label: 'Есть локальные изменения' })
+  if (currentStatus.code === 'error') {
+    return getSyncStatus()
   }
-  return emit({
-    code: currentStatus.code === 'error' ? 'error' : 'up_to_date',
-    label: currentStatus.code === 'error' ? currentStatus.label : 'Актуально',
-  })
+  return emitUpToDateOrOutdated()
 }
 
 let peekInFlight = false
 let peekTimer: ReturnType<typeof setTimeout> | null = null
+let autoPushInFlight = false
+
+/** Отправка очереди на сервер без кнопки «Синхронизировать» в UI. */
+export async function tryAutoPushPending(): Promise<void> {
+  if (autoPushInFlight || pullInFlight > 0) return
+  if (!hasUnsyncedLocalWork()) return
+  const settings = readSettings()
+  if (!settings.serverUrl.trim() || !settings.authToken.trim()) return
+  if (!(await isServerReachable())) return
+  autoPushInFlight = true
+  try {
+    await pushToServer()
+  } catch {
+    /* фоновая отправка */
+  } finally {
+    autoPushInFlight = false
+  }
+}
 
 export function scheduleRemoteChangePeek(): void {
   if (peekTimer) return
@@ -1155,10 +1210,18 @@ export async function peekAndPullRemoteChanges(): Promise<void> {
     if (!settings.serverUrl.trim() || !settings.authToken.trim()) return
     if (shouldSkipRemotePull()) return
 
-    const remote = await serverFetch<{ globalVersion: number }>('/sync/status', {
-      skipRemotePull: true,
-    })
+    const remote = await serverFetch<{ globalVersion: number; minClientVersion?: string | null }>(
+      '/sync/status',
+      {
+        skipRemotePull: true,
+      },
+    )
+    noteRemoteMinClientVersion(remote.minClientVersion)
+    if (isLocalClientOutdated() && currentStatus.code === 'up_to_date') {
+      emitUpToDateOrOutdated()
+    }
     const known = settings.lastGlobalVersion
+    await tryAutoPushPending()
     if (known != null && remote.globalVersion <= known) return
 
     await pullFromServer({ silent: true })
@@ -1170,6 +1233,7 @@ export async function peekAndPullRemoteChanges(): Promise<void> {
 }
 
 setAfterServerRequest(() => {
+  void tryAutoPushPending()
   scheduleRemoteChangePeek()
 })
 

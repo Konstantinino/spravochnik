@@ -6,7 +6,13 @@ import type {
   GuideItem,
   SupportTopicSection,
 } from '../types'
-import { DEPARTMENTS, supportPartySelectOptions, workDepartmentsFrom } from '../types'
+import {
+  DEPARTMENTS,
+  supportPartySelectOptions,
+  TOPIC_VIEW_FILTER_LABELS,
+  workDepartmentsFrom,
+} from '../types'
+import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
   filterTopicsForClientLinkPicker,
   filterTopicsForLinkPicker,
@@ -16,6 +22,9 @@ import {
 import {
   SUBSECTION_NONE_OPTION_LABEL,
   SUBSECTION_NONE_SELECT_VALUE,
+  editorArchiveSectionActive,
+  editorPartyForSave,
+  editorPartySelectValue,
   editorSubsectionsForDepartment,
   isEditableRootTopic,
   rootSubsectionIdForSave,
@@ -24,18 +33,20 @@ import {
 import {
   formatFileMarkdownLink,
   formatSharedImageMarkdown,
+  markdownForEdit,
+  markdownFromEdit,
   parseImageRefFromClipboard,
 } from '../lib/markdown'
 import {
   focusCursor,
   insertAtCursor,
+  type TextareaSelection,
   insertPastedImageReferenceAsync,
   wrapSelectionWithTopicLink,
 } from '../lib/textInsert'
 import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ParentTopicField } from './ParentTopicField'
-import { TextareaWithNbspButton } from './TextareaWithNbspButton'
 import { TopicLinkPicker } from './TopicLinkPicker'
 
 interface TopicEditorModalProps {
@@ -113,7 +124,15 @@ export function TopicEditorModal({
     setPickerQuery,
   } = useTopicLinkPicker(textareaRef)
 
-  usePreserveTextareaFocus(open, textareaRef)
+  const textareaSelectionRef = usePreserveTextareaFocus(open, textareaRef)
+
+  function resolvedTextareaSelection(): TextareaSelection {
+    const el = textareaRef.current
+    if (el && document.activeElement === el) {
+      return { start: el.selectionStart, end: el.selectionEnd }
+    }
+    return textareaSelectionRef.current
+  }
 
   const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
 
@@ -123,17 +142,28 @@ export function TopicEditorModal({
     mode === 'edit' ? initial?.parent_id : null,
   )
 
+  const topicArchived = mode === 'edit' && Boolean(initial?.archived)
+  const archiveSection = editorArchiveSectionActive(targetDept, topicArchived, party)
+
   const targetDeptSubsections = useMemo(
-    () => editorSubsectionsForDepartment(subsections, targetDept, party),
-    [subsections, targetDept, party],
+    () =>
+      editorSubsectionsForDepartment(subsections, targetDept, party, {
+        archiveSection,
+      }),
+    [subsections, targetDept, party, archiveSection],
   )
 
   const showPartyPicker = showParty && isRootTopic
   const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
+  const showArchiveSectionReadonly =
+    !showPartyPicker && isRootTopic && topicArchived
 
   const partySelectOptions = useMemo(
-    () => supportPartySelectOptions(supportSections, party),
-    [supportSections, party],
+    () =>
+      supportPartySelectOptions(supportSections, party, {
+        includeArchive: topicArchived,
+      }),
+    [supportSections, party, topicArchived],
   )
 
   const linkPickerItems = useMemo(() => filterTopicsForLinkPicker(items), [items])
@@ -152,14 +182,22 @@ export function TopicEditorModal({
   useEffect(() => {
     if (!open) return
     setQuestion(initial?.question ?? '')
-    setAnswer(initial?.answer ?? '')
+    setAnswer(markdownForEdit(initial?.answer ?? ''))
     setTargetDept(departmentId)
-    const initialParty =
-      mode === 'edit' && initial ? getItemParty(initial) : defaultParty
+    const initialPartySelect =
+      mode === 'edit' && initial
+        ? editorPartySelectValue(departmentId, initial, defaultParty)
+        : defaultParty
+    const initialArchiveSection = editorArchiveSectionActive(
+      departmentId,
+      Boolean(initial?.archived),
+      initialPartySelect,
+    )
     const subsForDept = editorSubsectionsForDepartment(
       subsections,
       departmentId,
-      initialParty,
+      mode === 'edit' && initial ? getItemParty(initial) : defaultParty,
+      { archiveSection: initialArchiveSection },
     )
     const initialSub =
       mode === 'edit' && initial
@@ -174,11 +212,7 @@ export function TopicEditorModal({
       mode === 'edit' ? (initial?.client_topic_id ?? null) : null
     setSelectedClientTopicId(initialClient)
     setAttachClientLink(initialClient != null)
-    setParty(
-      mode === 'edit' && initial
-        ? getItemParty(initial)
-        : defaultParty,
-    )
+    setParty(initialPartySelect)
     if (mode === 'add') setDraftId(newDraftId())
     setError(null)
     clearPicker()
@@ -240,7 +274,8 @@ export function TopicEditorModal({
       const result = await window.spravochnik.saveTopicImage(imageOwnerPayload())
       if (!result) return
       const markdown = `\n\n![](${result.markdownPath})`
-      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      const sel = resolvedTextareaSelection()
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current, sel)
       setAnswer(next)
       focusCursor(textareaRef.current, cursor)
     } catch (e) {
@@ -254,7 +289,8 @@ export function TopicEditorModal({
       const result = await window.spravochnik.saveTopicFile(imageOwnerPayload())
       if (!result) return
       const markdown = `\n\n${formatFileMarkdownLink(result.originalName, result.markdownPath)}\n\n`
-      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
+      const sel = resolvedTextareaSelection()
+      const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current, sel)
       setAnswer(next)
       focusCursor(textareaRef.current, cursor)
     } catch (e) {
@@ -357,7 +393,13 @@ export function TopicEditorModal({
       setError('Выберите родительскую тему или снимите галочку')
       return
     }
-    if (showParty && party === 'additional' && attachClientLink && selectedClientTopicId == null) {
+    if (
+      ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED &&
+      showParty &&
+      party === 'additional' &&
+      attachClientLink &&
+      selectedClientTopicId == null
+    ) {
       setError('Выберите клиентскую тему или снимите галочку')
       return
     }
@@ -367,18 +409,20 @@ export function TopicEditorModal({
       await onSave({
         departmentId: targetDept,
         question: question.trim(),
-        answer,
+        answer: markdownFromEdit(answer),
         parent_id: attachParent ? selectedParentId : null,
         ...(showSubsectionPicker
           ? { subsection_id: rootSubsectionIdForSave(targetSubsectionId) }
           : {}),
         client_topic_id:
-          showParty && party === 'additional'
+          ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED && showParty && party === 'additional'
             ? attachClientLink
               ? selectedClientTopicId
               : null
             : undefined,
-        party: showParty ? party : undefined,
+        party: showParty
+          ? editorPartyForSave(party, targetDept, initial ?? null, defaultParty)
+          : undefined,
         id: initial?.id,
         draftId: mode === 'add' ? draftId : undefined,
       })
@@ -454,6 +498,15 @@ export function TopicEditorModal({
             </label>
           )}
 
+          {showArchiveSectionReadonly && (
+            <label className="field">
+              <span>Раздел</span>
+              <select value="archive" disabled aria-readonly="true">
+                <option value="archive">{TOPIC_VIEW_FILTER_LABELS.archive}</option>
+              </select>
+            </label>
+          )}
+
           {showSubsectionPicker && (
             <label className="field">
               <span>{targetDept === 'support' ? 'Подраздел' : 'Раздел'}</span>
@@ -461,9 +514,11 @@ export function TopicEditorModal({
                 value={targetSubsectionId}
                 onChange={(e) => setTargetSubsectionId(e.target.value)}
               >
-                <option value={SUBSECTION_NONE_SELECT_VALUE}>
-                  {SUBSECTION_NONE_OPTION_LABEL}
-                </option>
+                {!archiveSection ? (
+                  <option value={SUBSECTION_NONE_SELECT_VALUE}>
+                    {SUBSECTION_NONE_OPTION_LABEL}
+                  </option>
+                ) : null}
                 {targetDeptSubsections.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
@@ -492,7 +547,7 @@ export function TopicEditorModal({
             onParentIdChange={handleParentIdChange}
           />
 
-          {showParty && party === 'additional' && (
+          {ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED && showParty && party === 'additional' && (
             <ParentTopicField
               items={clientLinkPickerItems}
               excludeId={mode === 'edit' ? initial?.id ?? null : null}
@@ -508,25 +563,19 @@ export function TopicEditorModal({
 
           <label className="field">
             <span>Текст ответа (Markdown)</span>
-            <TextareaWithNbspButton
+            <textarea
+              ref={textareaRef}
+              className="viewer__textarea"
               value={answer}
-              onValueChange={setAnswer}
-              textareaRef={textareaRef}
-            >
-              <textarea
-                ref={textareaRef}
-                className="viewer__textarea"
-                value={answer}
-                onChange={handleAnswerChange}
-                onKeyDown={handleAnswerKeyDown}
-                onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
-                onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
-                onPaste={(e) => void handleAnswerPaste(e)}
-                onCopy={handleAnswerCopy}
-                rows={10}
-                placeholder="Текст ответа. «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
-              />
-            </TextareaWithNbspButton>
+              onChange={handleAnswerChange}
+              onKeyDown={handleAnswerKeyDown}
+              onSelect={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+              onClick={(e) => syncLinkPickerFromTextarea(answer, e.currentTarget)}
+              onPaste={(e) => void handleAnswerPaste(e)}
+              onCopy={handleAnswerCopy}
+              rows={10}
+              placeholder="Текст ответа. «+» — ссылка на тему. Фото и файлы (до 10 МБ) — кнопки ниже."
+            />
           </label>
           <TopicLinkPicker
             open={linkPicker}
@@ -538,10 +587,20 @@ export function TopicEditorModal({
           />
 
           <div className="modal__toolbar">
-            <button type="button" className="btn btn-secondary" onClick={() => void insertPhoto()}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => void insertPhoto()}
+            >
               Вставить фото
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => void insertFile()}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => void insertFile()}
+            >
               Вставить файл
             </button>
           </div>

@@ -34,6 +34,12 @@ import {
   type SupportPhoneLine,
 } from '../lib/supportPhones'
 import {
+  DEFAULT_SUPPORT_EMAILS,
+  normalizeSupportEmail,
+  normalizeSupportEmails,
+  type SupportEmailLine,
+} from '../lib/supportEmails'
+import {
   formatSubsectionDividerLine,
   normalizeSubsectionLabelInput,
 } from '../lib/subsectionDividerLabel'
@@ -187,6 +193,8 @@ export function SettingsPage({
   const [pullingFull, setPullingFull] = useState(false)
   const [supportPhones, setSupportPhones] = useState<SupportPhoneLine[]>(DEFAULT_SUPPORT_PHONES)
   const [savingSupportPhones, setSavingSupportPhones] = useState(false)
+  const [supportEmails, setSupportEmails] = useState<SupportEmailLine[]>(DEFAULT_SUPPORT_EMAILS)
+  const [savingSupportEmails, setSavingSupportEmails] = useState(false)
   const [workDepts, setWorkDepts] = useState<Department[]>(WORK_DEPARTMENTS)
   const [topicSections, setTopicSections] =
     useState<DepartmentSubsection[]>(initialTopicSections)
@@ -482,8 +490,12 @@ export function SettingsPage({
     setOwnerEmail(s.ownerEmail)
     setSyncStatus(sync)
     if (actorIsStaff) {
-      const phones = await window.spravochnik.getSupportPhones()
+      const [phones, emails] = await Promise.all([
+        window.spravochnik.getSupportPhones(),
+        window.spravochnik.getSupportEmails(),
+      ])
       setSupportPhones(normalizeSupportPhones(phones))
+      setSupportEmails(normalizeSupportEmails(emails))
       await reloadDepartmentsConfig()
     }
     if (actorIsOwner) {
@@ -529,7 +541,7 @@ export function SettingsPage({
   useEffect(() => {
     return window.spravochnik.onSyncStatus((status) => {
       setSyncStatus(status)
-      if (status.code === 'up_to_date' || status.code === 'pending') {
+      if (status.code === 'up_to_date' || status.code === 'client_outdated') {
         void window.spravochnik
           .listUsers()
           .then((next) => setUsers(coerceUsers(next)))
@@ -742,7 +754,7 @@ export function SettingsPage({
         setError(status.detail || status.label)
       } else if (status.code === 'no_server' || status.code === 'no_token') {
         setError(status.detail || status.label)
-      } else if (status.code === 'up_to_date') {
+      } else if (status.code === 'up_to_date' || status.code === 'client_outdated') {
         setInfo('Темы, фото и файлы загружены с сервера.')
         await reload()
       } else {
@@ -777,6 +789,47 @@ export function SettingsPage({
 
   function removeSupportPhoneRow(index: number) {
     setSupportPhones((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
+  }
+
+  function updateSupportEmail(index: number, patch: Partial<SupportEmailLine>) {
+    setSupportEmails((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    )
+  }
+
+  function addSupportEmailRow() {
+    setSupportEmails((prev) =>
+      prev.length >= 8
+        ? prev
+        : [...prev, { label: 'Новый', email: '' } satisfies SupportEmailLine],
+    )
+  }
+
+  function removeSupportEmailRow(index: number) {
+    setSupportEmails((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
+  }
+
+  async function saveSupportEmails() {
+    setSavingSupportEmails(true)
+    setError(null)
+    setInfo(null)
+    try {
+      const prepared = normalizeSupportEmails(
+        supportEmails.map((row) => ({
+          label: row.label,
+          email: normalizeSupportEmail(row.email),
+        })),
+      )
+      const saved = await window.spravochnik.setSupportEmails({ emails: prepared })
+      setSupportEmails(saved)
+      setInfo('Почты техподдержки сохранены')
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : ''
+      const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
+      setError(cleaned || 'Не удалось сохранить почты')
+    } finally {
+      setSavingSupportEmails(false)
+    }
   }
 
   async function saveSupportPhones() {
@@ -850,7 +903,16 @@ export function SettingsPage({
           <h2>Подключение</h2>
           <p className="settings-sync-status">
             <span>
-              Статус: <strong>{syncStatus?.label ?? '—'}</strong>
+              Статус:{' '}
+              <strong
+                className={
+                  syncStatus?.code === 'client_outdated'
+                    ? 'settings-sync-status__label--outdated'
+                    : undefined
+                }
+              >
+                {syncStatus?.label ?? '—'}
+              </strong>
             </span>
             <button
               type="button"
@@ -868,7 +930,7 @@ export function SettingsPage({
           <p className="muted settings-section__hint">
             Адрес сервера задаётся на экране входа (шестерёнка в углу). Кнопка выше загружает с
             сервера все темы, разделы, фото и файлы и заменяет локальный кэш — несохранённые на
-            сервер правки и очередь «Синхронизировать» сбрасываются.
+            сервер несохранённые локальные правки и очередь отправки сбрасываются.
           </p>
         </section>
 
@@ -1507,10 +1569,73 @@ export function SettingsPage({
 
         {actorIsStaff && (
           <section className="settings-section">
+            <h2>Почты техподдержки</h2>
+            <p className="muted">
+              Блок в шапке слева от телефонов (отдел «Техподдержка»). По клику адрес копируется в
+              буфер обмена.
+            </p>
+            <ul className="support-phones-settings">
+              {supportEmails.map((row, index) => (
+                <li key={index} className="support-phones-settings__row">
+                  <label className="support-phones-settings__field">
+                    <span className="support-phones-settings__label">Название</span>
+                    <input
+                      type="text"
+                      value={row.label}
+                      onChange={(e) => updateSupportEmail(index, { label: e.target.value })}
+                    />
+                  </label>
+                  <label className="support-phones-settings__field">
+                    <span className="support-phones-settings__label">E-mail</span>
+                    <input
+                      type="email"
+                      value={row.email}
+                      onChange={(e) =>
+                        updateSupportEmail(index, { email: normalizeSupportEmail(e.target.value) })
+                      }
+                      placeholder="support@r-est.ru"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-ghost support-phones-settings__remove"
+                    onClick={() => removeSupportEmailRow(index)}
+                    disabled={supportEmails.length <= 1}
+                    title="Удалить строку"
+                  >
+                    Удалить
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="support-phones-settings__actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={addSupportEmailRow}
+                disabled={supportEmails.length >= 8}
+              >
+                Добавить адрес
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void saveSupportEmails()}
+                disabled={savingSupportEmails}
+              >
+                {savingSupportEmails ? 'Сохранение…' : 'Сохранить почты'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {actorIsStaff && (
+          <section className="settings-section">
             <h2>Телефоны техподдержки</h2>
             <p className="muted">
-              Полоска над списком тем в отделе «Техподдержка». Введите только цифры номера — формат
-              для показа и копирования подставится автоматически.
+              Блок в шапке справа от почт (отдел «Техподдержка»). Введите только цифры номера —
+              формат для показа и копирования подставится автоматически.
             </p>
             <ul className="support-phones-settings">
               {supportPhones.map((row, index) => (

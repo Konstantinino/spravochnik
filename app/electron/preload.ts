@@ -204,6 +204,16 @@ contextBridge.exposeInMainWorld('spravochnik', {
     return () => ipcRenderer.removeListener('support-phones:changed', listener)
   },
 
+  getSupportEmails: () => ipcRenderer.invoke('support-emails:get'),
+
+  setSupportEmails: (payload: unknown) => ipcRenderer.invoke('support-emails:set', payload),
+
+  onSupportEmailsChanged: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('support-emails:changed', listener)
+    return () => ipcRenderer.removeListener('support-emails:changed', listener)
+  },
+
   getSessionLogs: () => ipcRenderer.invoke('session-log:get'),
 
   clearSessionLogs: () => ipcRenderer.invoke('session-log:clear'),

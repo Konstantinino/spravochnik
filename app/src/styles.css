@@ -78,7 +78,9 @@ option {
 }
 
 .app-shell--sync-busy .app-header,
+.app-shell--sync-busy .support-contact-bars,
 .app-shell--sync-busy .support-phones-bar,
+.app-shell--sync-busy .support-emails-bar,
 .app-shell--sync-busy .app-body {
   pointer-events: none;
   user-select: none;
@@ -86,12 +88,12 @@ option {
   opacity: 0.72;
 }
 
-.support-phones-bar--strip {
+.support-contact-bars--strip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 4px 18px;
+  gap: 0 14px;
   width: 100%;
   box-sizing: border-box;
   flex-shrink: 0;
@@ -105,16 +107,49 @@ option {
   border-bottom: 1px solid rgba(28, 36, 48, 0.06);
 }
 
+.support-contact-bars--header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0;
+  margin: 0 8px 0 12px;
+  max-width: min(640px, 58vw);
+}
+
+.support-emails-bar--strip,
+.support-phones-bar--strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+.support-contact-bars--strip .support-emails-bar--strip {
+  padding-right: 14px;
+  border-right: 1px solid rgba(28, 36, 48, 0.12);
+}
+
+.support-emails-bar--header,
 .support-phones-bar--header {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
   gap: 1px;
-  flex-shrink: 0;
-  margin: 0 8px 0 12px;
+  flex-shrink: 1;
+  min-width: 0;
+  margin: 0;
   padding: 0;
-  max-width: min(320px, 36vw);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -123,21 +158,32 @@ option {
   border: none;
 }
 
-.app-header:has(.support-phones-bar--header) {
+.support-emails-bar--header {
+  max-width: min(280px, 28vw);
+  padding-right: 10px;
+  margin-right: 10px;
+  border-right: 1px solid rgba(245, 241, 232, 0.28);
+}
+
+.support-phones-bar--header {
+  max-width: min(320px, 28vw);
+}
+
+.app-header:has(.support-contact-bars--header) {
   align-items: center;
   padding-top: 8px;
   padding-bottom: 8px;
 }
 
-.app-header:has(.support-phones-bar--header) .app-header__sync {
+.app-header:has(.support-contact-bars--header) .app-header__sync {
   margin-right: 0;
 }
 
-.app-header:has(.support-phones-bar--header) .support-phones-bar--header {
+.app-header:has(.support-contact-bars--header) .support-contact-bars--header {
   margin-left: auto;
 }
 
-.app-header:has(.support-phones-bar--header) .app-header__dept {
+.app-header:has(.support-contact-bars--header) .app-header__dept {
   margin-left: 0;
 }
 
@@ -194,6 +240,62 @@ option {
   text-decoration-color: rgba(255, 255, 255, 0.85);
 }
 
+.support-emails-bar__item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35em;
+  white-space: nowrap;
+}
+
+.support-emails-bar__label {
+  color: rgba(28, 36, 48, 0.52);
+  font-weight: 600;
+}
+
+.support-emails-bar__address {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--header-blue);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.support-emails-bar__address:hover {
+  color: #163040;
+}
+
+.support-emails-bar--header .support-emails-bar__item {
+  width: 100%;
+  min-width: 0;
+  gap: 0.45em;
+  justify-content: flex-end;
+}
+
+.support-emails-bar--header .support-emails-bar__label {
+  color: rgba(245, 241, 232, 0.65);
+}
+
+.support-emails-bar--header .support-emails-bar__address {
+  color: #fff;
+  font-size: 0.78rem;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
+.support-emails-bar--header .support-emails-bar__address:hover {
+  color: #fff;
+  text-decoration-color: rgba(255, 255, 255, 0.85);
+}
+
 .app-header--locked {
   cursor: wait;
 }
@@ -244,6 +346,12 @@ option {
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.app-header__sync-label--outdated {
+  color: #ff8a8a;
+  font-weight: 600;
+  opacity: 1;
 }
 
 .btn-header-sync {
@@ -950,9 +1058,9 @@ body.topic-reorder-dragging.topic-reorder-drop-ok * {
 }
 
 .viewer__subtopics {
-  margin-top: 20px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(28, 36, 48, 0.1);
+  margin: 4px 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(28, 36, 48, 0.1);
 }
 
 .viewer__subtopics-heading {
@@ -1074,135 +1182,26 @@ mark.find-hit--active {
   gap: 10px;
 }
 
-.viewer__textarea-wrap {
-  position: relative;
-}
-
-.viewer__nbsp-btn {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  padding: 0;
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.85);
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.15s ease;
-}
-
-.viewer__nbsp-btn-icon {
-  display: block;
-  transform: rotate(180deg);
-}
-
-.viewer__nbsp-btn:hover {
-  opacity: 0.85;
-  color: var(--text);
-}
-
-.viewer__textarea-stack {
-  position: relative;
+.viewer__textarea {
   width: 100%;
-}
-
-/* Visible glyphs and the caret both come from the textarea. The highlight
-   only paints the &#160; background, so a long ![](images/…) path cannot
-   drift away from the caret. Padding, wrapping and scrollbar gutter still
-   match (and beat `.field textarea`) so that background stays put. */
-.viewer__textarea-stack > textarea.viewer__textarea,
-.viewer__textarea-highlight {
+  min-height: 320px;
   margin: 0;
-  padding: 12px 52px 12px 14px;
-  border: 1px solid transparent;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
   border-radius: 8px;
   box-sizing: border-box;
   font: inherit;
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: inherit;
   line-height: 1.5;
-  letter-spacing: normal;
-  word-spacing: normal;
-  tab-size: 8;
   white-space: pre-wrap;
   overflow-wrap: break-word;
-  word-break: normal;
-  font-kerning: none;
-  font-variant-ligatures: none;
-  font-feature-settings: "kern" 0, "liga" 0, "calt" 0;
-  text-rendering: auto;
-  scrollbar-gutter: stable;
-}
-
-.viewer__textarea-stack > textarea.viewer__textarea {
-  width: 100%;
-  min-height: 320px;
-  display: block;
-  position: relative;
-  z-index: 1;
-  border-color: var(--border);
   resize: vertical;
-  background: transparent;
-  color: var(--text);
-  caret-color: var(--text);
-}
-
-.viewer__textarea-highlight {
-  position: absolute;
-  inset: 0;
   background: #fff;
-  color: transparent;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.viewer__textarea {
-  resize: vertical;
-}
-
-.viewer__textarea--edit-overlay {
-  position: relative;
-  z-index: 1;
-  background: transparent;
   color: var(--text);
   caret-color: var(--text);
 }
 
-.viewer__textarea-stack > textarea.viewer__textarea::placeholder {
+.viewer__textarea::placeholder {
   color: var(--muted);
-}
-
-.viewer__textarea--edit-overlay::selection {
-  background: rgba(51, 144, 255, 0.45);
-  color: var(--text);
-}
-
-.viewer__textarea--edit-overlay::-moz-selection {
-  background: rgba(51, 144, 255, 0.45);
-  color: var(--text);
-}
-
-mark.nbsp-entity-mark {
-  background: rgba(134, 239, 172, 0.55);
-  color: transparent;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
-  border-radius: 2px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
 }
 
 .viewer__editor-toolbar {
@@ -1307,6 +1306,7 @@ mark.nbsp-entity-mark {
   cursor: pointer;
 }
 
+.viewer__image--loading,
 .viewer__image--broken {
   min-width: 120px;
   min-height: 72px;
@@ -2093,6 +2093,11 @@ mark.nbsp-entity-mark {
   margin: -6px 0 14px;
 }
 
+.auth-sync--outdated {
+  color: #c62828;
+  font-weight: 600;
+}
+
 .auth-token-panel {
   display: flex;
   flex-direction: column;
@@ -2329,6 +2334,10 @@ mark.nbsp-entity-mark {
   padding: 6px 14px;
   font-size: 0.9rem;
   white-space: nowrap;
+}
+
+.settings-sync-status__label--outdated {
+  color: #c62828;
 }
 
 .settings-app-download {

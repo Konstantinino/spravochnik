@@ -73,9 +73,42 @@ export function formatSharedImageMarkdown(canonicalMediaPath: string): string {
   return `![](${path})`
 }
 
-/** В исходнике темы — `&#160;`, при просмотре — символ NBSP. */
+export function normalizeEditorNewlines(source: string): string {
+  return source.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
+/** Маркер пустой строки в теле темы — в textarea показываем буквально `&nbsp;`. */
+export const TOPIC_MARKDOWN_NBSP_LITERAL = '&nbsp;'
+
+const NBSP_LINE_RE = /^(?:&nbsp;|&#160;|\u00A0)+$/
+
+function nbspFormsToLiteral(source: string): string {
+  return source.replace(/&#160;/g, TOPIC_MARKDOWN_NBSP_LITERAL).replace(/\u00A0/g, TOPIC_MARKDOWN_NBSP_LITERAL)
+}
+
+/** Сохранение: единый литерал `&nbsp;`, без «невидимых» NBSP. */
+export function normalizeTopicMarkdownText(source: string): string {
+  return nbspFormsToLiteral(normalizeEditorNewlines(source))
+}
+
+/** Просмотр: строка из `&nbsp;` — визуально пустая (NBSP в абзаце). */
 export function markdownForDisplay(source: string): string {
-  return source.replace(/&#160;/g, '\u00A0')
+  return normalizeEditorNewlines(source)
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim()
+      if (NBSP_LINE_RE.test(trimmed)) return '\u00A0'
+      return line
+    })
+    .join('\n')
+}
+
+export function markdownForEdit(source: string): string {
+  return normalizeTopicMarkdownText(source)
+}
+
+export function markdownFromEdit(source: string): string {
+  return normalizeTopicMarkdownText(source)
 }
 
 /** Telegram file_id typically looks like AgACAg... or BQACAg... (long alphanumeric). */

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Component, type ReactNode } from 'react'
 import { Header } from './components/Header'
-import { SupportPhonesBar } from './components/SupportPhonesBar'
+import { SupportContactBars } from './components/SupportContactBars'
 import { SUPPORT_PHONES_PLACEMENT } from './lib/supportPhonesUi'
 import { Search } from './components/Search'
 import { TopicList } from './components/TopicList'
@@ -20,7 +20,11 @@ import {
   rootReorderRequiresSameParty,
 } from './lib/data'
 import { buildTopicSearchFilter } from './lib/search'
-import { releaseStaleFocus, restoreAppFocus } from './lib/restoreAppFocus'
+import {
+  installInputFocusGuard,
+  releaseStaleFocus,
+  restoreAppFocus,
+} from './lib/restoreAppFocus'
 import {
   loadSavedDepartment,
   saveDepartment,
@@ -134,11 +138,12 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSync)
-  const [pushing, setPushing] = useState(false)
-  const [busyLeft, setBusyLeft] = useState<number | null>(null)
+  const [resolvingConflicts, setResolvingConflicts] = useState(false)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [navHistory, setNavHistory] = useState<number[]>([])
-  const pushInFlight = useRef(false)
+  /** После перехода по ссылке в тексте — раскрыть дерево и прокрутить список. */
+  const pendingListRevealRef = useRef(false)
+  const [listRevealSeq, setListRevealSeq] = useState(0)
   /** Skip auto-deselect while save/reload settles (avoid race with background sync). */
   const keepSelectedIdRef = useRef<number | null>(null)
   /** Snapshot of topic before inline edit; consumed on successful save. */
@@ -202,6 +207,8 @@ export default function App() {
     return new Set(deptTopicSectionIdsForDepartment(departmentId, subsections))
   }, [departmentId, subsections])
 
+  useEffect(() => installInputFocusGuard(), [])
+
   useEffect(() => {
     if (listFilter === 'all' || listFilter === 'archive') return
     if (departmentId === 'support') {
@@ -238,7 +245,7 @@ export default function App() {
       if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
         setConflictOpen(true)
       }
-      if (status.code === 'up_to_date' || status.code === 'pending') {
+      if (status.code === 'up_to_date' || status.code === 'client_outdated') {
         void refreshDepartmentsAndLostCount()
         void window.spravochnik.getCurrentUser().then((u) => {
           if (!u) return
@@ -348,7 +355,7 @@ export default function App() {
     if (!user) return
     if (
       syncStatus.code === 'up_to_date' ||
-      syncStatus.code === 'pending' ||
+      syncStatus.code === 'client_outdated' ||
       syncStatus.code === 'conflict'
     ) {
       void window.spravochnik.loadGuide(departmentId).then((data) => {
@@ -363,54 +370,8 @@ export default function App() {
     }
   }, [syncStatus.code, syncStatus.lastPulledAt, departmentId, user?.id])
 
-  async function runPush() {
-    if (pushInFlight.current) return
-    pushInFlight.current = true
-    setPushing(true)
-    try {
-      const status = await window.spravochnik.pushSync()
-      setSyncStatus(status)
-      if (status.code === 'conflict' && (status.conflicts?.length ?? 0) > 0) {
-        setConflictOpen(true)
-      }
-      if (status.code === 'up_to_date') {
-        const data = await window.spravochnik.loadGuide(departmentId)
-        setGuide(data)
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка отправки')
-    } finally {
-      setPushing(false)
-      pushInFlight.current = false
-    }
-  }
-
-  // Auto-retry when sync lock is busy
-  useEffect(() => {
-    if (syncStatus.code !== 'busy') {
-      setBusyLeft(null)
-      return
-    }
-    let left = syncStatus.retryAfterSec ?? 20
-    setBusyLeft(left)
-    const timer = window.setInterval(() => {
-      left -= 1
-      setBusyLeft(left)
-      if (left <= 0) {
-        window.clearInterval(timer)
-        void runPush()
-      }
-    }, 1000)
-    return () => window.clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- retry only when busy status arrives
-  }, [syncStatus.code, syncStatus.retryAfterSec, syncStatus.lockBy])
-
-  async function handlePush() {
-    await runPush()
-  }
-
   async function handleResolveConflicts(resolutions: ConflictResolution[]) {
-    setPushing(true)
+    setResolvingConflicts(true)
     try {
       const status = await window.spravochnik.resolveSyncConflicts(resolutions)
       setSyncStatus(status)
@@ -429,7 +390,7 @@ export default function App() {
       const data = await window.spravochnik.loadGuide(departmentId)
       setGuide(data)
     } finally {
-      setPushing(false)
+      setResolvingConflicts(false)
     }
   }
 
@@ -528,6 +489,7 @@ export default function App() {
   function navigateToTopic(id: number) {
     const topic = items.find((i) => i.id === id)
     if (!topic || id === selectedId) return
+    pendingListRevealRef.current = true
     setNavHistory((history) => (selectedId != null ? [...history, selectedId] : history))
     if (!visibleItems.some((i) => i.id === id)) {
       if (isArchived(topic)) {
@@ -556,10 +518,17 @@ export default function App() {
           setListFilter('all')
         }
       }
+      pendingListRevealRef.current = true
       setSelectedId(prevId)
       return next
     })
   }
+
+  useEffect(() => {
+    if (!pendingListRevealRef.current || selectedId == null) return
+    pendingListRevealRef.current = false
+    setListRevealSeq((seq) => seq + 1)
+  }, [selectedId])
 
   useEffect(() => {
     const pinned = keepSelectedIdRef.current
@@ -743,20 +712,6 @@ export default function App() {
     const listKey = departments.find((d) => d.id === departmentId)?.listKey ?? 'questions'
     setGuide((prev) => (prev ? { ...prev, [listKey]: merged } : prev))
   }
-
-  const displaySyncStatus: SyncStatus = useMemo(() => {
-    if (syncStatus.code === 'busy' && busyLeft != null) {
-      return {
-        ...syncStatus,
-        label: `Синхронизация временно занята (${busyLeft} с)`,
-        detail:
-          syncStatus.lockBy != null
-            ? `Сейчас синхронизирует: ${syncStatus.lockBy}`
-            : syncStatus.detail,
-      }
-    }
-    return syncStatus
-  }, [syncStatus, busyLeft])
 
   async function handleSave(payload: {
     departmentId: DepartmentId
@@ -1022,7 +977,7 @@ export default function App() {
   }
 
   // Block UI only while uploading local changes — startup/background pull stays interactive
-  const syncBlocking = pushing || busyLeft != null
+  const syncBlocking = resolvingConflicts
 
   const deptLabel = departments.find((d) => d.id === departmentId)?.label ?? ''
   const headerDepartments = departmentsForUser(user.role, departments, {
@@ -1077,16 +1032,13 @@ export default function App() {
         onDepartmentChange={handleDepartmentChange}
         onOpenSettings={() => setView('settings')}
         user={user}
-        syncStatus={displaySyncStatus}
-        canEdit={!!canEdit}
+        syncStatus={syncStatus}
         onLogout={() => void handleLogout()}
-        onPush={() => void handlePush()}
-        pushing={pushing || busyLeft != null}
         interactionLocked={syncBlocking}
       />
 
       {departmentId === 'support' && SUPPORT_PHONES_PLACEMENT === 'strip' ? (
-        <SupportPhonesBar placement="strip" />
+        <SupportContactBars placement="strip" />
       ) : null}
 
       <div className="app-body">
@@ -1118,6 +1070,7 @@ export default function App() {
               <TopicList
                 items={visibleItems}
                 selectedId={selectedId}
+                listRevealSeq={listRevealSeq}
                 onSelect={selectTopicFromSidebar}
                 searchFilter={searchFilter}
                 subsections={currentSubsections}
@@ -1161,7 +1114,9 @@ export default function App() {
             onSave={handleInlineSave}
             onSaveImageDisplay={handleSaveImageDisplay}
             onDelete={handleDelete}
-            onToggleArchive={canEdit ? () => void handleToggleArchive() : undefined}
+            onToggleArchive={
+              canEdit ? (scope) => void handleToggleArchive(scope) : undefined
+            }
             onAddSubtopic={() => {
               if (!selected) return
               setEditorMode('add')

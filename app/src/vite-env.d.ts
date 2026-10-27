@@ -217,6 +217,14 @@ export interface SpravochnikApi {
 
   onSupportPhonesChanged: (callback: () => void) => () => void
 
+  getSupportEmails: () => Promise<Array<{ label: string; email: string }>>
+
+  setSupportEmails: (payload: {
+    emails: Array<{ label: string; email: string }>
+  }) => Promise<Array<{ label: string; email: string }>>
+
+  onSupportEmailsChanged: (callback: () => void) => () => void
+
   getAdminSettings: () => Promise<{
 
     hasPendingChanges: boolean

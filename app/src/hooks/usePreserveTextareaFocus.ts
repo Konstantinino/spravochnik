@@ -1,10 +1,11 @@
 import { useEffect, useRef, type RefObject } from 'react'
+import { isStaleAppShellFocus } from '../lib/restoreAppFocus'
 
 const FOCUSABLE_SELECTOR =
   'button, input, select, textarea, a, label, .topic-link-picker, [contenteditable="true"]'
 
 const EXTERNAL_FOCUS_ROOT =
-  '.search-block, .sidebar, .app-header, .viewer__header, .viewer-find, .viewer__topbar, .modal'
+  '.search-block, .sidebar, .app-header, .viewer__header, .viewer-find, .viewer__topbar, .modal, .settings-page'
 
 function shouldKeepExternalFocus(el: Element | null): boolean {
   if (!el || el === document.body || el === document.documentElement) return false
@@ -19,7 +20,7 @@ function shouldKeepExternalFocus(el: Element | null): boolean {
 export function usePreserveTextareaFocus(
   active: boolean,
   textareaRef: RefObject<HTMLTextAreaElement | null>,
-): void {
+): RefObject<{ start: number; end: number }> {
   const selectionRef = useRef({ start: 0, end: 0 })
   const activeRef = useRef(active)
   const blurTimerRef = useRef<number | null>(null)
@@ -50,11 +51,8 @@ export function usePreserveTextareaFocus(
       if (document.activeElement === textarea) return
       if (shouldKeepExternalFocus(document.activeElement)) return
 
-      // Alt+Shift on Windows often leaves focus on <body> — recover the editor caret.
-      const activeEl = document.activeElement
-      if (activeEl != null && activeEl !== document.body && activeEl !== document.documentElement) {
-        return
-      }
+      // Alt+Shift и restoreAppFocus часто оставляют body или .app-shell — вернуть курсор в textarea.
+      if (!isStaleAppShellFocus(document.activeElement)) return
 
       textarea.focus({ preventScroll: true })
       const { start, end } = selectionRef.current
@@ -87,6 +85,7 @@ export function usePreserveTextareaFocus(
     document.addEventListener('focusin', onFocusIn, true)
 
     return () => {
+      activeRef.current = false
       clearBlurTimer()
       el.removeEventListener('select', saveSelection)
       el.removeEventListener('keyup', saveSelection)
@@ -106,4 +105,6 @@ export function usePreserveTextareaFocus(
       blurTimerRef.current = null
     }
   }, [active])
+
+  return selectionRef
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DepartmentId, ImageDisplayMap } from '../types'
 import {
   IMAGE_SCALE_DEFAULT,
@@ -36,6 +36,8 @@ export function TopicMarkdownImage({
   const [loaded, setLoaded] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const [reloadNonce, setReloadNonce] = useState(0)
+  const loadRetryRef = useRef(0)
+  const MAX_LOAD_RETRIES = 3
 
   useEffect(() => {
     if (isRemote) {
@@ -63,24 +65,34 @@ export function TopicMarkdownImage({
   }, [resolved, reloadNonce])
 
   useEffect(() => {
+    loadRetryRef.current = 0
     setLoaded(false)
     setLoadFailed(false)
+    setReloadNonce(0)
   }, [rawSrc, topicId, departmentId, storagePath])
 
   async function handleError() {
-    const canonical = isRemote ? null : storagePath ?? displayRef
-    if (canonical && canonical.startsWith('media/')) {
+    if (loadRetryRef.current >= MAX_LOAD_RETRIES) {
+      setLoadFailed(true)
+      return
+    }
+    loadRetryRef.current += 1
+
+    const canonical = isRemote ? null : (storagePath ?? displayRef)
+    const mediaPath = canonical?.replace(/^spravochnik:\/\//, '').split(/[?#]/)[0]
+    if (mediaPath?.startsWith('media/')) {
       try {
         await window.spravochnik.ensureMediaFiles({
           departmentId,
-          relativePaths: [canonical.replace(/^spravochnik:\/\//, '')],
+          relativePaths: [mediaPath],
         })
-        setLoadFailed(false)
-        setReloadNonce((n) => n + 1)
-        return
       } catch {
-        /* fall through */
+        setLoadFailed(true)
+        return
       }
+      setLoadFailed(false)
+      setReloadNonce((n) => n + 1)
+      return
     }
     setLoadFailed(true)
   }
@@ -94,16 +106,18 @@ export function TopicMarkdownImage({
       className={[
         'viewer__image',
         loadFailed ? 'viewer__image--broken' : '',
+        !loaded && !loadFailed ? 'viewer__image--loading' : '',
       ]
         .filter(Boolean)
         .join(' ')}
-      loading="lazy"
+      loading={isRemote ? 'lazy' : 'eager'}
       style={
         showScale
           ? { maxWidth: `${scale}%`, width: 'auto', height: 'auto' }
           : undefined
       }
       onLoad={() => {
+        loadRetryRef.current = 0
         setLoaded(true)
         setLoadFailed(false)
       }}

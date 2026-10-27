@@ -1,5 +1,9 @@
-import type { DepartmentId, DepartmentSubsection } from '../types'
+import type { DepartmentId, DepartmentSubsection, GuideItem } from '../types'
+import { getItemParty } from './data'
 import { normalizeSubsectionLabelInput } from './subsectionDividerLabel'
+
+/** Значение «Раздел» в редакторе для архивных тем техподдержки (не поле party в JSON). */
+export const SUPPORT_EDITOR_ARCHIVE_PARTY_ID = 'archive'
 
 export function sortSubsectionsForEditor(
   subs: DepartmentSubsection[],
@@ -40,21 +44,62 @@ export function isEditableRootTopic(
   return initialParentId == null && !attachParent
 }
 
+export function editorArchiveSectionActive(
+  departmentId: DepartmentId,
+  topicArchived: boolean,
+  partySelectValue?: string,
+): boolean {
+  if (departmentId !== 'support') return false
+  return (
+    topicArchived || partySelectValue === SUPPORT_EDITOR_ARCHIVE_PARTY_ID
+  )
+}
+
+export function editorPartySelectValue(
+  departmentId: DepartmentId,
+  item: Pick<GuideItem, 'archived' | 'party'> | null | undefined,
+  fallbackParty = 'supplier',
+): string {
+  if (departmentId === 'support' && item?.archived) {
+    return SUPPORT_EDITOR_ARCHIVE_PARTY_ID
+  }
+  return item ? getItemParty(item) : fallbackParty
+}
+
+/** party в JSON темы; «archive» в select — только UI. */
+export function editorPartyForSave(
+  selectedParty: string,
+  departmentId: DepartmentId,
+  item: Pick<GuideItem, 'party'> | null | undefined,
+  fallbackParty = 'supplier',
+): string {
+  if (departmentId !== 'support') return selectedParty
+  if (selectedParty === SUPPORT_EDITOR_ARCHIVE_PARTY_ID) {
+    return item ? getItemParty(item) : fallbackParty
+  }
+  return selectedParty
+}
+
 export function editorSubsectionsForDepartment(
   subsections: DepartmentSubsection[],
   departmentId: DepartmentId,
   party: string,
+  options?: { archiveSection?: boolean },
 ): DepartmentSubsection[] {
   const forDept = subsections.filter((s) => s.departmentId === departmentId)
   const scoped =
-    departmentId === 'support'
-      ? forDept.filter(
-          (s) =>
-            s.party === party && !s.isArchiveLost && !s.isArchiveArchived,
-        )
-      : forDept.filter(
-          (s) => !s.party && !s.isArchiveLost && !s.isArchiveArchived,
-        )
+    departmentId === 'support' && options?.archiveSection
+      ? forDept.filter((s) => s.isArchiveLost || s.isArchiveArchived)
+      : departmentId === 'support'
+        ? forDept.filter(
+            (s) =>
+              s.party === party &&
+              !s.isArchiveLost &&
+              !s.isArchiveArchived,
+          )
+        : forDept.filter(
+            (s) => !s.party && !s.isArchiveLost && !s.isArchiveArchived,
+          )
   return sortSubsectionsForEditor(scoped).map((s) => ({
     ...s,
     label: normalizeSubsectionLabelInput(s.label),

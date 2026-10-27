@@ -6,12 +6,20 @@ import {
   parseImageRefFromClipboard,
 } from './markdown'
 
+export type TextareaSelection = { start: number; end: number }
+
 /** Insert markdown snippet into textarea value at cursor (or append). */
 export function insertAtCursor(
   value: string,
   snippet: string,
   el: HTMLTextAreaElement | null,
+  selection?: TextareaSelection | null,
 ): { next: string; cursor: number } {
+  if (selection) {
+    const { start, end } = selection
+    const next = value.slice(0, start) + snippet + value.slice(end)
+    return { next, cursor: start + snippet.length }
+  }
   if (el) {
     const start = el.selectionStart
     const end = el.selectionEnd
@@ -98,26 +106,3 @@ export function focusCursor(el: HTMLTextAreaElement | null, cursor: number): voi
   })
 }
 
-/** HTML-сущность неразрывного пробела для Markdown (рендер через HTML). */
-export const NBSP_MARKDOWN_ENTITY = '&#160;'
-
-export function insertNbspEntityAtCursor(
-  value: string,
-  el: HTMLTextAreaElement | null,
-): { next: string; selectStart: number; selectEnd: number } {
-  const { next, cursor } = insertAtCursor(value, NBSP_MARKDOWN_ENTITY, el)
-  const selectStart = cursor - NBSP_MARKDOWN_ENTITY.length
-  return { next, selectStart, selectEnd: cursor }
-}
-
-export function focusSelection(
-  el: HTMLTextAreaElement | null,
-  start: number,
-  end: number,
-): void {
-  if (!el) return
-  requestAnimationFrame(() => {
-    el.focus()
-    el.setSelectionRange(start, end)
-  })
-}

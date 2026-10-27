@@ -32,3 +32,21 @@ export async function getLatestAppReleaseVersion(): Promise<string | null> {
 export function normalizeVersionLabel(version: string): string {
   return version.trim().replace(/^v/i, '')
 }
+
+let cachedRequiredVersion: { value: string | null; expiresAt: number } | null = null
+const REQUIRED_VERSION_CACHE_MS = 30_000
+
+/** Минимальная версия клиента для записи на API (env или последний релиз). */
+export async function requiredClientVersion(): Promise<string | null> {
+  const envMin = process.env.MIN_CLIENT_VERSION?.trim()
+  if (envMin) return normalizeVersionLabel(envMin)
+
+  const now = Date.now()
+  if (cachedRequiredVersion && cachedRequiredVersion.expiresAt > now) {
+    return cachedRequiredVersion.value
+  }
+  const latest = await getLatestAppReleaseVersion()
+  const value = latest ? normalizeVersionLabel(latest) : null
+  cachedRequiredVersion = { value, expiresAt: now + REQUIRED_VERSION_CACHE_MS }
+  return value
+}

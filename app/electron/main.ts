@@ -92,6 +92,7 @@ import {
   resolveSyncConflicts,
   tryPushTopicOnline,
   tryPushReorderOnline,
+  tryAutoPushPending,
   ensureTopicMediaDownloaded,
   ensureMediaFilesDownloaded,
 } from './sync-backend'
@@ -105,7 +106,9 @@ import {
   unlockTopicOrder,
   renewTopicOrderLock,
   fetchDepartmentTopics,
+  fetchSupportEmails,
   fetchSupportPhones,
+  saveSupportEmailsOnServer,
   saveSupportPhonesOnServer,
   serverFetch,
   serverLogin,
@@ -164,6 +167,7 @@ import {
   startUpdateCheckInterval,
 } from './updates'
 import { downloadMediaImage } from './media-download'
+import { normalizeSupportEmails } from '../src/lib/supportEmails'
 import { normalizeSupportPhones } from '../src/lib/supportPhones'
 import { normalizeSubsectionLabelInput } from '../src/lib/subsectionDividerLabel'
 import {
@@ -2538,11 +2542,13 @@ function registerIpc(): void {
   ipcMain.handle('updates:check', () => checkForUpdates())
   ipcMain.handle('updates:download', () => downloadUpdate())
   ipcMain.handle('updates:install', async () => {
+    await tryAutoPushPending()
     const sync = getSyncStatus()
     if (sync.hasPendingChanges) {
       return {
         ok: false,
-        error: 'Сначала синхронизируйте локальные изменения',
+        error:
+          'Не удалось отправить локальные изменения на сервер. Проверьте интернет и повторите установку обновления.',
       } as const
     }
     return installUpdate()
@@ -2617,6 +2623,48 @@ function registerIpc(): void {
     return phones
   })
 
+  function cacheSupportEmails(emails: unknown) {
+    const normalized = normalizeSupportEmails(emails)
+    const s = readSettings()
+    writeSettings({ ...s, supportEmails: normalized })
+    return normalized
+  }
+
+  function broadcastSupportEmailsChanged(): void {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('support-emails:changed')
+    }
+  }
+
+  ipcMain.handle('support-emails:get', async () => {
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim() && (await isServerReachable())) {
+      try {
+        const emails = await fetchSupportEmails()
+        return cacheSupportEmails(emails)
+      } catch {
+        /* use local cache */
+      }
+    }
+    return normalizeSupportEmails(settings.supportEmails)
+  })
+
+  ipcMain.handle('support-emails:set', async (_event, payload: { emails: unknown }) => {
+    requireRole(getCurrentUser(), STAFF_ROLES)
+    let emails = normalizeSupportEmails(payload.emails)
+    const settings = readSettings()
+    if (settings.serverUrl.trim() && settings.authToken.trim()) {
+      const online = await isServerReachable()
+      if (!online) {
+        throw new Error('Нет связи с сервером — почты не сохранены')
+      }
+      emails = await saveSupportEmailsOnServer(emails)
+    }
+    cacheSupportEmails(emails)
+    broadcastSupportEmailsChanged()
+    return emails
+  })
+
   ipcMain.handle('session-log:get', () => getSessionLogs())
   ipcMain.handle('session-log:clear', () => {
     clearSessionLogs()
@@ -2658,7 +2706,7 @@ app.whenReady().then(() => {
 
   // Background sync after UI is up
   setTimeout(() => {
-    void pullFromYandex()
+    void pullFromYandex().then(() => tryAutoPushPending())
   }, 800)
 
   setInterval(() => {

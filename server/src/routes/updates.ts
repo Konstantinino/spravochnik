@@ -4,6 +4,7 @@ import path from 'node:path'
 import { query } from '../db/pool.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { compareVersions } from '../lib/app-version.js'
+import { readSupportEmailsFromDb } from '../lib/support-emails.js'
 import { readSupportPhonesFromDb } from '../lib/support-phones.js'
 
 const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 'updates')
@@ -31,6 +32,16 @@ updatesRouter.get('/support-phones', authMiddleware, async (_req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка чтения телефонов' })
+  }
+})
+
+updatesRouter.get('/support-emails', authMiddleware, async (_req, res) => {
+  try {
+    const emails = await readSupportEmailsFromDb()
+    res.json({ emails })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка чтения почт' })
   }
 })
 

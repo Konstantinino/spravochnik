@@ -97,6 +97,8 @@ function SubsectionDivider({ label }: { label: string }) {
 interface TopicListProps {
   items: GuideItem[]
   selectedId: number | null
+  /** Увеличивается при переходе по ссылке из темы — раскрыть ветку и прокрутить список. */
+  listRevealSeq?: number
   onSelect: (id: number) => void
   searchFilter: TopicSearchFilter | null
   subsections?: DepartmentSubsection[]
@@ -502,6 +504,7 @@ export function TopicList({
   onExitReorderMode,
   onEditTopic,
   onReorderSiblings,
+  listRevealSeq = 0,
 }: TopicListProps) {
   const [ctxMenu, setCtxMenu] = useState<{
     x: number
@@ -585,14 +588,26 @@ export function TopicList({
     })
   }, [])
 
+  const revealTopicInList = useCallback(
+    (topicId: number) => {
+      setExpandFolderIds(new Set(getAncestorIds(items, topicId)))
+      setScrollToTopicId(topicId)
+    },
+    [items],
+  )
+
   useEffect(() => {
     const hasSearch = searchFilter != null
     if (hadSearchFilterRef.current && !hasSearch && selectedId != null) {
-      setExpandFolderIds(new Set(getAncestorIds(items, selectedId)))
-      setScrollToTopicId(selectedId)
+      revealTopicInList(selectedId)
     }
     hadSearchFilterRef.current = hasSearch
-  }, [searchFilter, selectedId, items])
+  }, [searchFilter, selectedId, items, revealTopicInList])
+
+  useEffect(() => {
+    if (listRevealSeq === 0 || selectedId == null) return
+    revealTopicInList(selectedId)
+  }, [listRevealSeq, selectedId, revealTopicInList])
 
   useEffect(() => {
     if (scrollToTopicId == null) return
@@ -609,6 +624,7 @@ export function TopicList({
         `[data-topic-id="${scrollToTopicId}"]`,
       ) as HTMLElement | null
       if (!row) {
+        if (items.some((entry) => entry.id === scrollToTopicId)) return
         setScrollToTopicId(null)
         return
       }
@@ -627,7 +643,7 @@ export function TopicList({
     return () => {
       cancelled = true
     }
-  }, [scrollToTopicId, expandFolderIds])
+  }, [scrollToTopicId, expandFolderIds, items])
 
   useEffect(() => {
     if (!reorderMode || reorderFocusId == null) return

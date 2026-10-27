@@ -17,7 +17,7 @@
 | PC-клиент | `app/` | Electron 35, React 19, Vite, TypeScript |
 | Веб-клиент | `web/` | Vite SPA, общий UI из `app/src`, httpOnly cookie |
 | Сервер API | `server/` | Node 20, Express, PostgreSQL, JWT (+ cookie-auth для веба) |
-| Docker | `docker-compose.yml` | postgres:16 + api |
+| Docker | `docker-compose.yml` | postgres:16 + api (context = repo root; **`web/dist` baked into image**) |
 | Данные для деплоя | `REST-INFO-export/` | JSON + media (в `.gitignore`) |
 
 **Синхронизация:** клиент читает локальный кэш (`%AppData%\rest-info\REST-INFO\`), пишет на сервер онлайн, оффлайн — очередь `pending-operations.json` + `pending-media.json`. При сохранении темы фото/файлы уходят на сервер сразу (если есть сеть). Чужие правки подтягиваются автоматически: после API-запросов проверяется `GET /sync/status` (`globalVersion`), при изменении — incremental pull без перезапуска (также каждые 60 с и при фокусе окна). **Во время pull** в шапке: «Загрузка данных…»; после успеха — «Актуально».
@@ -56,8 +56,8 @@ graphify update .
 
 | Файл | Назначение |
 |---|---|
-| `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment`, `updates:install`, `app:focus-window`, валидация URL сервера |
-| `server-api.ts` | HTTP-клиент к REST API; `validateServerUrl()`; заголовок **`X-Rest-Info-Client-Version`** |
+| `main.ts` | IPC, auth, CRUD, admin, storage-stats, `requireEditDepartment`, `updates:install`, `app:focus-window`, валидация URL; **Edit menu + context Copy** (выделение текста) |
+| `server-api.ts` | HTTP-клиент; `validateServerUrl()`; **`X-Rest-Info-Client-Version`**; **`getTopicOrderClientId()`** для lock порядка |
 | `server-sync.ts` | pull/push, конфликты, очередь, flush медиа, reconcile create, `ensureRequestedPartyPersisted`, **`ensureRequestedClientLinkPersisted`**, `mergeTopicAfterPush`, **`applySubsectionsFromSync`**, ответ **426** → «Нужно обновить приложение» |
 | `departments-store.ts` | локальный `departments.json`, merge из sync/admin |
 | `subsections-store.ts` | локальный `subsections.json`, merge из sync/admin |
@@ -81,11 +81,12 @@ graphify update .
 | `lib/departments.ts` | CRUD разделов, `lost`, `sort_order`, `system_locked` |
 | `lib/subsections.ts` | CRUD подразделов, `resolveTopicSubsectionId` |
 | `lib/move-topics-to-lost.ts` | перенос тем в раздел `lost` при удалении раздела |
-| `routes/topics.ts` | CRUD тем, блокировки, topic-order; поле **`client_topic_id`** (admin → client) |
+| `routes/topics.ts` | CRUD тем, блокировки, topic-order + **`clientId`** в lock/unlock/renew/PUT; поле **`client_topic_id`** (admin → client) |
 | `middleware/min-client-version.ts` | запись на API только с актуальной версией клиента (см. `lib/app-version.ts`) |
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status; в changes: **`departments`**, **`subsections`** |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
-| `routes/media.ts` | upload/download; `updates/*` → UPDATES_DIR; лимит 120 МБ |
+| `routes/media.ts` | upload/download по `originalUrl`; `GET /media/status`; `updates/*` → UPDATES_DIR; лимит 120 МБ |
+| `index.ts` | Express; **`WEB_DIST`** static SPA; `/health` → `web`/`media`/`build` |
 | `routes/updates.ts` | GET /app/update (legacy), GET /app/updates/*, **GET /app/support-phones** |
 | `lib/support-phones.ts` | sync_state, normalize + format display from tel |
 | `import-from-json.ts` | импорт из REST-INFO-export |
@@ -160,10 +161,21 @@ npm run dev
 
 ### Linux / production
 
+На хосте, где запрещён `docker compose -f`, использовать env:
+
 ```bash
-docker compose up -d --build
+cd /home/opt/info-rest   # пример
+git pull
+# web/dist уже в git и вшивается в образ при build — отдельный npm run build на сервере не обязателен
+COMPOSE_FILE=docker-compose.yml docker compose up -d --build
+# проверка: curl -s https://info.r-est.ru/health → build + web.assets > 0
+```
+
+```bash
 docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```
+
+Фраза **«обнови ключевые файлы»** = актуализировать `docs/PROJECT-STATUS.md`, `AGENTS.md`, при необходимости `README.md` / `docs/testing-checklist.md` / deploy-доки под свежие изменения, затем commit + push (Setup — только по явной просьбе).
 
 ### Сборка установщика
 

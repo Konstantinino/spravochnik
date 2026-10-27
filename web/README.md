@@ -1,13 +1,14 @@
 # REST INFO — веб-клиент
 
-Браузерная версия на ветке `feature/web`. Десктоп (`app/`) не изменяется.
+Браузерный SPA в `main` (общий UI с десктопом через alias `@app`). Production: **https://info.r-est.ru**.
 
-## Решения (зафиксировано)
+## Решения
 
 - Сессия: **httpOnly cookie** (`POST /auth/login-web`, `/auth/register-web`, `/auth/logout-web`)
-- URL сервера: **ввод на экране входа** (localStorage)
-- Функции: **паритет с десктопом** (UI общий — `app/src` через alias `@app`)
+- Same-origin: URL сервера по умолчанию = `window.location.origin` (можно переопределить на экране входа)
+- Функции: паритет с десктопом (locks тем и **порядка** с `clientId`, медиа по HTTP `/media/media/…`)
 - Данные: только с сервера, без офлайн-очереди
+- Favicon: белая **R** на красном (`public/favicon.*`)
 
 ## Dev (Windows)
 
@@ -28,14 +29,23 @@ npm install
 npm run dev
 ```
 
-3. В браузере: http://127.0.0.1:5174 — URL сервера `http://127.0.0.1:3000`
+3. Браузер: http://127.0.0.1:5174 — URL сервера `http://127.0.0.1:3000`
 
-Vite проксирует `/auth`, `/media`, … на API, cookie работает с одного origin (5174).
+Vite проксирует `/auth`, `/media`, … на API.
 
 ## Production
 
-- Один домен: nginx отдаёт SPA и проксирует API **или** статика + API на том же host (cookie `SameSite=Lax`).
-- `CORS_ORIGIN=https://ваш-домен`, `COOKIE_SECURE=true` (HTTPS).
+SPA **собирается в образ API** (`server/Dockerfile`, context = корень репо, `COPY web/dist /data/web`).  
+**Не** монтировать пустой `./web/dist` поверх `/data/web` — это скрывает файлы из образа.
+
+```bash
+git pull
+COMPOSE_FILE=docker-compose.yml docker compose up -d --build
+curl -s https://info.r-est.ru/health
+# web.index=true, web.assets>=1, build=…
+```
+
+Env: `CORS_ORIGIN=https://info.r-est.ru`, `COOKIE_SECURE=true`, host nginx → `127.0.0.1:3000`.
 
 ## Сборка
 
@@ -43,8 +53,8 @@ Vite проксирует `/auth`, `/media`, … на API, cookie работае
 cd web
 npm install
 npm run build
-# dist/ → nginx root
+# dist/ уходит в git и в Docker build context
 ```
 
-`npm run build` = только Vite (так и нужно на сервере: UI тянется из `../app/src`, без установки `app/node_modules`).  
-Локальная проверка типов: `npm run typecheck` (удобнее с установленным `app/`).
+`npm run build` = только Vite (UI из `../app/src`, без `app/node_modules` на сервере).  
+Типы: `npm run typecheck` (удобнее с установленным `app/`).

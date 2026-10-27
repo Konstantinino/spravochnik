@@ -9,7 +9,7 @@ Windows-приложение — корпоративный справочник
 ## Архитектура v2
 
 - **PC-клиент** — Electron + React (`app/`), оффлайн-чтение из локального кэша
-- **Веб-клиент** — Vite SPA (`web/`), тот же UI и API, сессия в httpOnly cookie (без офлайна)
+- **Веб-клиент** — Vite SPA (`web/`), тот же UI и API, сессия в httpOnly cookie (без офлайна); production: **https://info.r-est.ru** (SPA в образе API)
 - **Сервер** — Node.js REST API + PostgreSQL (`server/`), Docker Compose
 - **Синхронизация** — инкрементальный pull + прямая запись правок на **сервер** (не Яндекс.Диск)
 - **Владелец** — роль `owner`, настройки: пользователи, whitelist, место на сервере по отделам

@@ -1,6 +1,6 @@
-# REST INFO — план веб-версии (отдельная ветка)
+# REST INFO — план веб-версии
 
-Обновлено: 2026-10-27 — синхронизирован с `main` (отделы, подразделы, телефоны/почты, min client version header) и возвращён в `main`.
+Обновлено: 2026-10-27 — **в production** (https://info.r-est.ru); SPA baked into API image. Актуальный статус: [PROJECT-STATUS.md](PROJECT-STATUS.md), [web/README.md](../web/README.md).
 
 ## Зафиксированные решения (23.09.2026)
 

@@ -51,7 +51,8 @@ nano .env
 | `DB_PASSWORD` | длинная случайная строка | Пароль PostgreSQL |
 | `JWT_SECRET` | длинная случайная строка | Секрет для JWT-токенов |
 | `BOOTSTRAP_ADMIN_EMAIL` | kostya.alone18@yandex.ru | Email первого владельца (роль `owner` + whitelist) |
-| `CORS_ORIGIN` | `*` или `https://...` | CORS для клиента |
+| `CORS_ORIGIN` | `https://info.r-est.ru` | Origin веба/клиента (не `*` при cookie) |
+| `COOKIE_SECURE` | `true` | Cookie только по HTTPS |
 
 ---
 
@@ -69,6 +70,15 @@ unzip REST-INFO-export.zip -d import/
 
 ## Шаг 4. Запустить сервер
 
+Образ API собирается из **корня репо** и включает `web/dist` (браузерный клиент).  
+Если на хосте запрещён `docker compose -f …`:
+
+```bash
+COMPOSE_FILE=docker-compose.yml docker compose up -d --build
+```
+
+иначе:
+
 ```bash
 docker compose up -d --build
 ```
@@ -76,8 +86,9 @@ docker compose up -d --build
 Проверка:
 
 ```bash
-curl http://localhost:3000/health
-# {"ok":true,"time":"..."}
+curl -s http://localhost:3000/health
+# ok, web.index, web.assets, media.top, build
+curl -s http://localhost:3000/media/status
 ```
 
 ---
@@ -164,6 +175,15 @@ RESTINFO_ADMIN_TOKEN=<jwt> \
 ## Обновление сервера после изменений в Git
 
 На production с изолированным пользователем `rest-info` см. [SERVER-USER-SETUP.md](SERVER-USER-SETUP.md).
+
+Пример (info.r-est.ru):
+
+```bash
+cd /home/opt/info-rest
+git checkout -- web/dist   # если локально правили dist и pull ругается
+git pull
+COMPOSE_FILE=docker-compose.yml docker compose up -d --build
+```
 
 ```bash
 git pull

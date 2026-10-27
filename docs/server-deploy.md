@@ -14,17 +14,19 @@
 git clone https://github.com/Konstantinino/spravochnik.git
 cd spravochnik
 cp .env.example .env
-# Отредактируйте .env: DB_PASSWORD, JWT_SECRET, BOOTSTRAP_ADMIN_EMAIL
-docker compose up -d --build
+# Отредактируйте .env: DB_PASSWORD, JWT_SECRET, BOOTSTRAP_ADMIN_EMAIL, CORS_ORIGIN
+COMPOSE_FILE=docker-compose.yml docker compose up -d --build
+# или: docker compose up -d --build
 ```
 
 Проверка:
 
 ```bash
-curl http://localhost:3000/health
-# {"ok":true,"time":"..."}
+curl -s http://localhost:3000/health
+# ok + web.assets + build
 ```
 
+**Важно:** не bind-mount’ить пустой `./web/dist` на `/data/web` — SPA уже в образе.
 ## Production (nginx)
 
 ```bash
@@ -40,7 +42,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 | `DB_PASSWORD` | Пароль PostgreSQL |
 | `JWT_SECRET` | Секрет для JWT (длинная случайная строка) |
 | `BOOTSTRAP_ADMIN_EMAIL` | Email первого владельца (роль `owner` + whitelist) |
-| `CORS_ORIGIN` | `*` или origin клиента |
+| `CORS_ORIGIN` | origin веба, напр. `https://info.r-est.ru` (нужен для cookie) |
+| `COOKIE_SECURE` | `true` на HTTPS |
+| `WEB_DIST` | в compose: `/data/web` (SPA из образа) |
 
 ## Первичный импорт данных
 

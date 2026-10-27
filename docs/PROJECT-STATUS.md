@@ -6,11 +6,11 @@
 
 **v2 реализована.** Яндекс.Диск выведен из основного потока (sync + updates). Ожидается production-deploy серверным программистом.
 
-**Веб-клиент (`web/`)** снова в `main`: Vite SPA + cookie-auth (`/auth/login-web`, `/auth/register-web`, `/auth/logout-web`). UI общий с десктопом (`@app`). Без офлайна; данные только с API. Dev: см. [web/README.md](../web/README.md), план — [WEB-VERSION-PLAN.md](WEB-VERSION-PLAN.md).
+**Веб-клиент (`web/`)** в `main` и на production (**https://info.r-est.ru**): Vite SPA + cookie-auth; UI общий с десктопом (`@app`). SPA **вшита в образ API** (`WEB_DIST=/data/web`, без bind-mount `./web/dist`). Без офлайна. Dev: [web/README.md](../web/README.md).
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows (27 окт.): клиент **1.5.0** (`npm run dist:ascii` → `REST-INFO-Setup-1.5.0.exe`); веб (`web/`) на том же API. **1.5.0:** веб-клиент в `main` (cookie-auth), паритет UI с десктопом после sync ветки. **1.4.9:** курсор в редакторе — глифы textarea (ссылки на фото не уводят caret). **1.4.8–1.4.7:** выравнивание подсветки; плашки разделов; обязательный раздел корневой темы; admin — разделы только своего отдела. Ранее: разделы (**009**), подразделы (**010**), «Потерялись», телефоны/почты support; admin↔client (**008**); min client version (**426**). Production: nginx `client_max_body_size` ≥120M; миграции **004–013**; деплой SPA + `CORS_ORIGIN` / `COOKIE_SECURE`.
+Локально на Windows (27 окт.): клиент **1.5.0** (Setup уже собран; **новый Setup с copy/reorder-clientId — позже**, когда накопится пачка правок). **Production web (27 окт.):** медиа URL `/media/media/…`, buffered GET + `/media/status`; favicon R на красном; lock порядка с **`clientId`** (сайт ≠ приложение, даже один аккаунт); копирование текста в просмотре (CSS + Electron Edit/context menu). Миграции **004–014** (`014` — `topic_order_locks.client_id`). Host nginx → `:3000`; `CORS_ORIGIN` / `COOKIE_SECURE`.
 
 **Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
@@ -29,8 +29,9 @@
 - [x] Admin: users, роли **owner / admin / editor / user**, whitelist, releases, **PUT /admin/users/:id**, **POST /admin/transfer-ownership**, **GET /admin/storage-stats** (только owner)
 - [x] Миграции `002`–`007` + **`008_client_topic_link.sql`** (`client_topic_id` для admin-тем)
 - [x] **`middleware/min-client-version.ts`** — блок POST/PUT/DELETE, если версия клиента старее последнего релиза (`lib/app-version.ts`)
-- [x] **`PUT /departments/:dept/topic-order`** — сохранение `sort_index` (reorder списка; требует активной lock-сессии)
-- [x] **`POST /departments/:dept/topic-order/lock|unlock|renew-lock`** — одновременное редактирование порядка (как topic locks)
+- [x] **`PUT /departments/:dept/topic-order`** — сохранение `sort_index` (reorder; требует lock + тот же `clientId`)
+- [x] **`POST /departments/:dept/topic-order/lock|unlock|renew-lock`** — body `{ clientId }` (миграция **014**); один аккаунт не может держать порядок сразу в вебе и в десктопе
+- [x] SPA из `web/dist` в Docker-образе API; `GET /health` → `web` / `media` / `build`; `GET /media/status` (+ `?file=`)
 - [x] `import-from-json.ts` — импорт из REST-INFO-export
 - [x] Docker Compose + nginx prod overlay (`client_max_body_size 120M`)
 - [x] Изолированный deploy: пользователь `rest-info`, read-only deploy key, сеть `restinfo_internal`, скрипты `scripts/server/`, [SERVER-USER-SETUP.md](SERVER-USER-SETUP.md)
@@ -65,7 +66,8 @@
 - [x] Список тем и подтем — **`sort_index`** внутри группы сiblings, иначе алфавит (`compareTopicsForList` в `data.ts`)
 - [x] **Техподдержка:** фильтры **Все / Поставщик / Заказчик / Ошибки / Администратор** (+ Архив); admin↔client link в редакторе; **«Клиент»/«Админ»** в topbar
 - [x] **`server-api.ts`:** заголовок **`X-Rest-Info-Client-Version`**; sync при **426** — «Нужно обновить приложение»
-- [x] **Редактировать порядок** (ПКМ): на **любом** фильтре party; порядок общий (`sort_index`); сохранение на сервер **только при «Завершить»**; перед входом — pull порядка + lock; красная плашка 1 с, если занято
+- [x] **Редактировать порядок** (ПКМ): на **любом** фильтре party; порядок общий (`sort_index`); сохранение на сервер **только при «Завершить»**; перед входом — pull порядка + lock (`clientId`); красная плашка ~4 с, если занято
+- [x] **Копирование текста** в режиме просмотра: `user-select` на markdown; Electron — меню «Правка» + ПКМ «Копировать» (Setup с этим фиксом — в следующей сборке)
 - [x] **Viewer:** рекурсивное дерево подтем; уровень 2+ — opacity **0.7**
 - [x] Sidebar: папки **свёрнуты** при старте / Ctrl+R; после **сброса поиска** — раскрытие пути к выбранной теме + скролл в **центр** списка
 - [x] Sync UI: при pull (в т.ч. фоновом) статус **«Загрузка данных…»**, после — **«Актуально»**
@@ -154,20 +156,14 @@
 
 | Задача | Приоритет | Кто |
 |---|---|---|
-| Production deploy (Docker + HTTPS) | **Высокий** | Серверный программист |
-| Передать ZIP `REST-INFO-export/` программисту | **Высокий** | Администратор |
-| Импорт на production: `import-from-json.js` | **Высокий** | Программист |
-| Залить Setup **1.5.0** + `latest.yml` + blockmap на production | **Высокий** | Админ / программист |
-| Деплой веб SPA (`web/dist`) + cookie-auth API (`CORS_ORIGIN`, `COOKIE_SECURE`) | **Высокий** | Программист |
-| Деплой API с support-phones (если ещё не на production) | **Высокий** | Программист |
-| **`npm run migrate`** на production (**004–010**, incl. departments + subsections) | **Высокий** | Программист |
-| Деплой API **`/admin/departments`** и подразделов | **Высокий** | Программист |
-| Указать production URL в клиентах | Средний | Админ |
+| Production web **info.r-est.ru** (SPA в образе API) | **Сделано** | — |
+| Залить Setup с пачкой правок (copy text, order `clientId`, …) — **не срочно**, накопим | Средний | Админ |
+| Залить Setup **1.5.0** + `latest.yml` + blockmap (если ещё не на production) | Средний | Админ / программист |
+| E2E по testing-checklist на production (web + desktop) | Средний | QA |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |
 | Progress bar full media sync | Низкий | Dev |
 | Migration wizard yandexToken → serverUrl | Низкий | Dev |
-| E2E по testing-checklist на production | Средний | После deploy |
 
 ---
 
@@ -211,12 +207,10 @@ spravochnik-repo/
 
 ## Следующие шаги (для администратора)
 
-1. ZIP `REST-INFO-export/` → программисту
-2. Доступ к GitHub репо → программисту + `docs/DEPLOY-FOR-PROGRAMMER.md`
-3. Дождаться production URL
-4. `npm run dist:ascii` → загрузить Setup на сервер
-5. Раздать установщик сотрудникам, указать production URL при входе
-6. Отозвать OAuth-токен Яндекс.Диска (больше не нужен)
+1. Сайт: https://info.r-est.ru (после `git pull` + `COMPOSE_FILE=docker-compose.yml docker compose up -d --build`)
+2. Накопить правки десктопа → один новый Setup (copy / order clientId / …) и залить на сервер
+3. Раздать установщик; URL: `https://info.r-est.ru`
+4. Отозвать OAuth-токен Яндекс.Диска (больше не нужен)
 
 ---
 

@@ -47,9 +47,16 @@ export function canonicalImageStoragePath(
   return null
 }
 
+function markdownLinkDestination(path: string): string {
+  if (/[<>\s()]/.test(path)) return `<${path}>`
+  return path
+}
+
 /** Markdown `![](…)` or bare media / spravochnik image path from clipboard. */
 export function parsePastedImageMarkdown(text: string): string | null {
   const trimmed = text.trim()
+  const angleMatch = trimmed.match(/^!\[[^\]]*]\(<([^>]+)>\)$/)
+  if (angleMatch) return angleMatch[1].trim()
   const mdMatch = trimmed.match(/^!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)$/)
   if (mdMatch) return mdMatch[1].trim()
   const cleaned = stripMediaRefPrefix(trimmed)
@@ -70,7 +77,31 @@ export function parseImageRefFromClipboard(text: string): string | null {
 /** Share image across topics: stable path in markdown (no copy in storage). */
 export function formatSharedImageMarkdown(canonicalMediaPath: string): string {
   const path = stripMediaRefPrefix(canonicalMediaPath)
-  return `![](${path})`
+  return `![](${markdownLinkDestination(path)})`
+}
+
+/** Fix `![](images/name (1).png)` so CommonMark treats it as an image, not plain text. */
+function repairLooseMarkdownImages(source: string): string {
+  return source.replace(
+    /!\[([^\]]*)]\((images\/.*?\.(?:png|jpe?g|gif|webp|bmp))\)/gi,
+    (full, alt, dest) => {
+      const d = dest.trim()
+      if (/[\s()]/.test(d)) return `![${alt}](<${d}>)`
+      return full
+    },
+  )
+}
+
+/** Fix `[doc (1).pdf](files/doc (1).pdf)` — same paren/space issue as images. */
+function repairLooseMarkdownFileLinks(source: string): string {
+  return source.replace(
+    /\[((?:\\.|[^\]])*)\]\((files\/.*?\.[a-z0-9]{1,8})\)/gi,
+    (full, label, dest) => {
+      const d = dest.trim()
+      if (/[\s()]/.test(d)) return `[${label}](<${d}>)`
+      return full
+    },
+  )
 }
 
 export function normalizeEditorNewlines(source: string): string {
@@ -93,7 +124,10 @@ export function normalizeTopicMarkdownText(source: string): string {
 
 /** Просмотр: строка из `&nbsp;` — визуально пустая (NBSP в абзаце). */
 export function markdownForDisplay(source: string): string {
-  return normalizeEditorNewlines(source)
+  const repaired = repairLooseMarkdownFileLinks(
+    repairLooseMarkdownImages(normalizeEditorNewlines(source)),
+  )
+  return repaired
     .split('\n')
     .map((line) => {
       const trimmed = line.trim()
@@ -158,12 +192,15 @@ export function isAllowedMarkdownImageSrc(url: string): boolean {
 /** Topic file attachment: `files/uuid.pdf`, `media/12/files/…`, `spravochnik://media/12/files/…`. */
 export function parseFileAttachmentHref(href: string | undefined): { storedName: string } | null {
   if (!href) return null
-  const cleaned = href.replace(/\\/g, '/').replace(/^\/+/, '').trim()
+  let cleaned = href.replace(/\\/g, '/').replace(/^\/+/, '').trim()
+  if (cleaned.startsWith('<') && cleaned.endsWith('>')) {
+    cleaned = cleaned.slice(1, -1).trim()
+  }
   const match = cleaned.match(
-    /^(?:spravochnik:\/\/)?(?:media\/(?:_draft\/[^/]+|(?:(?:[a-z][a-z0-9_-]{0,47})\/)?\d+)\/)?files\/([^/?#\s]+)$/i,
+    /^(?:spravochnik:\/\/)?(?:media\/(?:_draft\/[^/]+|(?:(?:[a-z][a-z0-9_-]{0,47})\/)?\d+)\/)?files\/([^/?#]+)$/i,
   )
   if (!match) return null
-  const storedName = match[1]
+  const storedName = match[1].trim()
   if (!storedName || storedName.includes('..') || storedName.includes('/')) return null
   return { storedName }
 }
@@ -171,7 +208,7 @@ export function parseFileAttachmentHref(href: string | undefined): { storedName:
 /** Markdown snippet for an attached file: `[contract.pdf](files/uuid.pdf)`. */
 export function formatFileMarkdownLink(originalName: string, markdownPath: string): string {
   const label = escapeMdLinkLabel(originalName.trim() || 'Файл')
-  return `[${label}](${markdownPath})`
+  return `[${label}](${markdownLinkDestination(markdownPath)})`
 }
 
 /** Internal topic link: `#123`, `#topic-123`, `topic:123`. Returns null if not a topic link. */

@@ -273,7 +273,7 @@ export function TopicEditorModal({
     try {
       const result = await window.spravochnik.saveTopicImage(imageOwnerPayload())
       if (!result) return
-      const markdown = `\n\n![](${result.markdownPath})`
+      const markdown = `\n\n${formatSharedImageMarkdown(result.markdownPath)}\n\n`
       const sel = resolvedTextareaSelection()
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current, sel)
       setAnswer(next)
@@ -373,7 +373,7 @@ export function TopicEditorModal({
         setError('В буфере нет изображения')
         return
       }
-      const markdown = `\n\n![](${result.markdownPath})`
+      const markdown = `\n\n${formatSharedImageMarkdown(result.markdownPath)}\n\n`
       const { next, cursor } = insertAtCursor(answer, markdown, textareaRef.current)
       setAnswer(next)
       clearPicker()

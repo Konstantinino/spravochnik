@@ -65,17 +65,21 @@ export function TopicMarkdownImage({
       return
     }
     let cancelled = false
+    let objectUrl: string | null = null
     const ref = storagePath ?? rawSrc
     void (async () => {
       try {
         const url = await window.spravochnik.resolveMediaUrl(ref, topicId, departmentId)
-        if (!cancelled) setDisplaySrc(url || protocolSrc)
+        if (cancelled) return
+        if (url.startsWith('blob:')) objectUrl = url
+        setDisplaySrc(url || protocolSrc)
       } catch {
-        if (!cancelled) setDisplaySrc(protocolSrc)
+        if (!cancelled) setDisplaySrc(protocolSrc.startsWith('spravochnik://') ? '' : protocolSrc)
       }
     })()
     return () => {
       cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [rawSrc, topicId, departmentId, storagePath, isRemote, protocolSrc])
 

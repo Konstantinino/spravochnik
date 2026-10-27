@@ -40,6 +40,39 @@ import {
 } from './guide-store'
 import { getStoredServerUrl, mediaAbsoluteUrl, setStoredServerUrl } from './server-url'
 
+/** API media requires auth; <img src> cannot rely on cookies — load via fetch + blob URL. */
+async function fetchMediaObjectUrl(httpPath: string): Promise<string> {
+  const res = await fetch(httpPath, { credentials: 'include' })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  const blob = await res.blob()
+  if (!blob.size) {
+    throw new Error('Empty media response')
+  }
+  return URL.createObjectURL(blob)
+}
+
+function resolveMediaHttpUrl(
+  relativePath: string,
+  topicId?: number,
+  departmentId?: DepartmentId,
+): string {
+  const cleaned = relativePath.replace(/\\/g, '/').replace(/^spravochnik:\/\//, '')
+  if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) return cleaned
+  const canonical =
+    canonicalImageStoragePath(cleaned, topicId, departmentId) ??
+    (cleaned.startsWith('media/') ? cleaned : null)
+  if (canonical) return mediaAbsoluteUrl(canonical)
+  if (cleaned.startsWith('images/') && topicId != null && departmentId) {
+    return mediaAbsoluteUrl(`media/${departmentId}/${topicId}/${cleaned}`)
+  }
+  if (cleaned.startsWith('files/') && topicId != null && departmentId) {
+    return mediaAbsoluteUrl(`media/${departmentId}/${topicId}/${cleaned}`)
+  }
+  return mediaAbsoluteUrl(cleaned)
+}
+
 const REORDER_CLIENT_STORAGE_KEY = 'rest-info-topic-order-client-id'
 
 function getTopicOrderClientId(): string {
@@ -171,6 +204,31 @@ function randomId(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12)
 }
 
+function imageExtFromName(name: string, mimeType?: string): string {
+  const m = name.match(/(\.[a-z0-9]{1,8})$/i)
+  if (m) return m[1].toLowerCase()
+  if (mimeType?.startsWith('image/')) {
+    let ext = mimeType.slice('image/'.length).toLowerCase()
+    if (ext === 'jpeg') ext = 'jpg'
+    if (/^[a-z0-9]{1,8}$/.test(ext)) return `.${ext}`
+  }
+  return '.png'
+}
+
+/** Avoid spaces/parens in stored names (markdown + filesystem), same idea as desktop UUID names. */
+function safeStoredImageName(originalName: string, mimeType?: string): string {
+  return `${randomId()}${imageExtFromName(originalName, mimeType)}`
+}
+
+function fileExtFromName(name: string): string {
+  const m = name.match(/(\.[a-z0-9]{1,8})$/i)
+  return m ? m[1].toLowerCase() : '.bin'
+}
+
+function safeStoredFileName(originalName: string): string {
+  return `${randomId()}${fileExtFromName(originalName)}`
+}
+
 async function saveImageFile(
   file: File,
   payload: { topicId?: number; draftId?: string; departmentId?: DepartmentId },
@@ -178,10 +236,11 @@ async function saveImageFile(
   const dept = payload.departmentId ?? 'support'
   const topicPart =
     payload.topicId != null ? String(payload.topicId) : `draft-${payload.draftId ?? randomId()}`
-  const rel = `media/${dept}/${topicPart}/images/${file.name}`
+  const storedName = safeStoredImageName(file.name, file.type)
+  const rel = `media/${dept}/${topicPart}/images/${storedName}`
   await uploadMediaFile(rel, file, dept)
   const url = mediaAbsoluteUrl(rel)
-  return { markdownPath: `images/${file.name}`, url, relativeFsPath: rel }
+  return { markdownPath: `images/${storedName}`, url, relativeFsPath: rel }
 }
 
 function collectDescendantIds(list: GuideItem[], rootId: number): number[] {
@@ -317,11 +376,12 @@ const api: SpravochnikApi = {
     const dept = payload.departmentId ?? 'support'
     const topicPart =
       payload.topicId != null ? String(payload.topicId) : `draft-${payload.draftId ?? randomId()}`
-    const rel = `media/${dept}/${topicPart}/files/${file.name}`
+    const storedName = safeStoredFileName(file.name)
+    const rel = `media/${dept}/${topicPart}/files/${storedName}`
     await uploadMediaFile(rel, file, dept)
     const url = mediaAbsoluteUrl(rel)
     return {
-      markdownPath: `files/${file.name}`,
+      markdownPath: `files/${storedName}`,
       originalName: file.name,
       url,
       relativeFsPath: rel,
@@ -329,19 +389,16 @@ const api: SpravochnikApi = {
   },
 
   resolveMediaUrl: async (relativePath, topicId, departmentId) => {
-    const cleaned = relativePath.replace(/\\/g, '/').replace(/^spravochnik:\/\//, '')
-    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) return cleaned
-    const canonical =
-      canonicalImageStoragePath(cleaned, topicId, departmentId) ??
-      (cleaned.startsWith('media/') ? cleaned : null)
-    if (canonical) return mediaAbsoluteUrl(canonical)
-    if (cleaned.startsWith('images/') && topicId != null && departmentId) {
-      return mediaAbsoluteUrl(`media/${departmentId}/${topicId}/${cleaned}`)
+    const httpUrl = resolveMediaHttpUrl(relativePath, topicId, departmentId)
+    const isApiMedia =
+      httpUrl.startsWith('/media/') || httpUrl.includes('/media/media/')
+    if (
+      (httpUrl.startsWith('http://') || httpUrl.startsWith('https://')) &&
+      !isApiMedia
+    ) {
+      return httpUrl
     }
-    if (cleaned.startsWith('files/') && topicId != null && departmentId) {
-      return mediaAbsoluteUrl(`media/${departmentId}/${topicId}/${cleaned}`)
-    }
-    return mediaAbsoluteUrl(cleaned)
+    return fetchMediaObjectUrl(httpUrl)
   },
 
   resolveImageStorageRef: async (payload) => {

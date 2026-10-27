@@ -301,8 +301,10 @@ const api: SpravochnikApi = {
       for (const type of item.types) {
         if (!type.startsWith('image/')) continue
         const blob = await item.getType(type)
-        const ext = type.split('/')[1] ?? 'png'
-        const file = new File([blob], `clipboard.${ext}`, { type })
+        let ext = (type.split('/')[1] ?? 'png').toLowerCase()
+        if (ext === 'jpeg') ext = 'jpg'
+        if (!/^[a-z0-9]{1,8}$/.test(ext)) ext = 'png'
+        const file = new File([blob], `${randomId()}.${ext}`, { type })
         return saveImageFile(file, payload)
       }
     }

@@ -8,6 +8,9 @@ const apiTarget = process.env.WEB_DEV_API ?? 'http://127.0.0.1:3000'
 
 export default defineConfig({
   root: webRoot,
+  define: {
+    __REST_INFO_WEB__: JSON.stringify(true),
+  },
   plugins: [react()],
   resolve: {
     // Sources under ../app/src must resolve deps from web/node_modules (server has no app/ install).

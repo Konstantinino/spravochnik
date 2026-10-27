@@ -208,7 +208,10 @@ export default function App() {
     return new Set(deptTopicSectionIdsForDepartment(departmentId, subsections))
   }, [departmentId, subsections])
 
-  useEffect(() => installInputFocusGuard(), [])
+  useEffect(() => {
+    if (__REST_INFO_WEB__) return
+    return installInputFocusGuard()
+  }, [])
 
   useEffect(() => {
     if (listFilter === 'all' || listFilter === 'archive') return
@@ -1042,7 +1045,7 @@ export default function App() {
   return (
     <div
       className={`app-shell${syncBlocking ? ' app-shell--sync-busy' : ''}`}
-      tabIndex={-1}
+      tabIndex={__REST_INFO_WEB__ ? undefined : -1}
     >
       <Header
         departmentId={departmentId}

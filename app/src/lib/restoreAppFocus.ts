@@ -25,6 +25,7 @@ export function restoreAppFocus() {
   } else {
     releaseStaleFocus()
   }
+  if (__REST_INFO_WEB__) return
   requestAnimationFrame(() => {
     void window.spravochnik.focusAppWindow()
   })

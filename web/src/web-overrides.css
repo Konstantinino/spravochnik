@@ -6,3 +6,28 @@
   width: 100%;
   box-sizing: border-box;
 }
+
+/* Текст темы: явное выделение (Electron focus-trap на .app-shell в браузере не используется). */
+.viewer__scroll,
+.viewer__title,
+.viewer__body.markdown-body {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: auto;
+}
+
+.viewer__body.markdown-body p,
+.viewer__body.markdown-body li,
+.viewer__body.markdown-body blockquote,
+.viewer__body.markdown-body pre,
+.viewer__body.markdown-body code {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.viewer__body .viewer__image,
+.viewer__body .topic-file,
+.viewer__body button {
+  user-select: none;
+  -webkit-user-select: none;
+}

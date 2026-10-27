@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+/** true in web/vite build; false in Electron app build. */
+declare const __REST_INFO_WEB__: boolean
+
 
 
 import type {

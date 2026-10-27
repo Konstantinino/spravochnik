@@ -1197,7 +1197,7 @@ export function Viewer({
       )}
 
       <div className="viewer__scroll">
-        <article className="viewer">
+        <article className={`viewer${editing ? ' viewer--editing' : ''}`}>
           {error && !editing && <div className="form-error viewer__notice">{error}</div>}
 
       <div className="viewer__header">
@@ -1230,18 +1230,6 @@ export function Viewer({
           </button>
         )}
       </div>
-
-      {hasSubtopics && item && (
-        <div className="viewer__subtopics">
-          <div className="viewer__subtopics-heading">Подтемы</div>
-          <ViewerChildrenTree
-            parentId={item.id}
-            items={items}
-            currentId={current.id}
-            onNavigateToTopic={onNavigateToTopic}
-          />
-        </div>
-      )}
 
       {findOpen && !editing && (
         <div className="viewer-find">
@@ -1421,7 +1409,20 @@ export function Viewer({
           {error && <div className="form-error">{error}</div>}
         </div>
       ) : (
-        <div className="viewer__body markdown-body" ref={bodyRef}>
+        <>
+          {hasSubtopics && item && (
+            <div className="viewer__subtopics">
+              <div className="viewer__subtopics-heading">Подтемы</div>
+              <ViewerChildrenTree
+                parentId={item.id}
+                items={items}
+                currentId={current.id}
+                onNavigateToTopic={onNavigateToTopic}
+              />
+            </div>
+          )}
+
+          <div className="viewer__body markdown-body" ref={bodyRef}>
           {current.answer?.trim() ? (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -1457,6 +1458,7 @@ export function Viewer({
             </div>
           )}
         </div>
+        </>
       )}
         </article>
       </div>

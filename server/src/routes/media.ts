@@ -250,7 +250,7 @@ mediaRouter.post(
   },
 )
 
-mediaRouter.get('/manifest/all', async (_req, res) => {
+mediaRouter.get('/manifest/all', authMiddleware, async (_req, res) => {
   try {
     const result = await query<{
       relative_path: string
@@ -373,7 +373,7 @@ mediaRouter.delete(
 )
 
 // File GET last: resolve path from originalUrl.
-mediaRouter.get(/.*/, (req, res, next) => {
+mediaRouter.get(/.*/, authMiddleware, (req, res, next) => {
   try {
     const normalized = mediaRelFromRequest(req)
     if (

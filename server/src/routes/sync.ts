@@ -5,11 +5,11 @@ import { listSubsections, subsectionToClient } from '../lib/subsections.js'
 import { listSupportSections, supportSectionToClient } from '../lib/support-sections.js'
 import { rowToGuideItem, type TopicRow } from '../lib/topics.js'
 import { requiredClientVersion } from '../lib/app-version.js'
-import { authMiddleware, optionalAuth, type AuthRequest } from '../middleware/auth.js'
+import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
 export const syncRouter = Router()
 
-syncRouter.get('/changes', optionalAuth, async (req: AuthRequest, res) => {
+syncRouter.get('/changes', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const since = req.query.since ? String(req.query.since) : null
     const full = req.query.full === 'true' || !since

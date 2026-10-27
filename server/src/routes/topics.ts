@@ -71,7 +71,7 @@ function rejectLostDepartmentWrite(dept: string, res: Response): boolean {
   return false
 }
 
-topicsRouter.get('/:dept/topics', async (req, res) => {
+topicsRouter.get('/:dept/topics', authMiddleware, async (req, res) => {
   try {
     const dept = param(req.params.dept)
     const deptMeta = await getDepartmentById(dept)

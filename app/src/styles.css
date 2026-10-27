@@ -1066,6 +1066,10 @@ body.topic-reorder-dragging.topic-reorder-drop-ok * {
   border-bottom: 1px solid rgba(28, 36, 48, 0.1);
 }
 
+.viewer.viewer--editing .viewer__subtopics {
+  display: none;
+}
+
 .viewer__subtopics-heading {
   margin: 0 0 8px;
   font-size: 0.78rem;

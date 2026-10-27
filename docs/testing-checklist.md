@@ -11,7 +11,7 @@
 - [ ] Админ **не** может менять/удалять владельца
 - [ ] Удаление владельца требует `successorId` (передача владения)
 - [ ] `POST /auth/login` → JWT
-- [ ] `GET /departments/support/topics` → список тем
+- [ ] `GET /departments/support/topics` с JWT/cookie → список тем; без auth → 401
 - [ ] `PUT /departments/support/topic-order` → обновление `sort_index`
 - [ ] Миграции 004–010 применены (`npm run migrate`, incl. 009 departments, 010 subsections)
 - [ ] `GET /admin/departments` → список с `subsections[]`

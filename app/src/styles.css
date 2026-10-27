@@ -1028,6 +1028,9 @@ body.topic-reorder-dragging.topic-reorder-drop-ok * {
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .viewer__title-input {
@@ -1233,8 +1236,12 @@ mark.find-hit--active {
   background: #f8d7d4;
 }
 
+.viewer__body.markdown-body,
 .markdown-body {
   line-height: 1.6;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .markdown-body p {

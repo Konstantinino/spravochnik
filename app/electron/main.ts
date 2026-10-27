@@ -677,6 +677,42 @@ function attachWindowsInputFixes(win: BrowserWindow): void {
   })
 }
 
+/** Hidden Edit menu so Ctrl+C / Ctrl+V / Ctrl+A work without a visible menu bar. */
+function installAppEditMenu(): void {
+  const isMac = process.platform === 'darwin'
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: 'Правка',
+      submenu: [
+        { role: 'undo', label: 'Отменить' },
+        { role: 'redo', label: 'Повторить' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Вырезать' },
+        { role: 'copy', label: 'Копировать' },
+        { role: 'paste', label: 'Вставить' },
+        { role: 'selectAll', label: 'Выделить всё' },
+      ],
+    },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 function createWindow(): void {
   const savedWindow = loadSavedWindowBounds()
   const savedBounds = savedWindow?.bounds
@@ -715,23 +751,53 @@ function createWindow(): void {
   })
 
   win.webContents.on('context-menu', (_event, params) => {
+    const items: Electron.MenuItemConstructorOptions[] = []
     const linkURL = params.linkURL?.trim()
-    if (!linkURL || !/^https?:\/\//i.test(linkURL)) return
+    const hasHttpLink = Boolean(linkURL && /^https?:\/\//i.test(linkURL))
 
-    Menu.buildFromTemplate([
-      {
-        label: 'Открыть в браузере',
-        click: () => {
-          void shell.openExternal(linkURL)
+    if (params.isEditable) {
+      items.push(
+        { role: 'undo', label: 'Отменить', enabled: params.editFlags.canUndo },
+        { role: 'redo', label: 'Повторить', enabled: params.editFlags.canRedo },
+        { type: 'separator' },
+        { role: 'cut', label: 'Вырезать', enabled: params.editFlags.canCut },
+        { role: 'copy', label: 'Копировать', enabled: params.editFlags.canCopy },
+        { role: 'paste', label: 'Вставить', enabled: params.editFlags.canPaste },
+        { role: 'selectAll', label: 'Выделить всё', enabled: params.editFlags.canSelectAll },
+      )
+    } else if (params.selectionText?.trim() || params.editFlags.canCopy) {
+      items.push({
+        role: 'copy',
+        label: 'Копировать',
+        enabled: params.editFlags.canCopy || Boolean(params.selectionText?.trim()),
+      })
+      items.push({
+        role: 'selectAll',
+        label: 'Выделить всё',
+        enabled: params.editFlags.canSelectAll,
+      })
+    }
+
+    if (hasHttpLink && linkURL) {
+      if (items.length > 0) items.push({ type: 'separator' })
+      items.push(
+        {
+          label: 'Открыть в браузере',
+          click: () => {
+            void shell.openExternal(linkURL)
+          },
         },
-      },
-      {
-        label: 'Копировать адрес ссылки',
-        click: () => {
-          clipboard.writeText(linkURL)
+        {
+          label: 'Копировать адрес ссылки',
+          click: () => {
+            clipboard.writeText(linkURL)
+          },
         },
-      },
-    ]).popup({ window: win })
+      )
+    }
+
+    if (items.length === 0) return
+    Menu.buildFromTemplate(items).popup({ window: win })
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -2702,6 +2768,7 @@ app.whenReady().then(() => {
   })
 
   registerIpc()
+  installAppEditMenu()
   createWindow()
 
   // Background sync after UI is up

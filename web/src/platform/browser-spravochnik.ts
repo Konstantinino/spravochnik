@@ -361,7 +361,11 @@ const api: SpravochnikApi = {
 
   downloadMediaImage: async (resolvedSrc, suggestedName) => {
     try {
-      const res = await fetch(resolvedSrc, { credentials: 'include' })
+      let url = resolvedSrc
+      if (url.startsWith('spravochnik://')) {
+        url = mediaAbsoluteUrl(url.replace(/^spravochnik:\/\//, ''))
+      }
+      const res = await fetch(url, { credentials: 'include' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const blob = await res.blob()
       const a = document.createElement('a')
@@ -376,7 +380,11 @@ const api: SpravochnikApi = {
   },
 
   openMediaFile: async (resolvedSrc) => {
-    window.open(resolvedSrc, '_blank', 'noopener,noreferrer')
+    let url = resolvedSrc
+    if (url.startsWith('spravochnik://')) {
+      url = mediaAbsoluteUrl(url.replace(/^spravochnik:\/\//, ''))
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
     return { ok: true }
   },
 

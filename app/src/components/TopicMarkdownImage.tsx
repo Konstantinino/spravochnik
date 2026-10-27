@@ -27,10 +27,11 @@ export function TopicMarkdownImage({
   onContextMenu,
 }: TopicMarkdownImageProps) {
   const [storagePath, setStoragePath] = useState<string | null>(null)
+  const [displaySrc, setDisplaySrc] = useState('')
   const isRemote = /^https?:\/\//i.test(rawSrc.trim())
   const displayRef = isRemote ? rawSrc : (storagePath ?? rawSrc)
   const markdownKey = normalizeImageDisplayKey(displayRef)
-  const resolved = mediaSrcFromMarkdownUrl(displayRef, topicId, departmentId)
+  const protocolSrc = mediaSrcFromMarkdownUrl(displayRef, topicId, departmentId)
   const scale = getImageScaleForTopicImage(displayMap, displayRef, topicId, departmentId)
   const scaled = scale !== IMAGE_SCALE_DEFAULT
   const [loaded, setLoaded] = useState(false)
@@ -58,18 +59,39 @@ export function TopicMarkdownImage({
     }
   }, [rawSrc, topicId, departmentId, isRemote])
 
+  useEffect(() => {
+    if (isRemote) {
+      setDisplaySrc(rawSrc.trim())
+      return
+    }
+    let cancelled = false
+    const ref = storagePath ?? rawSrc
+    void (async () => {
+      try {
+        const url = await window.spravochnik.resolveMediaUrl(ref, topicId, departmentId)
+        if (!cancelled) setDisplaySrc(url || protocolSrc)
+      } catch {
+        if (!cancelled) setDisplaySrc(protocolSrc)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [rawSrc, topicId, departmentId, storagePath, isRemote, protocolSrc])
+
   const src = useMemo(() => {
-    if (!reloadNonce) return resolved
-    const join = resolved.includes('?') ? '&' : '?'
-    return `${resolved}${join}r=${reloadNonce}`
-  }, [resolved, reloadNonce])
+    if (!displaySrc) return ''
+    if (!reloadNonce) return displaySrc
+    const join = displaySrc.includes('?') ? '&' : '?'
+    return `${displaySrc}${join}r=${reloadNonce}`
+  }, [displaySrc, reloadNonce])
 
   useEffect(() => {
     loadRetryRef.current = 0
     setLoaded(false)
     setLoadFailed(false)
     setReloadNonce(0)
-  }, [rawSrc, topicId, departmentId, storagePath])
+  }, [rawSrc, topicId, departmentId, storagePath, displaySrc])
 
   async function handleError() {
     if (loadRetryRef.current >= MAX_LOAD_RETRIES) {
@@ -98,6 +120,7 @@ export function TopicMarkdownImage({
   }
 
   const showScale = scaled && loaded && !loadFailed
+  const openSrc = displaySrc || protocolSrc
 
   return (
     <img
@@ -122,8 +145,8 @@ export function TopicMarkdownImage({
         setLoadFailed(false)
       }}
       onError={() => void handleError()}
-      onClick={() => onOpenLightbox(resolved)}
-      onContextMenu={(e) => onContextMenu(e, markdownKey, resolved)}
+      onClick={() => onOpenLightbox(openSrc)}
+      onContextMenu={(e) => onContextMenu(e, markdownKey, openSrc)}
     />
   )
 }

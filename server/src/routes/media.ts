@@ -1,4 +1,4 @@
-import { Router, type NextFunction, type Response } from 'express'
+import { Router, type NextFunction, type Request, type Response } from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -21,6 +21,9 @@ import {
 const MEDIA_DIR = process.env.MEDIA_DIR ?? path.join(process.cwd(), 'data', 'media')
 const UPDATES_DIR = process.env.UPDATES_DIR ?? path.join(process.cwd(), 'data', 'updates')
 const UPLOAD_MAX_BYTES = 120 * 1024 * 1024
+
+/** Bumped when media GET handling changes — visible via GET /media/status */
+export const MEDIA_HANDLER_VERSION = '2026-10-27-v3'
 
 export const mediaRouter = Router()
 
@@ -58,27 +61,6 @@ const upload = multer({
   limits: { fileSize: UPLOAD_MAX_BYTES },
 })
 
-function paramCapture(params: Record<string, unknown>): string {
-  // Express/path-to-regexp may put the /* splat in "0" or "" depending on version.
-  for (const key of ['0', ''] as const) {
-    const v = params[key]
-    if (typeof v === 'string' && v) return v.replace(/^\/+/, '')
-    if (Array.isArray(v) && typeof v[0] === 'string' && v[0]) return v[0].replace(/^\/+/, '')
-  }
-  return ''
-}
-
-function mediaRelParam(req: { params: Record<string, unknown>; path: string; url?: string }): string {
-  const fromParams = paramCapture(req.params)
-  if (fromParams) return fromParams
-  // Inside app.use('/media', …) remainder is e.g. /media/support/… or /support/…
-  const remainder = (req.path || '').replace(/^\/+/, '')
-  if (remainder.startsWith('media/')) return remainder
-  if (remainder) return remainder
-  const urlPath = (req.url || '').split('?')[0] || ''
-  return urlPath.replace(/^\/+/, '')
-}
-
 function ensureMediaDir(): void {
   fs.mkdirSync(MEDIA_DIR, { recursive: true })
 }
@@ -90,6 +72,69 @@ function ensureUpdatesDir(): void {
 function sha256File(filePath: string): string {
   const data = fs.readFileSync(filePath)
   return crypto.createHash('sha256').update(data).digest('hex')
+}
+
+/** Path after /media from the real request URL (ignores Express splat quirks). */
+function mediaRelFromRequest(req: Request): string {
+  const raw = (req.originalUrl || req.url || '').split('?')[0] || ''
+  const stripped = raw.replace(/^\/media\/?/i, '')
+  return stripped.replace(/\\/g, '/').replace(/^\/+/, '')
+}
+
+function resolveMediaFileForRequest(normalized: string): string | null {
+  if (!normalized) return null
+  let filePath = resolveExistingMediaFile(MEDIA_DIR, normalized)
+  if (!filePath && !normalized.startsWith('media/')) {
+    filePath = resolveExistingMediaFile(MEDIA_DIR, `media/${normalized}`)
+  }
+  // URL was /media/media/... → rel media/...; also try without duplicate
+  if (!filePath && normalized.startsWith('media/media/')) {
+    filePath = resolveExistingMediaFile(MEDIA_DIR, normalized.replace(/^media\//, ''))
+  }
+  return filePath
+}
+
+const EXT_CONTENT_TYPE: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+}
+
+function sendMediaFile(res: Response, filePath: string): void {
+  const ext = path.extname(filePath).toLowerCase()
+  const type = EXT_CONTENT_TYPE[ext] || 'application/octet-stream'
+  let stat: fs.Stats
+  try {
+    stat = fs.statSync(filePath)
+  } catch (err) {
+    console.error('media stat failed', filePath, err)
+    res.status(500).json({ error: 'Ошибка чтения файла', code: (err as NodeJS.ErrnoException).code })
+    return
+  }
+  if (!stat.isFile()) {
+    res.status(404).json({ error: 'Файл не найден' })
+    return
+  }
+  res.setHeader('Content-Type', type)
+  res.setHeader('Content-Length', String(stat.size))
+  res.setHeader('Cache-Control', 'public, max-age=86400')
+  const stream = fs.createReadStream(filePath)
+  stream.on('error', (err) => {
+    console.error('media stream failed', filePath, err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Ошибка чтения файла', code: (err as NodeJS.ErrnoException).code })
+      return
+    }
+    res.destroy(err)
+  })
+  stream.pipe(res)
 }
 
 mediaRouter.post(
@@ -135,7 +180,6 @@ mediaRouter.post(
         return
       }
 
-      // App installers go to UPDATES_DIR (served by GET /app/download/…), not media volume.
       if (normalized.startsWith('updates/')) {
         if (!isStaffRole(req.user!.role)) {
           res.status(403).json({ error: 'Публикация обновлений доступна только admin/owner' })
@@ -212,153 +256,31 @@ mediaRouter.get('/manifest/all', async (_req, res) => {
   }
 })
 
-function resolveMediaFileForRequest(normalized: string): string | null {
-  let filePath = resolveExistingMediaFile(MEDIA_DIR, normalized)
-  // Accept /media/support/… (mount already provides /media) as alias of storage key media/support/…
-  if (!filePath && normalized && !normalized.startsWith('media/')) {
-    filePath = resolveExistingMediaFile(MEDIA_DIR, `media/${normalized}`)
-  }
-  return filePath
-}
-
-const EXT_CONTENT_TYPE: Record<string, string> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.bmp': 'image/bmp',
-  '.svg': 'image/svg+xml',
-  '.pdf': 'application/pdf',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-}
-
-function sendMediaFile(res: Response, filePath: string): void {
-  const ext = path.extname(filePath).toLowerCase()
-  const type = EXT_CONTENT_TYPE[ext] || 'application/octet-stream'
-  let stat: fs.Stats
-  try {
-    stat = fs.statSync(filePath)
-  } catch (err) {
-    console.error('media stat failed', filePath, err)
-    res.status(500).json({ error: 'Ошибка чтения файла', code: (err as NodeJS.ErrnoException).code })
-    return
-  }
-  if (!stat.isFile()) {
-    res.status(404).json({ error: 'Файл не найден' })
-    return
-  }
-  res.setHeader('Content-Type', type)
-  res.setHeader('Content-Length', String(stat.size))
-  res.setHeader('Cache-Control', 'public, max-age=86400')
-  const stream = fs.createReadStream(filePath)
-  stream.on('error', (err) => {
-    console.error('media stream failed', filePath, err)
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Ошибка чтения файла', code: (err as NodeJS.ErrnoException).code })
-      return
-    }
-    res.destroy(err)
-  })
-  stream.pipe(res)
-}
-
-/** JSON probe for ops: media volume top-level listing. */
-mediaRouter.get('/_stat', (_req, res) => {
+/** Always-JSON status (no wildcards) — use this to verify deploy. */
+mediaRouter.get('/status', (_req, res) => {
   try {
     ensureMediaDir()
-    const top = fs.readdirSync(MEDIA_DIR).slice(0, 80)
-    res.json({ mediaDir: MEDIA_DIR, top })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'Ошибка', detail: String(err) })
-  }
-})
-
-/** JSON probe for ops: does the file resolve on disk / is it readable? */
-mediaRouter.get('/_stat/*', (req, res) => {
-  try {
-    ensureMediaDir()
-    // path is /_stat/<rel> inside the /media mount
-    const normalized = req.path
-      .replace(/^\/_stat\/?/, '')
-      .replace(/^\/+/, '')
-      .replace(/\\/g, '/')
-    if (!normalized || normalized.includes('..')) {
-      res.status(400).json({ error: 'Недопустимый путь', path: req.path })
+    let top: string[] = []
+    try {
+      top = fs.readdirSync(MEDIA_DIR).slice(0, 40)
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        handler: MEDIA_HANDLER_VERSION,
+        mediaDir: MEDIA_DIR,
+        error: String(err),
+      })
       return
-    }
-    const candidates = mediaRelativePathCandidates(
-      normalized.startsWith('media/') ? normalized : `media/${normalized}`,
-    )
-    const resolved = resolveMediaFileForRequest(normalized)
-    let readable: boolean | null = null
-    let size: number | null = null
-    let readError: string | null = null
-    if (resolved) {
-      try {
-        fs.accessSync(resolved, fs.constants.R_OK)
-        readable = true
-        size = fs.statSync(resolved).size
-      } catch (err) {
-        readable = false
-        readError = (err as NodeJS.ErrnoException).code || String(err)
-      }
     }
     res.json({
+      ok: true,
+      handler: MEDIA_HANDLER_VERSION,
       mediaDir: MEDIA_DIR,
-      requested: normalized,
-      resolved,
-      readable,
-      size,
-      readError,
-      candidates: candidates.map((c) => ({
-        rel: c,
-        abs: path.join(MEDIA_DIR, ...c.split('/')),
-        exists: fs.existsSync(path.join(MEDIA_DIR, ...c.split('/'))),
-        absStripped: c.startsWith('media/')
-          ? path.join(MEDIA_DIR, ...c.slice('media/'.length).split('/'))
-          : null,
-        existsStripped: c.startsWith('media/')
-          ? fs.existsSync(path.join(MEDIA_DIR, ...c.slice('media/'.length).split('/')))
-          : null,
-      })),
+      top,
     })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Ошибка' })
-  }
-})
-
-// Use RegExp so nested paths are taken from req.path (avoids brittle /* splat params).
-mediaRouter.get(/.*/, (req, res, next) => {
-  try {
-    const normalized = req.path.replace(/^\/+/, '').replace(/\\/g, '/')
-    if (
-      !normalized ||
-      normalized === 'manifest/all' ||
-      normalized === '_stat' ||
-      normalized.startsWith('_stat/') ||
-      normalized === 'upload'
-    ) {
-      next()
-      return
-    }
-    if (normalized.includes('..')) {
-      res.status(400).json({ error: 'Недопустимый путь' })
-      return
-    }
-    ensureMediaDir()
-    const filePath = resolveMediaFileForRequest(normalized)
-    if (!filePath) {
-      res.status(404).json({ error: 'Файл не найден', path: normalized })
-      return
-    }
-    sendMediaFile(res, filePath)
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'Ошибка' })
+    res.status(500).json({ ok: false, error: 'Ошибка' })
   }
 })
 
@@ -369,12 +291,14 @@ mediaRouter.delete(
   blockWritesIfClientOutdated,
   async (req: AuthRequest, res) => {
     try {
-      const normalized = req.path.replace(/^\/+/, '').replace(/\\/g, '/')
+      const normalized = mediaRelFromRequest(req)
       if (!normalized || normalized.includes('..')) {
         res.status(400).json({ error: 'Недопустимый путь' })
         return
       }
-      const parsed = parseMediaRelativePath(normalized)
+      const parsed = parseMediaRelativePath(
+        normalized.startsWith('media/') ? normalized : `media/${normalized}`,
+      )
       if (
         parsed.departmentId &&
         !canEditDepartment(req.user!.role, req.user!.departmentId, parsed.departmentId)
@@ -382,7 +306,8 @@ mediaRouter.delete(
         res.status(403).json({ error: 'Редактор может изменять только свой отдел' })
         return
       }
-      const candidates = mediaRelativePathCandidates(normalized)
+      const storageKey = normalized.startsWith('media/') ? normalized : `media/${normalized}`
+      const candidates = mediaRelativePathCandidates(storageKey)
       for (const rel of candidates) {
         const filePath = resolveExistingMediaFile(MEDIA_DIR, rel)
         if (filePath && fs.existsSync(filePath)) {
@@ -402,3 +327,37 @@ mediaRouter.delete(
     }
   },
 )
+
+// File GET last: resolve path from originalUrl.
+mediaRouter.get(/.*/, (req, res, next) => {
+  try {
+    const normalized = mediaRelFromRequest(req)
+    if (
+      !normalized ||
+      normalized === 'manifest/all' ||
+      normalized === 'status' ||
+      normalized === 'upload'
+    ) {
+      next()
+      return
+    }
+    if (normalized.includes('..')) {
+      res.status(400).json({ error: 'Недопустимый путь' })
+      return
+    }
+    ensureMediaDir()
+    const filePath = resolveMediaFileForRequest(normalized)
+    if (!filePath) {
+      res.status(404).json({
+        error: 'Файл не найден',
+        path: normalized,
+        handler: MEDIA_HANDLER_VERSION,
+      })
+      return
+    }
+    sendMediaFile(res, filePath)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Ошибка', handler: MEDIA_HANDLER_VERSION })
+  }
+})

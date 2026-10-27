@@ -43,10 +43,32 @@ async function main(): Promise<void> {
   app.use(express.json({ limit: '10mb' }))
 
   app.get('/health', (_req, res) => {
+    let webIndex = false
+    let webAssets = 0
+    if (WEB_DIST) {
+      try {
+        webIndex = fs.existsSync(path.join(WEB_DIST, 'index.html'))
+        const assetsDir = path.join(WEB_DIST, 'assets')
+        if (fs.existsSync(assetsDir)) {
+          webAssets = fs.readdirSync(assetsDir).length
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    let mediaTop: string[] = []
+    try {
+      mediaTop = fs.readdirSync(MEDIA_DIR).slice(0, 20)
+    } catch {
+      /* ignore */
+    }
     res.json({
       ok: true,
       time: new Date().toISOString(),
       features: { adminDepartments: true },
+      web: { dist: WEB_DIST || null, index: webIndex, assets: webAssets },
+      media: { dir: MEDIA_DIR, top: mediaTop },
+      build: '2026-10-27-webmedia-v3',
     })
   })
 
@@ -60,13 +82,17 @@ async function main(): Promise<void> {
   if (WEB_DIST && fs.existsSync(WEB_DIST)) {
     const indexHtml = path.join(WEB_DIST, 'index.html')
     app.use(express.static(WEB_DIST, { index: false, maxAge: '1h' }))
-    app.get(/^(?!\/(auth|admin|departments|media|sync|app|health)(\/|$)).*/, (req, res, next) => {
-      if (!fs.existsSync(indexHtml)) {
-        next()
-        return
-      }
-      res.sendFile(indexHtml)
-    })
+    // Never fall back to index.html for /assets — missing files must be real 404s.
+    app.get(
+      /^(?!\/(auth|admin|departments|media|sync|app|health|assets)(\/|$)).*/,
+      (req, res, next) => {
+        if (!fs.existsSync(indexHtml)) {
+          next()
+          return
+        }
+        res.sendFile(indexHtml)
+      },
+    )
     console.log(`Serving web SPA from ${WEB_DIST}`)
   }
 

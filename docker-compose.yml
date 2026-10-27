@@ -22,7 +22,9 @@ services:
       retries: 5
 
   api:
-    build: ./server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -40,7 +42,7 @@ services:
     volumes:
       - media_data:/data/media
       - updates_data:/data/updates
-      - ./web/dist:/data/web:ro
+      # Do NOT bind-mount ./web/dist — an empty/outdated host folder hides the SPA baked into the image.
       - ./import:/import:ro
     ports:
       - "3000:3000"

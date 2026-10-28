@@ -6,8 +6,7 @@ import type {
   GuideItem,
   SupportTopicSection,
 } from '../types'
-import { isSupportArchiveSubsectionId } from '../lib/archiveLost'
-import { DEPARTMENTS, supportPartySelectOptions, workDepartmentsFrom } from '../types'
+import { DEPARTMENTS, supportPartySelectOptionsForTopicEditor, workDepartmentsFrom } from '../types'
 import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
   filterTopicsForClientLinkPicker,
@@ -24,11 +23,16 @@ import {
 import {
   SUBSECTION_NONE_OPTION_LABEL,
   SUBSECTION_NONE_SELECT_VALUE,
-  editorArchiveSectionActive,
+  defaultDeptSectionIdForNewRootTopic,
+  defaultSectionFieldsForArchivedRootTopic,
+  defaultSubsectionSelectForNewRootTopic,
+  departmentHasRootTopicSections,
   editorPartyForSave,
   editorPartySelectValue,
   editorSubsectionsForDepartment,
+  firstSupportSubsectionIdForParty,
   isEditableRootTopic,
+  showSubsectionNoneSelectOption,
   rootTopicSubsectionPayloadForSave,
   rootSubsectionSelectValueFromTopic,
   validateRootTopicSectionAssignment,
@@ -151,7 +155,6 @@ export function TopicEditorModal({
   )
 
   const topicArchived = mode === 'edit' && Boolean(initial?.archived)
-  const archiveSection = editorArchiveSectionActive(targetDept, topicArchived, party)
 
   const editorDeptSectionId = useMemo(() => {
     if (showParty) return null
@@ -163,10 +166,9 @@ export function TopicEditorModal({
   const targetDeptSubsections = useMemo(
     () =>
       editorSubsectionsForDepartment(subsections, targetDept, party, {
-        archiveSection,
         deptSectionId: showParty ? null : editorDeptSectionId,
       }),
-    [subsections, targetDept, party, archiveSection, showParty, editorDeptSectionId],
+    [subsections, targetDept, party, showParty, editorDeptSectionId],
   )
 
   const showPartyPicker = showParty && isRootTopic
@@ -189,14 +191,27 @@ export function TopicEditorModal({
     !showParty && isRootTopic && !deptHasNestedLayout && targetDeptSubsections.length > 0
   const showNestedSubsectionPicker =
     !showParty && isRootTopic && deptHasNestedLayout && nestedUnderEditorSection.length > 0
-  const deptHasNestedSubsections = deptHasNestedLayout
-  const showSubsectionOptionalNone =
-    archiveSection ||
-    showParty ||
-    (deptHasNestedSubsections && isRootTopic && Boolean(editorDeptSectionId))
+  const noneOptionForSupportSubsection = showSubsectionNoneSelectOption({
+    departmentId: 'support',
+    subsections,
+    nestedSubsectionPicker: true,
+    party,
+  })
+  const noneOptionForFlatSection = showSubsectionNoneSelectOption({
+    departmentId: targetDept,
+    subsections,
+    nestedSubsectionPicker: false,
+    party,
+  })
+  const noneOptionForNestedSubsection = showSubsectionNoneSelectOption({
+    departmentId: targetDept,
+    subsections,
+    nestedSubsectionPicker: true,
+    party,
+  })
 
   const partySelectOptions = useMemo(
-    () => supportPartySelectOptions(supportSections, party),
+    () => supportPartySelectOptionsForTopicEditor(supportSections, party),
     [supportSections, party],
   )
 
@@ -218,48 +233,69 @@ export function TopicEditorModal({
     setQuestion(initial?.question ?? '')
     setAnswer(markdownForEdit(initial?.answer ?? ''))
     setTargetDept(departmentId)
-    const initialPartySelect =
-      mode === 'edit' && initial
-        ? editorPartySelectValue(departmentId, initial, defaultParty)
-        : defaultParty
-    const initialArchiveSection = editorArchiveSectionActive(
+    const initialPartySelect = editorPartySelectValue(
       departmentId,
-      Boolean(initial?.archived),
-      initialPartySelect,
+      mode === 'edit' ? initial : null,
+      defaultParty,
     )
-    const restoreFromArchive =
+    const archivedRoot =
       mode === 'edit' &&
-      initial?.archived &&
-      initial.parent_id == null &&
-      isSupportArchiveSubsectionId(initial.subsection_id)
-    const nextDeptSection = restoreFromArchive
-      ? ''
-      : defaultDeptSectionId?.trim() ||
-        (mode === 'edit' && initial
-          ? deptSectionIdForTopicSubsection(initial.subsection_id, subsections) ?? ''
-          : '')
+      Boolean(initial?.archived) &&
+      initial?.parent_id == null
+    const nextDeptSection =
+      mode === 'add'
+        ? defaultDeptSectionIdForNewRootTopic(
+            subsections,
+            departmentId,
+            defaultDeptSectionId,
+          )
+        : archivedRoot
+          ? defaultSectionFieldsForArchivedRootTopic(
+              departmentId,
+              subsections,
+              initialPartySelect,
+              defaultDeptSectionId,
+            ).deptSectionId
+          : defaultDeptSectionId?.trim() ||
+            (initial
+              ? deptSectionIdForTopicSubsection(initial.subsection_id, subsections) ?? ''
+              : '')
     setDeptSectionId(nextDeptSection)
     const subsForDept = editorSubsectionsForDepartment(
       subsections,
       departmentId,
       mode === 'edit' && initial ? getItemParty(initial) : defaultParty,
-      { archiveSection: initialArchiveSection, deptSectionId: nextDeptSection || null },
+      { deptSectionId: nextDeptSection || null },
     )
     const initialSub =
-      restoreFromArchive
-        ? SUBSECTION_NONE_SELECT_VALUE
-        : mode === 'edit' && initial
-          ? rootSubsectionSelectValueFromTopic(initial.subsection_id, subsForDept, {
-              deptSectionId: nextDeptSection || null,
-            })
-          : defaultSubsectionId
-          ? rootSubsectionSelectValueFromTopic(defaultSubsectionId, subsForDept, {
-              deptSectionId: nextDeptSection || null,
-            })
-          : defaultDeptSectionId &&
-              !departmentHasNestedSubsections(subsections, departmentId)
-            ? defaultDeptSectionId
-            : SUBSECTION_NONE_SELECT_VALUE
+      mode === 'add'
+        ? defaultSubsectionSelectForNewRootTopic(
+            departmentId,
+            subsections,
+            nextDeptSection || null,
+            initialPartySelect,
+          )
+        : archivedRoot
+          ? defaultSectionFieldsForArchivedRootTopic(
+              departmentId,
+              subsections,
+              initialPartySelect,
+              defaultDeptSectionId,
+            ).subsectionSelectValue
+          : initial
+            ? rootSubsectionSelectValueFromTopic(initial.subsection_id, subsForDept, {
+                deptSectionId: nextDeptSection || null,
+              })
+            : defaultSubsectionId
+              ? rootSubsectionSelectValueFromTopic(defaultSubsectionId, subsForDept, {
+                  deptSectionId: nextDeptSection || null,
+                })
+              : defaultSubsectionSelectForNewRootTopic(
+                  departmentId,
+                  subsections,
+                  nextDeptSection || null,
+                  initialPartySelect,
+                )
     setTargetSubsectionId(initialSub)
     const initialParent =
       mode === 'edit' ? (initial?.parent_id ?? null) : parentId
@@ -311,7 +347,8 @@ export function TopicEditorModal({
     setParty(next)
     setAttachParent(false)
     setSelectedParentId(null)
-    setTargetSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
+    const firstSub = firstSupportSubsectionIdForParty(subsections, next)
+    setTargetSubsectionId(firstSub ?? SUBSECTION_NONE_SELECT_VALUE)
     if (next !== 'additional') {
       setAttachClientLink(false)
       setSelectedClientTopicId(null)
@@ -465,7 +502,6 @@ export function TopicEditorModal({
       isRootTopic,
       showParty,
       party,
-      archiveSection,
       subsectionSelectValue: targetSubsectionId,
       deptSectionSelectValue: deptSectionId,
       defaultDeptSectionId,
@@ -555,7 +591,16 @@ export function TopicEditorModal({
                 onChange={(e) => {
                   const next = e.target.value as DepartmentId
                   setTargetDept(next)
-                  setTargetSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
+                  const nextSection = defaultDeptSectionIdForNewRootTopic(subsections, next)
+                  setDeptSectionId(nextSection)
+                  setTargetSubsectionId(
+                    defaultSubsectionSelectForNewRootTopic(
+                      next,
+                      subsections,
+                      nextSection || null,
+                      party,
+                    ),
+                  )
                   if (next !== 'support') {
                     setSelectedParentId(null)
                     setAttachParent(false)
@@ -595,13 +640,24 @@ export function TopicEditorModal({
                 value={deptSectionId}
                 required
                 onChange={(e) => {
-                  setDeptSectionId(e.target.value)
-                  setTargetSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
+                  const nextSection = e.target.value
+                  setDeptSectionId(nextSection)
+                  setTargetSubsectionId(
+                    defaultSubsectionSelectForNewRootTopic(
+                      targetDept,
+                      subsections,
+                      nextSection,
+                      party,
+                    ),
+                  )
                 }}
               >
-                <option value="" disabled>
-                  Выберите раздел
-                </option>
+                {!deptSectionId.trim() &&
+                !departmentHasRootTopicSections(targetDept, subsections) ? (
+                  <option value="" disabled>
+                    Выберите раздел
+                  </option>
+                ) : null}
                 {deptSectionOptions.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
@@ -622,22 +678,26 @@ export function TopicEditorModal({
               </span>
               <select
                 value={targetSubsectionId}
-                required={
-                  !showParty &&
-                  !deptHasNestedLayout &&
-                  !showNestedSubsectionPicker
-                }
+                required
                 onChange={(e) => setTargetSubsectionId(e.target.value)}
               >
-                {showSubsectionOptionalNone ? (
+                {(showParty
+                  ? noneOptionForSupportSubsection ||
+                    (mode === 'edit' && !targetSubsectionId.trim())
+                  : showNestedSubsectionPicker
+                    ? noneOptionForNestedSubsection ||
+                      (mode === 'edit' &&
+                        targetSubsectionId === SUBSECTION_NONE_SELECT_VALUE)
+                    : noneOptionForFlatSection ||
+                      (mode === 'edit' && !targetSubsectionId.trim())) ? (
                   <option value={SUBSECTION_NONE_SELECT_VALUE}>
                     {SUBSECTION_NONE_OPTION_LABEL}
                   </option>
-                ) : (
+                ) : !targetSubsectionId.trim() ? (
                   <option value="" disabled>
                     {showNestedSubsectionPicker ? 'Выберите подраздел' : 'Выберите раздел'}
                   </option>
-                )}
+                ) : null}
                 {(showNestedSubsectionPicker
                   ? nestedUnderEditorSection
                   : targetDeptSubsections

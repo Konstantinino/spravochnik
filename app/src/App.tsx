@@ -26,8 +26,10 @@ import {
   topicMatchesDeptSection,
 } from './lib/deptTopicSections'
 import {
+  defaultDeptSectionIdForNewRootTopic,
   deptSectionListFilterForSubsection,
   shouldUnarchiveRootTopicOnSectionSave,
+  topicItemPatchForArchiveToggle,
 } from './lib/topicSectionPickers'
 import {
   installInputFocusGuard,
@@ -1020,23 +1022,38 @@ export default function App() {
     pinSelectedTopic(topicId)
     try {
       const wasArchived = Boolean(selected.archived)
+      const archivePatch = topicItemPatchForArchiveToggle(
+        departmentId,
+        selected,
+        subsections,
+        nextArchived,
+      )
       const data = await window.spravochnik.updateItem({
         departmentId,
         item: {
           ...selected,
-          archived: nextArchived,
-          ...(wasArchived && !nextArchived ? { subsection_id: null } : {}),
+          question: selected.question,
+          answer: selected.answer,
+          ...archivePatch,
         },
         promoteChildren: scope === 'topic' && nextArchived,
       })
       setGuide(data)
       pinSelectedTopic(topicId)
+      const updated = getItems(data).find((i) => Number(i.id) === Number(topicId))
       if (nextArchived && listFilter !== 'archive') {
         setSelectedId(null)
         setNavHistory([])
-      } else if (!nextArchived && wasArchived && listFilter === 'archive') {
-        setListFilter('all')
-        if (user) saveListFilter(user.id, departmentId, 'all')
+      } else if (!nextArchived && wasArchived) {
+        if (listFilter === 'archive') {
+          setListFilter('all')
+          if (user) saveListFilter(user.id, departmentId, 'all')
+        }
+        if (departmentId === 'support' && updated?.party) {
+          syncListFilterAfterPartySave(getItemParty(updated))
+        } else if (departmentId !== 'support' && updated) {
+          syncListFilterAfterDeptSectionSave(updated.subsection_id)
+        }
       }
     } catch (e) {
       releasePinnedTopic(topicId)
@@ -1164,11 +1181,14 @@ export default function App() {
     return nested.length > 0 ? undefined : listFilter
   })()
 
-  const editorDefaultDeptSectionId =
-    departmentId !== 'support' &&
-    isDeptTopLevelSectionFilter(listFilter, departmentId, subsections)
+  const editorDefaultDeptSectionId = (() => {
+    if (departmentId === 'support') return undefined
+    const fromFilter = isDeptTopLevelSectionFilter(listFilter, departmentId, subsections)
       ? listFilter
       : undefined
+    const id = defaultDeptSectionIdForNewRootTopic(subsections, departmentId, fromFilter)
+    return id || undefined
+  })()
 
   return (
     <div

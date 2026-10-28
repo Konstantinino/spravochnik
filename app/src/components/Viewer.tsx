@@ -12,12 +12,10 @@ import type {
 import {
   departmentHasNestedSubsections,
   deptNestedSubsections,
-  deptSectionIdForTopicSubsection,
   deptTopLevelSections,
   isDeptTopLevelSectionFilter,
 } from '../lib/deptTopicSections'
-import { isSupportArchiveSubsectionId } from '../lib/archiveLost'
-import { supportPartySelectOptions } from '../types'
+import { supportPartySelectOptionsForTopicEditor } from '../types'
 import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
   filterTopicsForClientLinkPicker,
@@ -61,13 +59,15 @@ import {
 import {
   SUBSECTION_NONE_OPTION_LABEL,
   SUBSECTION_NONE_SELECT_VALUE,
-  editorArchiveSectionActive,
+  defaultSubsectionSelectForNewRootTopic,
+  departmentHasRootTopicSections,
+  firstSupportSubsectionIdForParty,
+  showSubsectionNoneSelectOption,
   editorPartyForSave,
-  editorPartySelectValue,
   editorSubsectionsForDepartment,
   isEditableRootTopic,
+  rootTopicEditorFieldsFromGuideItem,
   rootTopicSubsectionPayloadForSave,
-  rootSubsectionSelectValueFromTopic,
   validateRootTopicSectionAssignment,
 } from '../lib/topicSectionPickers'
 import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
@@ -347,35 +347,15 @@ export function Viewer({
     const linkedClient = item.client_topic_id ?? null
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
-    setParty(editorPartySelectValue(departmentId, item))
-    const restoreFromArchive =
-      item.archived &&
-      item.parent_id == null &&
-      isSupportArchiveSubsectionId(item.subsection_id)
-    const nextDeptSection = restoreFromArchive
-      ? ''
-      : isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
-        ? sidebarListFilter
-        : deptSectionIdForTopicSubsection(item.subsection_id, subsections) ?? ''
-    setDeptSectionId(nextDeptSection)
-    const archiveSection = editorArchiveSectionActive(
+    const sectionFields = rootTopicEditorFieldsFromGuideItem(
       departmentId,
-      Boolean(item.archived),
-      editorPartySelectValue(departmentId, item),
-    )
-    const subs = editorSubsectionsForDepartment(
       subsections,
-      departmentId,
-      getItemParty(item),
-      { archiveSection, deptSectionId: nextDeptSection || null },
+      item,
+      sidebarListFilter,
     )
-    setSubsectionId(
-      restoreFromArchive
-        ? SUBSECTION_NONE_SELECT_VALUE
-        : rootSubsectionSelectValueFromTopic(item.subsection_id, subs, {
-            deptSectionId: nextDeptSection || null,
-          }),
-    )
+    setParty(sectionFields.party)
+    setDeptSectionId(sectionFields.deptSectionId)
+    setSubsectionId(sectionFields.subsectionSelectValue)
   }, [
     editing,
     item?.id,
@@ -419,35 +399,15 @@ export function Viewer({
     const linkedClient = item.client_topic_id ?? null
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
-    setParty(editorPartySelectValue(departmentId, item))
-    const restoreFromArchive =
-      item.archived &&
-      item.parent_id == null &&
-      isSupportArchiveSubsectionId(item.subsection_id)
-    const nextDeptSection = restoreFromArchive
-      ? ''
-      : isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
-        ? sidebarListFilter
-        : deptSectionIdForTopicSubsection(item.subsection_id, subsections) ?? ''
-    setDeptSectionId(nextDeptSection)
-    const archiveSection = editorArchiveSectionActive(
+    const sectionFields = rootTopicEditorFieldsFromGuideItem(
       departmentId,
-      Boolean(item.archived),
-      editorPartySelectValue(departmentId, item),
-    )
-    const subs = editorSubsectionsForDepartment(
       subsections,
-      departmentId,
-      getItemParty(item),
-      { archiveSection, deptSectionId: nextDeptSection || null },
+      item,
+      sidebarListFilter,
     )
-    setSubsectionId(
-      restoreFromArchive
-        ? SUBSECTION_NONE_SELECT_VALUE
-        : rootSubsectionSelectValueFromTopic(item.subsection_id, subs, {
-            deptSectionId: nextDeptSection || null,
-          }),
-    )
+    setParty(sectionFields.party)
+    setDeptSectionId(sectionFields.deptSectionId)
+    setSubsectionId(sectionFields.subsectionSelectValue)
     onEditStart?.(structuredClone(item))
     setEditing(true)
     onStartEditRequestHandled?.()
@@ -483,12 +443,6 @@ export function Viewer({
     item?.parent_id ?? null,
   )
 
-  const archiveSection = editorArchiveSectionActive(
-    departmentId,
-    Boolean(item?.archived),
-    party,
-  )
-
   const editorDeptSectionId = useMemo(() => {
     if (showParty) return null
     if (isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)) {
@@ -501,10 +455,9 @@ export function Viewer({
   const targetDeptSubsections = useMemo(
     () =>
       editorSubsectionsForDepartment(subsections, departmentId, party, {
-        archiveSection,
         deptSectionId: editorDeptSectionId,
       }),
-    [subsections, departmentId, party, archiveSection, editorDeptSectionId],
+    [subsections, departmentId, party, editorDeptSectionId],
   )
 
   const topicArchived = Boolean(item?.archived)
@@ -530,13 +483,27 @@ export function Viewer({
     !showParty && isRootTopic && deptHasNestedLayout && nestedUnderEditorSection.length > 0
   const showSupportSubsectionPicker =
     showParty && isRootTopic && targetDeptSubsections.length > 0
-  const showSubsectionOptionalNone =
-    archiveSection ||
-    showParty ||
-    (deptHasNestedLayout && isRootTopic && Boolean(editorDeptSectionId))
+  const noneOptionForSupportSubsection = showSubsectionNoneSelectOption({
+    departmentId: 'support',
+    subsections,
+    nestedSubsectionPicker: true,
+    party,
+  })
+  const noneOptionForFlatSection = showSubsectionNoneSelectOption({
+    departmentId,
+    subsections,
+    nestedSubsectionPicker: false,
+    party,
+  })
+  const noneOptionForNestedSubsection = showSubsectionNoneSelectOption({
+    departmentId,
+    subsections,
+    nestedSubsectionPicker: true,
+    party,
+  })
 
   const partySelectOptions = useMemo(
-    () => supportPartySelectOptions(supportSections, party),
+    () => supportPartySelectOptionsForTopicEditor(supportSections, party),
     [supportSections, party],
   )
 
@@ -544,7 +511,8 @@ export function Viewer({
     setParty(next)
     setAttachParent(false)
     setParentId(null)
-    setSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
+    const firstSub = firstSupportSubsectionIdForParty(subsections, next)
+    setSubsectionId(firstSub ?? SUBSECTION_NONE_SELECT_VALUE)
     if (next !== 'additional') {
       setAttachClientLink(false)
       setClientTopicId(null)
@@ -634,7 +602,15 @@ export function Viewer({
     setAnswer(markdownForEdit(item.answer ?? ''))
     setParentId(item.parent_id ?? null)
     setAttachParent(item.parent_id != null)
-    setParty(getItemParty(item))
+    const sectionFields = rootTopicEditorFieldsFromGuideItem(
+      departmentId,
+      subsections,
+      item,
+      sidebarListFilter,
+    )
+    setParty(sectionFields.party)
+    setDeptSectionId(sectionFields.deptSectionId)
+    setSubsectionId(sectionFields.subsectionSelectValue)
     setError(null)
   }
 
@@ -739,7 +715,6 @@ export function Viewer({
       isRootTopic,
       showParty,
       party,
-      archiveSection,
       subsectionSelectValue: subsectionId,
       deptSectionSelectValue: deptSectionId,
       defaultDeptSectionId,
@@ -1417,13 +1392,24 @@ export function Viewer({
                 value={deptSectionId}
                 required
                 onChange={(e) => {
-                  setDeptSectionId(e.target.value)
-                  setSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
+                  const nextSection = e.target.value
+                  setDeptSectionId(nextSection)
+                  setSubsectionId(
+                    defaultSubsectionSelectForNewRootTopic(
+                      departmentId,
+                      subsections,
+                      nextSection,
+                      party,
+                    ),
+                  )
                 }}
               >
-                <option value="" disabled>
-                  Выберите раздел
-                </option>
+                {!deptSectionId.trim() &&
+                !departmentHasRootTopicSections(departmentId, subsections) ? (
+                  <option value="" disabled>
+                    Выберите раздел
+                  </option>
+                ) : null}
                 {deptSectionOptions.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
@@ -1443,22 +1429,25 @@ export function Viewer({
               </span>
               <select
                 value={subsectionId}
-                required={
-                  !showParty &&
-                  !deptHasNestedLayout &&
-                  !showNestedSubsectionPicker
-                }
+                required
                 onChange={(e) => setSubsectionId(e.target.value)}
               >
-                {showSubsectionOptionalNone ? (
+                {(showSupportSubsectionPicker
+                  ? noneOptionForSupportSubsection ||
+                    !subsectionId.trim()
+                  : showNestedSubsectionPicker
+                    ? noneOptionForNestedSubsection ||
+                      subsectionId === SUBSECTION_NONE_SELECT_VALUE
+                    : noneOptionForFlatSection ||
+                      !subsectionId.trim()) ? (
                   <option value={SUBSECTION_NONE_SELECT_VALUE}>
                     {SUBSECTION_NONE_OPTION_LABEL}
                   </option>
-                ) : (
+                ) : !subsectionId.trim() ? (
                   <option value="" disabled>
                     {showNestedSubsectionPicker ? 'Выберите подраздел' : 'Выберите раздел'}
                   </option>
-                )}
+                ) : null}
                 {(showNestedSubsectionPicker
                   ? nestedUnderEditorSection
                   : targetDeptSubsections

@@ -394,13 +394,23 @@ export function supportPartySelectOptions(
   const ids = new Set(sorted.map((s) => s.id))
   const extra = typeof currentPartyId === 'string' ? currentPartyId.trim() : ''
   const out = sorted.map(({ id, label }) => ({ id, label }))
-  if (extra && !ids.has(extra)) {
-    out.push({ id: extra, label: extra })
+  if (extra && !ids.has(extra) && isSupportParty(extra)) {
+    out.push({ id: extra, label: SUPPORT_PARTY_LABELS[extra] })
   }
   if (options?.includeArchive && !out.some((o) => o.id === 'archive')) {
     out.push({ id: 'archive', label: TOPIC_VIEW_FILTER_LABELS.archive })
   }
   return out
+}
+
+/** Разделы support в редакторе тем — без псевдо-фильтра «Архив». */
+export function supportPartySelectOptionsForTopicEditor(
+  sections: SupportTopicSection[],
+  currentPartyId?: string | null,
+): Array<{ id: string; label: string }> {
+  return supportPartySelectOptions(sections, currentPartyId).filter(
+    (o) => o.id !== 'archive',
+  )
 }
 
 export interface AdminDepartment {

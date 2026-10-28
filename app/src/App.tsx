@@ -1257,6 +1257,7 @@ export default function App() {
                 onSelect={selectTopicFromSidebar}
                 searchFilter={searchFilter}
                 subsections={currentSubsections}
+                departmentId={departmentId}
                 supportDept={departmentId === 'support'}
                 supportListFilter={listFilter}
                 supportSections={supportSections}

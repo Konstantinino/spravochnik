@@ -157,6 +157,8 @@ import {
   moveGuideTopicsToArchiveLost,
 } from '../src/lib/archiveLost'
 import { applyDeptArchiveSubsectionToRow } from '../src/lib/departmentArchive'
+import { backfillTopicPartyInList } from '../src/lib/backfillTopicParty'
+import type { GuideItem } from '../src/types'
 import {
   createSupportSectionOnServer,
   deleteSupportSectionOnServer,
@@ -2034,19 +2036,18 @@ function registerIpc(): void {
     const dept = departmentById(departmentId)
     const data = readGuideFile(dept.fileName) as Record<string, unknown>
     const listKey = dept.listKey
-    const list = (data[listKey] as Array<{
-      id: number
-      parent_id?: number | null
-      has_children?: boolean
-      archived?: boolean
-    }>) ?? []
-    const reconciled = reconcileHasChildren(list)
-    const changed = reconciled.some(
+    let list = (data[listKey] as GuideItem[]) ?? []
+    const subs = getSubsectionsForDepartment(departmentId)
+    const partyChanged = backfillTopicPartyInList(list, departmentId, subs)
+    const reconciled = reconcileHasChildren(list) as GuideItem[]
+    const childrenChanged = reconciled.some(
       (item, index) => item.has_children !== list[index]?.has_children,
     )
-    if (changed) {
-      data[listKey] = reconciled
+    if (partyChanged || childrenChanged) {
+      list = reconciled
+      data[listKey] = list
       writeGuideFile(dept.fileName, data)
+      if (partyChanged) markLocalChange()
     }
     return data
   })

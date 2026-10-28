@@ -118,9 +118,10 @@ interface TopicListProps {
   onSelect: (id: number) => void
   searchFilter: TopicSearchFilter | null
   subsections?: DepartmentSubsection[]
-  /** Support + «Все»: group root topics under party section headings */
+  departmentId?: string
+  /** «Все»: группировка корней по разделу (party) */
   groupRootsByParty?: boolean
-  /** Отдел «Тех. поддержка» — разделы = party, подразделы = subsections.party */
+  /** Отдел «Тех. поддержка» — разделы из support_topic_sections */
   supportDept?: boolean
   supportListFilter?: TopicViewFilter
   supportSections?: SupportTopicSection[]
@@ -507,6 +508,7 @@ export function TopicList({
   onSelect,
   searchFilter,
   subsections = [],
+  departmentId: departmentIdProp,
   groupRootsByParty = false,
   supportDept = false,
   supportListFilter = 'all',
@@ -711,6 +713,15 @@ export function TopicList({
     })
   }
 
+  const listDepartmentId =
+    departmentIdProp ??
+    (supportDept ? 'support' : (subsections.find((s) => s.departmentId)?.departmentId ?? ''))
+
+  const partyContext = useCallback(
+    () => ({ departmentId: listDepartmentId, subsections }),
+    [listDepartmentId, subsections],
+  )
+
   const canDropOnTarget = useCallback(
     (draggedId: number, targetId: number): boolean => {
       if (draggedId === targetId) return false
@@ -719,17 +730,17 @@ export function TopicList({
       if (!dragged || !target) return false
       if ((dragged.parent_id ?? null) !== (target.parent_id ?? null)) return false
       if (rootReorderSameParty && (dragged.parent_id ?? null) === null) {
-        if (supportDept) {
-          return getItemParty(dragged) === getItemParty(target)
-        }
+        const ctx = partyContext()
         return (
-          deptReorderSectionKey(dragged, subsections) ===
-          deptReorderSectionKey(target, subsections)
+          getItemParty(dragged, ctx) === getItemParty(target, ctx) ||
+          (!getItemParty(dragged, ctx) &&
+            deptReorderSectionKey(dragged, subsections) ===
+              deptReorderSectionKey(target, subsections))
         )
       }
       return true
     },
-    [rootReorderSameParty, items],
+    [rootReorderSameParty, items, partyContext, subsections],
   )
 
   const handleDropOnItem = useCallback(
@@ -885,36 +896,51 @@ export function TopicList({
   }
 
   function sectionLabel(sectionId: string): string {
+    const fromSupport = supportSections.find((s) => s.id === sectionId)?.label
+    if (fromSupport) return fromSupport
+    const fromDept = subsections.find((s) => s.id === sectionId)?.label
+    if (fromDept) return fromDept
     return (
-      supportSections.find((s) => s.id === sectionId)?.label ??
-      SUPPORT_PARTY_LABELS[sectionId as keyof typeof SUPPORT_PARTY_LABELS] ??
-      sectionId
+      SUPPORT_PARTY_LABELS[sectionId as keyof typeof SUPPORT_PARTY_LABELS] ?? sectionId
     )
   }
 
   function isPartySectionFilter(value: TopicViewFilter): value is string {
     if (value === 'all' || value === 'archive') return false
-    if (isSupportParty(value)) return true
-    return supportSections.some((s) => s.id === value)
+    if (supportDept) {
+      if (isSupportParty(value)) return true
+      return supportSections.some((s) => s.id === value)
+    }
+    return deptTopLevelSections(subsections, listDepartmentId).some((s) => s.id === value)
   }
 
-  function renderSupportAllLayout() {
-    const sections =
-      supportSections.length > 0
-        ? supportSections
-        : (['supplier', 'customer', 'errors', 'additional'] as SupportParty[]).map((id) => ({
-            id,
-            label: sectionLabel(id),
-            sortOrder: 0,
-          }))
+  function renderPartyAllLayout() {
+    const deptId = listDepartmentId
+    const ctx = partyContext()
+    const sections: Array<{ id: string; label: string }> = supportDept
+      ? (supportSections.length > 0
+          ? supportSections
+          : (['supplier', 'customer', 'errors', 'additional'] as SupportParty[]).map(
+              (id) => ({ id, label: sectionLabel(id) }),
+            ))
+      : deptTopLevelSections(subsections, deptId).map((s) => ({
+          id: s.id,
+          label: s.label,
+        }))
     return sections.map((section) => {
       const party = section.id
-      const partyRoots = roots.filter((item) => getItemParty(item) === party)
-      const partySubs = subsectionsForPartyScope(subsections, party as SupportParty)
+      const partyRoots = roots.filter((item) => getItemParty(item, ctx) === party)
+      const partySubs = supportDept
+        ? subsectionsForPartyScope(subsections, party as SupportParty)
+        : sortSubsections(deptNestedSubsections(subsections, deptId, party))
       if (partyRoots.length === 0 && partySubs.length === 0) return null
       return (
         <li key={party} className="topic-party-section">
-          <div className="topic-party-section__heading">{section.label}</div>
+          {supportDept ? (
+            <div className="topic-party-section__heading">{section.label}</div>
+          ) : (
+            <DeptSectionHeading label={section.label} />
+          )}
           <ul className="topic-party-section__list">
             {partySubs.length > 0
               ? renderSubsectionBlocks(partyRoots, partySubs)
@@ -925,45 +951,15 @@ export function TopicList({
     })
   }
 
-  function renderSupportSinglePartyLayout(party: string) {
-    const partySubs = subsectionsForPartyScope(subsections, party)
+  function renderSinglePartyLayout(party: string) {
+    const deptId = listDepartmentId
+    const partySubs = supportDept
+      ? subsectionsForPartyScope(subsections, party)
+      : sortSubsections(deptNestedSubsections(subsections, deptId, party))
     if (partySubs.length > 0) {
       return renderSubsectionBlocks(roots, partySubs)
     }
     return roots.map((item) => renderTreeNode(item, treeNodeProps))
-  }
-
-  function renderDeptAllLayout() {
-    const deptId = subsections.find((s) => s.departmentId)?.departmentId ?? ''
-    const sections = deptLevelSubsections(subsections, deptId)
-    if (sections.length === 0) {
-      return roots.map((item) => renderTreeNode(item, treeNodeProps))
-    }
-    const unassigned = roots.filter(
-      (item) =>
-        !sections.some((sec) => topicMatchesDeptSection(item, sec.id, subsections)),
-    )
-    return [
-      ...unassigned.map((item) => renderTreeNode(item, treeNodeProps)),
-      ...sections.map((section) => {
-        const sectionRoots = roots.filter((item) =>
-          topicMatchesDeptSection(item, section.id, subsections),
-        )
-        const nestedSubs = sortSubsections(
-          deptNestedSubsections(subsections, deptId, section.id),
-        )
-        return (
-          <li key={section.id} className="topic-party-section">
-            <DeptSectionHeading label={section.label} />
-            <ul className="topic-party-section__list">
-              {nestedSubs.length > 0
-                ? renderSubsectionBlocks(sectionRoots, nestedSubs)
-                : sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))}
-            </ul>
-          </li>
-        )
-      }),
-    ]
   }
 
   function renderDeptSingleSectionLayout(sectionId: string) {
@@ -976,14 +972,11 @@ export function TopicList({
   }
 
   function renderSidebarRoots() {
-    if (supportDept && groupRootsByParty) {
-      return renderSupportAllLayout()
+    if (groupRootsByParty) {
+      return renderPartyAllLayout()
     }
-    if (!supportDept && groupRootsByParty) {
-      return renderDeptAllLayout()
-    }
-    if (supportDept && isPartySectionFilter(supportListFilter)) {
-      return renderSupportSinglePartyLayout(supportListFilter)
+    if (isPartySectionFilter(supportListFilter)) {
+      return renderSinglePartyLayout(supportListFilter)
     }
     if (
       !supportDept &&
@@ -992,9 +985,7 @@ export function TopicList({
       return renderDeptSingleSectionLayout(supportListFilter)
     }
     if (supportListFilter === 'archive') {
-      const deptId = supportDept
-        ? 'support'
-        : (subsections.find((s) => s.departmentId)?.departmentId ?? '')
+      const deptId = listDepartmentId
       const archiveSubs = sortSubsections(
         subsections.filter(
           (s) =>
@@ -1007,8 +998,8 @@ export function TopicList({
       if (archiveSubs.length > 0) {
         return renderSubsectionBlocks(roots, archiveSubs)
       }
-      if (!supportDept && deptId) {
-        return renderDeptAllLayout()
+      if (deptId && groupRootsByParty) {
+        return renderPartyAllLayout()
       }
       return roots.map((item) => renderTreeNode(item, treeNodeProps))
     }

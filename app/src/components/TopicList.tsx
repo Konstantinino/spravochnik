@@ -18,6 +18,7 @@ import {
 import type { TopicSearchFilter } from '../lib/search'
 import {
   deptNestedSubsections,
+  deptReorderSectionKey,
   deptTopLevelSections,
   topicMatchesDeptSection,
 } from '../lib/deptTopicSections'
@@ -718,7 +719,13 @@ export function TopicList({
       if (!dragged || !target) return false
       if ((dragged.parent_id ?? null) !== (target.parent_id ?? null)) return false
       if (rootReorderSameParty && (dragged.parent_id ?? null) === null) {
-        return getItemParty(dragged) === getItemParty(target)
+        if (supportDept) {
+          return getItemParty(dragged) === getItemParty(target)
+        }
+        return (
+          deptReorderSectionKey(dragged, subsections) ===
+          deptReorderSectionKey(target, subsections)
+        )
       }
       return true
     },
@@ -938,27 +945,24 @@ export function TopicList({
     )
     return [
       ...unassigned.map((item) => renderTreeNode(item, treeNodeProps)),
-      ...sections
-        .map((section) => {
-          const sectionRoots = roots.filter((item) =>
-            topicMatchesDeptSection(item, section.id, subsections),
-          )
-          if (sectionRoots.length === 0) return null
-          const nestedSubs = sortSubsections(
-            deptNestedSubsections(subsections, deptId, section.id),
-          )
-          return (
-            <li key={section.id} className="topic-party-section">
-              <DeptSectionHeading label={section.label} />
-              <ul className="topic-party-section__list">
-                {nestedSubs.length > 0
-                  ? renderSubsectionBlocks(sectionRoots, nestedSubs)
-                  : sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))}
-              </ul>
-            </li>
-          )
-        })
-        .filter(Boolean),
+      ...sections.map((section) => {
+        const sectionRoots = roots.filter((item) =>
+          topicMatchesDeptSection(item, section.id, subsections),
+        )
+        const nestedSubs = sortSubsections(
+          deptNestedSubsections(subsections, deptId, section.id),
+        )
+        return (
+          <li key={section.id} className="topic-party-section">
+            <DeptSectionHeading label={section.label} />
+            <ul className="topic-party-section__list">
+              {nestedSubs.length > 0
+                ? renderSubsectionBlocks(sectionRoots, nestedSubs)
+                : sectionRoots.map((item) => renderTreeNode(item, treeNodeProps))}
+            </ul>
+          </li>
+        )
+      }),
     ]
   }
 
@@ -987,11 +991,14 @@ export function TopicList({
     ) {
       return renderDeptSingleSectionLayout(supportListFilter)
     }
-    if (supportDept && supportListFilter === 'archive') {
+    if (supportListFilter === 'archive') {
+      const deptId = supportDept
+        ? 'support'
+        : (subsections.find((s) => s.departmentId)?.departmentId ?? '')
       const archiveSubs = sortSubsections(
         subsections.filter(
           (s) =>
-            s.departmentId === 'support' &&
+            s.departmentId === deptId &&
             (s.isArchiveLost ||
               s.isArchiveArchived ||
               roots.some((r) => r.subsection_id === s.id)),
@@ -999,6 +1006,9 @@ export function TopicList({
       )
       if (archiveSubs.length > 0) {
         return renderSubsectionBlocks(roots, archiveSubs)
+      }
+      if (!supportDept && deptId) {
+        return renderDeptAllLayout()
       }
       return roots.map((item) => renderTreeNode(item, treeNodeProps))
     }

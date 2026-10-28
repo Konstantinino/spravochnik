@@ -20,7 +20,12 @@ import {
   rootReorderRequiresSameParty,
 } from './lib/data'
 import { buildTopicSearchFilter } from './lib/search'
-import { deptNestedSubsections, isDeptTopLevelSectionFilter } from './lib/deptTopicSections'
+import {
+  deptNestedSubsections,
+  isDeptTopLevelSectionFilter,
+  topicMatchesDeptSection,
+} from './lib/deptTopicSections'
+import { deptSectionListFilterForSubsection } from './lib/topicSectionPickers'
 import {
   installInputFocusGuard,
   releaseStaleFocus,
@@ -326,6 +331,44 @@ export default function App() {
     if (user) saveListFilter(user.id, departmentId, party)
   }
 
+  function syncListFilterAfterDeptSectionSave(subsectionId: string | null | undefined) {
+    if (departmentId === 'support') return
+    const sectionId = deptSectionListFilterForSubsection(
+      departmentId,
+      subsectionId,
+      subsections,
+    )
+    if (!sectionId) {
+      if (listFilter !== 'all' && listFilter !== 'archive' && deptTopicSectionIdSet.has(listFilter)) {
+        setListFilter('all')
+        if (user) saveListFilter(user.id, departmentId, 'all')
+      }
+      return
+    }
+    if (listFilter === 'all' || listFilter === 'archive' || listFilter === sectionId) return
+    if (topicMatchesDeptSection({ subsection_id: subsectionId } as GuideItem, listFilter, subsections)) {
+      return
+    }
+    setListFilter(sectionId)
+    if (user) saveListFilter(user.id, departmentId, sectionId)
+  }
+
+  function alignListFilterForTopic(topic: GuideItem) {
+    if (!visibleItems.some((i) => i.id === topic.id)) {
+      if (isArchived(topic)) {
+        if (canEdit) setListFilter('archive')
+      } else if (listFilter === 'archive') {
+        setListFilter('all')
+      } else if (departmentId === 'support' && isSupportParty(listFilter)) {
+        setListFilter('all')
+      } else if (deptTopicSectionIdSet.has(listFilter)) {
+        if (!topicMatchesDeptSection(topic, listFilter, subsections)) {
+          setListFilter('all')
+        }
+      }
+    }
+  }
+
   function closeTopic() {
     setSelectedId(null)
     setNavHistory([])
@@ -477,15 +520,7 @@ export default function App() {
     if (!canEdit) return
     const topic = items.find((i) => i.id === id)
     if (!topic) return
-    if (!visibleItems.some((i) => i.id === id)) {
-      if (isArchived(topic)) {
-        setListFilter('archive')
-      } else if (listFilter === 'archive') {
-        setListFilter('all')
-      } else if (departmentId === 'support' && isSupportParty(listFilter)) {
-        setListFilter('all')
-      }
-    }
+    alignListFilterForTopic(topic)
     setNavHistory([])
     setSelectedId(id)
     setSidebarEditRequest({ topicId: id, seq: Date.now() })
@@ -496,15 +531,7 @@ export default function App() {
     if (!topic || id === selectedId) return
     pendingListRevealRef.current = true
     setNavHistory((history) => (selectedId != null ? [...history, selectedId] : history))
-    if (!visibleItems.some((i) => i.id === id)) {
-      if (isArchived(topic)) {
-        if (canEdit) setListFilter('archive')
-      } else if (listFilter === 'archive') {
-        setListFilter('all')
-      } else if (departmentId === 'support' && isSupportParty(listFilter)) {
-        setListFilter('all')
-      }
-    }
+    alignListFilterForTopic(topic)
     setSelectedId(id)
   }
 
@@ -514,15 +541,7 @@ export default function App() {
       const next = [...history]
       const prevId = next.pop()!
       const prev = items.find((i) => i.id === prevId)
-      if (prev && !visibleItems.some((i) => i.id === prevId)) {
-        if (isArchived(prev)) {
-          if (canEdit) setListFilter('archive')
-        } else if (listFilter === 'archive') {
-          setListFilter('all')
-        } else if (departmentId === 'support' && isSupportParty(listFilter)) {
-          setListFilter('all')
-        }
-      }
+      if (prev) alignListFilterForTopic(prev)
       pendingListRevealRef.current = true
       setSelectedId(prevId)
       return next
@@ -712,6 +731,8 @@ export default function App() {
   ) {
     const scope = resolveReorderSiblingScope(listFilter, parentId, items, draggedId, {
       deptSectionIds: departmentId === 'support' ? undefined : deptTopicSectionIdSet,
+      departmentId,
+      deptSubsections: departmentId === 'support' ? undefined : subsections,
     })
     const { changes } = reorderSiblingTopics(items, parentId, draggedId, targetId, scope)
     if (changes.length === 0) return
@@ -729,6 +750,7 @@ export default function App() {
     client_topic_id?: number | null
     party?: string
     subsection_id?: string | null
+    dept_section_id?: string
     id?: number
     draftId?: string
   }) {
@@ -739,16 +761,30 @@ export default function App() {
       const data = await window.spravochnik.updateItem({
         departmentId: payload.departmentId,
         item: {
-          ...existing,
+          id: existing.id,
+          version: existing.version,
           question: payload.question,
           answer: payload.answer,
           parent_id: payload.parent_id,
           party: payload.party ?? existing.party,
+          has_children: existing.has_children,
+          archived: existing.archived,
+          sort_index: existing.sort_index,
+          photos: existing.photos,
+          documents: existing.documents,
+          image_display: existing.image_display,
           ...(payload.client_topic_id !== undefined
             ? { client_topic_id: payload.client_topic_id }
-            : {}),
+            : existing.client_topic_id != null
+              ? { client_topic_id: existing.client_topic_id }
+              : {}),
           ...(payload.subsection_id !== undefined
             ? { subsection_id: payload.subsection_id }
+            : existing.subsection_id != null
+              ? { subsection_id: existing.subsection_id }
+              : {}),
+          ...(payload.dept_section_id
+            ? { dept_section_id: payload.dept_section_id }
             : {}),
         },
       })
@@ -756,6 +792,8 @@ export default function App() {
       pinSelectedTopic(payload.id)
       if (payload.departmentId === 'support' && payload.party) {
         syncListFilterAfterPartySave(payload.party)
+      } else if (payload.departmentId !== 'support') {
+        syncListFilterAfterDeptSectionSave(payload.subsection_id)
       }
       return
     }
@@ -773,6 +811,7 @@ export default function App() {
         ...(payload.subsection_id !== undefined
           ? { subsection_id: payload.subsection_id }
           : {}),
+        ...(payload.dept_section_id ? { dept_section_id: payload.dept_section_id } : {}),
         photos: [],
         documents: [],
       },
@@ -785,6 +824,8 @@ export default function App() {
       setQuery('')
       if (payload.departmentId === 'support' && payload.party) {
         syncListFilterAfterPartySave(payload.party)
+      } else if (payload.departmentId !== 'support') {
+        syncListFilterAfterDeptSectionSave(payload.subsection_id)
       }
     } else {
       setDepartmentId(payload.departmentId)
@@ -803,6 +844,7 @@ export default function App() {
     client_topic_id?: number | null
     party?: string
     subsection_id?: string | null
+    dept_section_id?: string
   }) {
     if (!selected) return
     const topicId = selected.id
@@ -812,16 +854,30 @@ export default function App() {
       const data = await window.spravochnik.updateItem({
         departmentId,
         item: {
-          ...selected,
+          id: selected.id,
+          version: selected.version,
           question: payload.question,
           answer: payload.answer,
           parent_id: payload.parent_id,
           party: payload.party ?? selected.party,
+          has_children: selected.has_children,
+          archived: selected.archived,
+          sort_index: selected.sort_index,
+          photos: selected.photos,
+          documents: selected.documents,
+          image_display: selected.image_display,
           ...(payload.client_topic_id !== undefined
             ? { client_topic_id: payload.client_topic_id }
-            : {}),
+            : selected.client_topic_id != null
+              ? { client_topic_id: selected.client_topic_id }
+              : {}),
           ...(payload.subsection_id !== undefined
             ? { subsection_id: payload.subsection_id }
+            : selected.subsection_id != null
+              ? { subsection_id: selected.subsection_id }
+              : {}),
+          ...(payload.dept_section_id
+            ? { dept_section_id: payload.dept_section_id }
             : {}),
         },
       })
@@ -833,6 +889,8 @@ export default function App() {
       editSnapshotRef.current = null
       if (departmentId === 'support' && payload.party) {
         syncListFilterAfterPartySave(payload.party)
+      } else if (departmentId !== 'support') {
+        syncListFilterAfterDeptSectionSave(payload.subsection_id)
       }
     } catch (e) {
       releasePinnedTopic(topicId)

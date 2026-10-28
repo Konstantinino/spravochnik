@@ -73,8 +73,31 @@ export function assignableSubsectionsForDeptEditor(
   sectionId: string | null,
 ): DepartmentSubsection[] {
   const top = deptTopLevelSections(subsections, departmentId)
-  if (!sectionId) return top
+  const hasNested = departmentHasNestedSubsections(subsections, departmentId)
+  if (!sectionId) {
+    if (hasNested) return []
+    return top
+  }
   const nested = deptNestedSubsections(subsections, departmentId, sectionId)
   if (nested.length > 0) return nested
-  return top.filter((s) => s.id === sectionId)
+  // У раздела нет подразделов — тема привязывается к id раздела, не показываем его в «Подраздел».
+  return []
+}
+
+export function deptSectionHasNestedSubsections(
+  subsections: DepartmentSubsection[],
+  departmentId: string,
+  sectionId: string,
+): boolean {
+  return deptNestedSubsections(subsections, departmentId, sectionId).length > 0
+}
+
+/** Top-level section id for reorder / grouping (empty = unassigned). */
+export function deptReorderSectionKey(
+  item: GuideItem,
+  subsections: DepartmentSubsection[],
+): string {
+  const sid = String(item.subsection_id ?? '').trim()
+  if (!sid) return ''
+  return deptSectionIdForTopicSubsection(sid, subsections) ?? sid
 }

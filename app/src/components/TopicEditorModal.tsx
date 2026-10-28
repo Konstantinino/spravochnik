@@ -21,6 +21,7 @@ import {
 } from '../lib/data'
 import {
   departmentHasNestedSubsections,
+  deptNestedSubsections,
   deptSectionIdForTopicSubsection,
   deptTopLevelSections,
 } from '../lib/deptTopicSections'
@@ -32,8 +33,9 @@ import {
   editorPartySelectValue,
   editorSubsectionsForDepartment,
   isEditableRootTopic,
-  rootSubsectionIdForSave,
+  rootTopicSubsectionPayloadForSave,
   rootSubsectionSelectValueFromTopic,
+  validateRootTopicSectionAssignment,
 } from '../lib/topicSectionPickers'
 import {
   formatFileMarkdownLink,
@@ -80,6 +82,7 @@ interface TopicEditorModalProps {
     client_topic_id?: number | null
     party?: string
     subsection_id?: string | null
+    dept_section_id?: string
     id?: number
     draftId?: string
   }) => Promise<void>
@@ -180,8 +183,22 @@ export function TopicEditorModal({
     () => deptTopLevelSections(subsections, targetDept),
     [subsections, targetDept],
   )
-  const showSubsectionPicker = targetDeptSubsections.length > 0 && isRootTopic
+  const deptHasNestedLayout =
+    !showParty && departmentHasNestedSubsections(subsections, targetDept)
+  const nestedUnderEditorSection = useMemo(() => {
+    if (!deptHasNestedLayout || !editorDeptSectionId) return []
+    return deptNestedSubsections(subsections, targetDept, editorDeptSectionId)
+  }, [deptHasNestedLayout, editorDeptSectionId, subsections, targetDept])
+  const showFlatDeptSectionPicker =
+    !showParty && isRootTopic && !deptHasNestedLayout && targetDeptSubsections.length > 0
+  const showNestedSubsectionPicker =
+    !showParty && isRootTopic && deptHasNestedLayout && nestedUnderEditorSection.length > 0
   const showArchiveSectionReadonly = isRootTopic && topicArchived
+  const deptHasNestedSubsections = deptHasNestedLayout
+  const showSubsectionOptionalNone =
+    archiveSection ||
+    showParty ||
+    (deptHasNestedSubsections && isRootTopic && Boolean(editorDeptSectionId))
 
   const partySelectOptions = useMemo(
     () =>
@@ -232,10 +249,17 @@ export function TopicEditorModal({
     )
     const initialSub =
       mode === 'edit' && initial
-        ? rootSubsectionSelectValueFromTopic(initial.subsection_id, subsForDept)
+        ? rootSubsectionSelectValueFromTopic(initial.subsection_id, subsForDept, {
+            deptSectionId: nextDeptSection || null,
+          })
         : defaultSubsectionId
-          ? rootSubsectionSelectValueFromTopic(defaultSubsectionId, subsForDept)
-          : SUBSECTION_NONE_SELECT_VALUE
+          ? rootSubsectionSelectValueFromTopic(defaultSubsectionId, subsForDept, {
+              deptSectionId: nextDeptSection || null,
+            })
+          : defaultDeptSectionId &&
+              !departmentHasNestedSubsections(subsections, departmentId)
+            ? defaultDeptSectionId
+            : SUBSECTION_NONE_SELECT_VALUE
     setTargetSubsectionId(initialSub)
     const initialParent =
       mode === 'edit' ? (initial?.parent_id ?? null) : parentId
@@ -437,6 +461,40 @@ export function TopicEditorModal({
       setError('Выберите клиентскую тему или снимите галочку')
       return
     }
+    const sectionValidation = validateRootTopicSectionAssignment(targetDept, subsections, {
+      isRootTopic,
+      showParty,
+      party,
+      archiveSection,
+      subsectionSelectValue: targetSubsectionId,
+      deptSectionSelectValue: deptSectionId,
+      defaultDeptSectionId,
+      editorDeptSectionId,
+    })
+    if (sectionValidation) {
+      setError(sectionValidation)
+      return
+    }
+    const showSupportSubsectionPicker =
+      showParty && isRootTopic && targetDeptSubsections.length > 0
+    const sectionPayload = rootTopicSubsectionPayloadForSave(targetDept, subsections, {
+      isRootTopic,
+      showParty,
+      hasSupportSubsectionPicker: showSupportSubsectionPicker,
+      subsectionSelectValue: targetSubsectionId,
+      editorDeptSectionId,
+      defaultDeptSectionId,
+      deptSectionSelectValue: deptSectionId,
+    })
+    if (
+      !showParty &&
+      isRootTopic &&
+      deptTopLevelSections(subsections, targetDept).length > 0 &&
+      sectionPayload.subsection_id == null
+    ) {
+      setError('Выберите раздел')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -445,9 +503,7 @@ export function TopicEditorModal({
         question: question.trim(),
         answer: markdownFromEdit(answer),
         parent_id: attachParent ? selectedParentId : null,
-        ...(showSubsectionPicker
-          ? { subsection_id: rootSubsectionIdForSave(targetSubsectionId) }
-          : {}),
+        ...sectionPayload,
         client_topic_id:
           ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED && showParty && party === 'additional'
             ? attachClientLink
@@ -552,8 +608,8 @@ export function TopicEditorModal({
                   setTargetSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
                 }}
               >
-                <option value={SUBSECTION_NONE_SELECT_VALUE}>
-                  {SUBSECTION_NONE_OPTION_LABEL}
+                <option value="" disabled>
+                  Выберите раздел
                 </option>
                 {deptSectionOptions.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -564,21 +620,37 @@ export function TopicEditorModal({
             </label>
           )}
 
-          {showSubsectionPicker && (
+          {(showParty
+            ? isRootTopic && targetDeptSubsections.length > 0
+            : showFlatDeptSectionPicker || showNestedSubsectionPicker) && (
             <label className="field">
               <span>
-                {targetDept === 'support' || showDeptSectionPicker ? 'Подраздел' : 'Раздел'}
+                {targetDept === 'support' || showNestedSubsectionPicker
+                  ? 'Подраздел'
+                  : 'Раздел'}
               </span>
               <select
                 value={targetSubsectionId}
+                required={
+                  !showParty &&
+                  !deptHasNestedLayout &&
+                  !showNestedSubsectionPicker
+                }
                 onChange={(e) => setTargetSubsectionId(e.target.value)}
               >
-                {!archiveSection ? (
+                {showSubsectionOptionalNone ? (
                   <option value={SUBSECTION_NONE_SELECT_VALUE}>
                     {SUBSECTION_NONE_OPTION_LABEL}
                   </option>
-                ) : null}
-                {targetDeptSubsections.map((s) => (
+                ) : (
+                  <option value="" disabled>
+                    {showNestedSubsectionPicker ? 'Выберите подраздел' : 'Выберите раздел'}
+                  </option>
+                )}
+                {(showNestedSubsectionPicker
+                  ? nestedUnderEditorSection
+                  : targetDeptSubsections
+                ).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
                   </option>

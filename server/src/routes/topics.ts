@@ -193,12 +193,35 @@ topicsRouter.post(
       const clientTopicId = resolveClientTopicId(dept, party, item.client_topic_id, null)
 
       const topic = await withTransaction(async (client) => {
+        let createDeptSectionHint: unknown = item.dept_section_id ?? item.deptSectionId
+        const createRequested = item.subsection_id ?? item.subsectionId
+        if (
+          dept !== 'support' &&
+          parentId == null &&
+          (!createDeptSectionHint || !String(createDeptSectionHint).trim())
+        ) {
+          const sid = typeof createRequested === 'string' ? createRequested.trim() : ''
+          if (sid) {
+            const subRow = await client.query<{ party: string | null }>(
+              `SELECT party FROM department_subsections WHERE id = $1 AND department_id = $2`,
+              [sid, dept],
+            )
+            const partyCol = subRow.rows[0]?.party
+            createDeptSectionHint =
+              typeof partyCol === 'string' && partyCol.trim()
+                ? partyCol.trim()
+                : sid
+          }
+        }
         const subsectionId = await resolveTopicSubsectionId(
           dept,
           parentId,
-          item.subsection_id ?? item.subsectionId,
+          createRequested,
           client,
           party,
+          {
+            deptSectionId: createDeptSectionHint,
+          },
         )
 
         const idRes = await client.query<{ next_id: number }>(
@@ -503,12 +526,35 @@ topicsRouter.put(
         ) {
           requestedSubsection = null
         }
+        let deptSectionHint: unknown = item.dept_section_id ?? item.deptSectionId
+        if (
+          dept !== 'support' &&
+          parentId == null &&
+          (!deptSectionHint || !String(deptSectionHint).trim())
+        ) {
+          const sid =
+            typeof requestedSubsection === 'string' ? requestedSubsection.trim() : ''
+          if (sid) {
+            const subRow = await client.query<{ party: string | null }>(
+              `SELECT party FROM department_subsections WHERE id = $1 AND department_id = $2`,
+              [sid, dept],
+            )
+            const partyCol = subRow.rows[0]?.party
+            deptSectionHint =
+              typeof partyCol === 'string' && partyCol.trim()
+                ? partyCol.trim()
+                : sid
+          }
+        }
         let subsectionId = await resolveTopicSubsectionId(
           dept,
           parentId,
           requestedSubsection,
           client,
           party,
+          {
+            deptSectionId: deptSectionHint,
+          },
         )
         if (dept === 'support') {
           const archivedBucketId = await ensureArchiveArchivedSubsection(client)

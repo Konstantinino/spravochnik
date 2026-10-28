@@ -253,6 +253,31 @@ function archiveSupportTopicsLocally(match: (row: Record<string, unknown>) => bo
   return moved
 }
 
+function clearDeptSubsectionLocally(departmentId: string, subsectionId: string): number {
+  const dept = departmentById(departmentId)
+  const data = readGuideFile(dept.fileName) as Record<string, unknown>
+  const listKey = dept.listKey
+  const list = (data[listKey] as Array<Record<string, unknown>>) || []
+  const subs = getSubsectionsForDepartment(departmentId)
+  const existing = subs.find((s) => s.id === subsectionId)
+  const ids = new Set<string>([subsectionId])
+  if (existing && !existing.party) {
+    for (const s of subs) {
+      if ((s.party ?? null) === subsectionId) ids.add(s.id)
+    }
+  }
+  const cleared = clearGuideTopicSubsectionId(list, (row) => {
+    const sid = String(row.subsection_id ?? '').trim()
+    return sid !== '' && ids.has(sid)
+  })
+  if (cleared > 0) {
+    data[listKey] = list
+    writeGuideFile(dept.fileName, data)
+    markLocalChange()
+  }
+  return cleared
+}
+
 function clearSupportSubsectionLocally(subsectionId: string): number {
   const dept = departmentById('support')
   const data = readGuideFile(dept.fileName) as Record<string, unknown>
@@ -1512,10 +1537,8 @@ function registerIpc(): void {
       clearSupportSubsectionLocally(id)
     } else if (settings.serverUrl.trim()) {
       await deleteSubsectionOnServer(id)
-    } else {
-      archiveSupportTopicsLocally(
-        (row) => String(row.subsection_id ?? '').trim() === id,
-      )
+    } else if (existing) {
+      clearDeptSubsectionLocally(existing.departmentId, id)
     }
     removeSubsectionLocal(id)
     try {

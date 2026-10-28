@@ -215,12 +215,51 @@ function filterSubsectionsForTopicScope(
   return subs.filter((s) => !s.isArchiveLost && !s.isArchiveArchived)
 }
 
+function deptTopLevelSectionRecords(subs: SubsectionRecord[]): SubsectionRecord[] {
+  return subs.filter((s) => !s.party && !s.isArchiveLost && !s.isArchiveArchived)
+}
+
+function departmentHasNestedSubsectionRecords(subs: SubsectionRecord[]): boolean {
+  return subs.some((s) => Boolean(s.party?.trim()))
+}
+
+/** Как в клиенте: «без подраздела» → id раздела; иначе id подраздела или раздела (плоский отдел). */
+export function resolveNonSupportRootSubsectionId(
+  subs: SubsectionRecord[],
+  requested: unknown,
+  deptSectionId: string | null,
+): string | null {
+  const tops = deptTopLevelSectionRecords(subs)
+  if (tops.length === 0) {
+    const raw = typeof requested === 'string' ? requested.trim() : ''
+    return raw || null
+  }
+
+  const picked =
+    typeof requested === 'string' && requested.trim()
+      ? requested.trim()
+      : null
+  const section = deptSectionId?.trim() || null
+
+  if (departmentHasNestedSubsectionRecords(subs)) {
+    if (!section) return picked
+    const nested = subs.filter((s) => (s.party ?? null) === section)
+    if (nested.length > 0) {
+      if (picked && nested.some((s) => s.id === picked)) return picked
+      return section
+    }
+    return section
+  }
+  return picked
+}
+
 export async function resolveTopicSubsectionId(
   departmentId: string,
   parentId: number | null,
   requested: unknown,
   client: Client,
   party: string | null,
+  options?: { deptSectionId?: unknown },
 ): Promise<string | null> {
   const all = await listSubsectionsForClient(client, departmentId)
   const subs = filterSubsectionsForTopicScope(all, departmentId, party)
@@ -237,30 +276,52 @@ export async function resolveTopicSubsectionId(
     return null
   }
 
-  if (requested === null) return null
+  if (departmentId === 'support' && requested === null) return null
 
-  const id = typeof requested === 'string' ? requested.trim() : ''
-  if (!id) return null
+  let effectiveRequested: unknown = requested
+  if (departmentId !== 'support') {
+    const deptSectionRaw = options?.deptSectionId
+    const deptSectionId =
+      typeof deptSectionRaw === 'string' && deptSectionRaw.trim()
+        ? deptSectionRaw.trim()
+        : null
+    let normalizedRequest: unknown = requested
+    const requestedStr = typeof requested === 'string' ? requested.trim() : ''
+    if (requestedStr && !subs.some((s) => s.id === requestedStr)) {
+      // Старый/локальный id (есть в клиенте, нет в department_subsections) — не блокируем «без подраздела».
+      normalizedRequest = null
+    }
+    effectiveRequested = resolveNonSupportRootSubsectionId(
+      subs,
+      normalizedRequest,
+      deptSectionId,
+    )
+  } else if (requested === null) {
+    return null
+  }
+
+  const id = typeof effectiveRequested === 'string' ? effectiveRequested.trim() : ''
+  if (!id) {
+    if (departmentId !== 'support' && deptTopLevelSectionRecords(subs).length > 0) {
+      const err = new Error('Выберите раздел')
+      ;(err as Error & { status: number }).status = 400
+      throw err
+    }
+    return null
+  }
 
   const pickMsg = departmentId === 'support' ? 'Выберите подраздел' : 'Выберите раздел'
   if (!subs.some((s) => s.id === id)) {
     if (departmentId === 'support' && isSupportArchiveSubsectionId(id)) {
       return id
     }
-    const err = new Error(pickMsg)
+    const err = new Error(
+      departmentId === 'support'
+        ? pickMsg
+        : `${pickMsg} (id: ${id})`,
+    )
     ;(err as Error & { status: number }).status = 400
     throw err
-  }
-  if (departmentId !== 'support') {
-    const picked = subs.find((s) => s.id === id)
-    if (picked && !picked.party) {
-      const hasNested = subs.some((s) => s.party === id)
-      if (hasNested) {
-        const err = new Error('Выберите подраздел')
-        ;(err as Error & { status: number }).status = 400
-        throw err
-      }
-    }
   }
   return id
 }

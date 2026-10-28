@@ -1,5 +1,5 @@
 import type { DepartmentSubsection, GuideItem, TopicViewFilter } from '../types'
-import { topicMatchesDeptSection } from './deptTopicSections'
+import { deptReorderSectionKey, topicMatchesDeptSection } from './deptTopicSections'
 
 export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[] }): GuideItem[] {
   return data.questions ?? data.templates ?? []
@@ -132,9 +132,15 @@ export function resolveReorderSiblingScope(
   parentId: number | null,
   allItems: GuideItem[],
   draggedId: number,
-  options?: { deptSectionIds?: ReadonlySet<string> },
+  options?: {
+    deptSectionIds?: ReadonlySet<string>
+    departmentId?: string
+    deptSubsections?: DepartmentSubsection[]
+  },
 ): ReorderSiblingScope | undefined {
   if (parentId != null) return undefined
+
+  const deptSubs = options?.deptSubsections ?? []
 
   if (listFilter === 'archive') {
     return { matchSibling: isArchived }
@@ -143,7 +149,7 @@ export function resolveReorderSiblingScope(
     if (options?.deptSectionIds?.has(listFilter)) {
       return {
         matchSibling: (item) =>
-          !isArchived(item) && String(item.subsection_id ?? '').trim() === listFilter,
+          !isArchived(item) && topicMatchesDeptSection(item, listFilter, deptSubs),
       }
     }
     const party = listFilter
@@ -154,6 +160,13 @@ export function resolveReorderSiblingScope(
   if (listFilter === 'all') {
     const dragged = allItems.find((item) => item.id === draggedId)
     if (!dragged) return undefined
+    if (options?.departmentId && options.departmentId !== 'support') {
+      const key = deptReorderSectionKey(dragged, deptSubs)
+      return {
+        matchSibling: (item) =>
+          !isArchived(item) && deptReorderSectionKey(item, deptSubs) === key,
+      }
+    }
     const party = getItemParty(dragged)
     return {
       matchSibling: (item) => !isArchived(item) && getItemParty(item) === party,
@@ -167,7 +180,9 @@ export function rootReorderRequiresSameParty(
   departmentId: string,
   listFilter: TopicViewFilter,
 ): boolean {
-  return departmentId === 'support' && listFilter !== 'archive'
+  if (listFilter === 'archive') return false
+  if (departmentId === 'support') return true
+  return listFilter === 'all'
 }
 
 /** Reorder siblings after drag-and-drop; returns changed { id, sort_index } pairs. */

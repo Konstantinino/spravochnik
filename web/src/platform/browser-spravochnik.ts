@@ -309,7 +309,12 @@ const api: SpravochnikApi = {
       `/departments/${payload.departmentId}/topics/${payload.item.id}`,
       {
         method: 'PUT',
-        body: JSON.stringify({ item: payload.item }),
+        body: JSON.stringify({
+          item: payload.item,
+          ...(payload.reservedMediaPaths?.length
+            ? { reservedMediaPaths: payload.reservedMediaPaths }
+            : {}),
+        }),
       },
     )
     return refreshDepartmentFromServer(payload.departmentId)
@@ -607,19 +612,18 @@ const api: SpravochnikApi = {
   },
 
   getSupportPhones: async () => {
-    const data = await apiFetch<{ phones: Array<{ label: string; display: string; tel: string }> }>(
-      '/app/support-phones',
-    )
-    return data.phones ?? []
+    const data = await apiFetch<{
+      phones: Record<string, Array<{ label: string; display: string; tel: string }>>
+    }>('/app/support-phones')
+    return data.phones ?? {}
   },
 
   setSupportPhones: async (payload) => {
-    const data = await apiFetch<{ phones: Array<{ label: string; display: string; tel: string }> }>(
-      '/admin/support-phones',
-      { method: 'PUT', body: JSON.stringify(payload) },
-    )
+    const data = await apiFetch<{
+      phones: Record<string, Array<{ label: string; display: string; tel: string }>>
+    }>('/admin/support-phones', { method: 'PUT', body: JSON.stringify(payload) })
     for (const fn of supportPhonesListeners) fn()
-    return data.phones ?? []
+    return data.phones ?? {}
   },
 
   onSupportPhonesChanged: (callback) => {
@@ -628,19 +632,18 @@ const api: SpravochnikApi = {
   },
 
   getSupportEmails: async () => {
-    const data = await apiFetch<{ emails: Array<{ label: string; email: string }> }>(
-      '/app/support-emails',
-    )
-    return data.emails ?? []
+    const data = await apiFetch<{
+      emails: Record<string, Array<{ label: string; email: string }>>
+    }>('/app/support-emails')
+    return data.emails ?? {}
   },
 
   setSupportEmails: async (payload) => {
-    const data = await apiFetch<{ emails: Array<{ label: string; email: string }> }>(
-      '/admin/support-emails',
-      { method: 'PUT', body: JSON.stringify(payload) },
-    )
+    const data = await apiFetch<{
+      emails: Record<string, Array<{ label: string; email: string }>>
+    }>('/admin/support-emails', { method: 'PUT', body: JSON.stringify(payload) })
     for (const fn of supportEmailsListeners) fn()
-    return data.emails ?? []
+    return data.emails ?? {}
   },
 
   onSupportEmailsChanged: (callback) => {
@@ -777,6 +780,22 @@ const api: SpravochnikApi = {
     return { ok: true }
   },
 
+  reorderAdminSubsections: async (payload) => {
+    const data = await apiFetch<{ subsections: Array<Record<string, unknown>> }>(
+      '/admin/subsections/reorder',
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      },
+    )
+    const updated = (data.subsections ?? []).map(mapSubsection)
+    const byId = new Map(updated.map((row) => [row.id, row]))
+    setCachedSubsections(
+      getCachedSubsections().map((row) => (byId.has(row.id) ? { ...row, ...byId.get(row.id)! } : row)),
+    )
+    return updated
+  },
+
   getSupportSections: async () => {
     if (getCachedSupportSections().length === 0) {
       try {
@@ -811,6 +830,19 @@ const api: SpravochnikApi = {
       getCachedSupportSections().map((s) => (s.id === section.id ? section : s)),
     )
     return section
+  },
+
+  reorderAdminSupportSections: async (payload) => {
+    const data = await apiFetch<{ sections: Array<Record<string, unknown>> }>(
+      '/admin/support-sections/reorder',
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      },
+    )
+    const sections = (data.sections ?? []).map(mapSupportSection)
+    setCachedSupportSections(sections)
+    return sections
   },
 
   deleteAdminSupportSection: async (id) => {

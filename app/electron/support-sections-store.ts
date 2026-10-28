@@ -69,6 +69,21 @@ export function applySupportSectionsFromSync(rows: SyncSupportSectionPayload[]):
   return mapped
 }
 
+export function applySupportSectionSortOrder(
+  orderedIds: string[],
+): StoredSupportSection[] {
+  const current = readStoredSupportSections()
+  const byId = new Map(current.map((row) => [row.id, row]))
+  const list = orderedIds.map((id, index) => {
+    const row = byId.get(id)
+    if (!row) throw new Error(`Раздел не найден: ${id}`)
+    return { ...row, sortOrder: (index + 1) * 10 }
+  })
+  const rest = current.filter((row) => !orderedIds.includes(row.id))
+  writeStoredSupportSections([...list, ...rest].sort((a, b) => a.sortOrder - b.sortOrder))
+  return readStoredSupportSections()
+}
+
 export function mergeSupportSectionPatch(row: SyncSupportSectionPayload): StoredSupportSection[] {
   const current = readStoredSupportSections()
   const idx = current.findIndex((s) => s.id === row.id)

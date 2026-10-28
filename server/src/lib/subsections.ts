@@ -1,5 +1,5 @@
 import type pg from 'pg'
-import { query } from '../db/pool.js'
+import { query, withTransaction, bumpGlobalVersion } from '../db/pool.js'
 import { isSupportArchiveSubsectionId } from './archive-lost.js'
 export interface SubsectionRecord {
   id: string
@@ -371,4 +371,49 @@ export function subsectionToClient(row: SubsectionRecord) {
     isArchiveLost: row.isArchiveLost,
     isArchiveArchived: row.isArchiveArchived,
   }
+}
+
+function matchesSubsectionScope(row: SubsectionRecord, party: string | null): boolean {
+  if (row.isArchiveLost || row.isArchiveArchived) return false
+  const rowParty = row.party ?? null
+  return party === null ? rowParty === null : rowParty === party
+}
+
+export async function reorderSubsectionsInScope(
+  departmentId: string,
+  party: string | null,
+  orderedIds: string[],
+): Promise<SubsectionRecord[]> {
+  const all = await listSubsections(departmentId)
+  const scope = all.filter((row) => matchesSubsectionScope(row, party))
+  if (orderedIds.length === 0) return scope
+  const scopeIds = new Set(scope.map((row) => row.id))
+  if (orderedIds.length !== scope.length) {
+    throw new Error('Нужен полный список подразделов в группе')
+  }
+  const seen = new Set<string>()
+  for (const id of orderedIds) {
+    if (!scopeIds.has(id) || seen.has(id)) {
+      throw new Error('Некорректный порядок подразделов')
+    }
+    seen.add(id)
+  }
+  await withTransaction(async (client) => {
+    for (let index = 0; index < orderedIds.length; index += 1) {
+      const sortOrder = (index + 1) * 10
+      await client.query(
+        `UPDATE department_subsections SET sort_order = $3
+         WHERE id = $1 AND department_id = $2`,
+        [orderedIds[index], departmentId, sortOrder],
+      )
+    }
+    await bumpGlobalVersion(client)
+  })
+  return all
+    .filter((row) => matchesSubsectionScope(row, party))
+    .sort((a, b) => {
+      const ai = orderedIds.indexOf(a.id)
+      const bi = orderedIds.indexOf(b.id)
+      return ai - bi
+    })
 }

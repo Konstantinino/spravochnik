@@ -32,6 +32,7 @@ import {
   listSubsections,
   nextSubsectionSortOrder,
   normalizeSubsectionLabelInput,
+  reorderSubsectionsInScope,
   subsectionToClient,
 } from '../lib/subsections.js'
 import {
@@ -53,6 +54,7 @@ import {
   getSupportSectionById,
   listSupportSections,
   nextSupportSectionSortOrder,
+  reorderSupportSections,
   supportSectionToClient,
 } from '../lib/support-sections.js'
 import { isKnownSupportParty } from '../lib/support-sections.js'
@@ -918,6 +920,34 @@ adminRouter.post('/departments/:deptId/subsections', async (req: AuthRequest, re
   }
 })
 
+adminRouter.put('/subsections/reorder', async (req: AuthRequest, res) => {
+  try {
+    const departmentId = normalizeWorkDepartmentId(req.body?.departmentId)
+    if (!denyTopicSectionsUnlessAllowed(req, res, departmentId)) return
+    const rawParty = req.body?.party
+    const party =
+      rawParty == null || String(rawParty).trim() === ''
+        ? null
+        : String(rawParty).trim()
+    const orderedIds = Array.isArray(req.body?.orderedIds)
+      ? req.body.orderedIds.map((id: unknown) => String(id ?? '').trim()).filter(Boolean)
+      : []
+    if (orderedIds.length === 0) {
+      res.status(400).json({ error: 'Укажите порядок подразделов' })
+      return
+    }
+    const updated = await reorderSubsectionsInScope(departmentId, party, orderedIds)
+    res.json({
+      subsections: updated.map(subsectionToClient),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Ошибка изменения порядка',
+    })
+  }
+})
+
 adminRouter.put('/subsections/:id', async (req: AuthRequest, res) => {
   try {
     const id = param(req.params.id)
@@ -989,6 +1019,26 @@ adminRouter.post('/support-sections', async (req: AuthRequest, res) => {
         : 500
     res.status(status).json({
       error: err instanceof Error ? err.message : 'Ошибка создания раздела',
+    })
+  }
+})
+
+adminRouter.put('/support-sections/reorder', async (req: AuthRequest, res) => {
+  try {
+    if (!denyTopicSectionsUnlessAllowed(req, res, 'support')) return
+    const orderedIds = Array.isArray(req.body?.orderedIds)
+      ? req.body.orderedIds.map((id: unknown) => String(id ?? '').trim()).filter(Boolean)
+      : []
+    if (orderedIds.length === 0) {
+      res.status(400).json({ error: 'Укажите порядок разделов' })
+      return
+    }
+    const sections = await reorderSupportSections(orderedIds)
+    res.json({ sections: sections.map(supportSectionToClient) })
+  } catch (err) {
+    console.error(err)
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Ошибка изменения порядка',
     })
   }
 })

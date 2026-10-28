@@ -1,5 +1,5 @@
 import type pg from 'pg'
-import { query } from '../db/pool.js'
+import { query, withTransaction, bumpGlobalVersion } from '../db/pool.js'
 
 export interface SupportSectionRecord {
   id: string
@@ -95,4 +95,31 @@ export function supportSectionToClient(row: SupportSectionRecord) {
     sortOrder: row.sortOrder,
     systemLocked: row.systemLocked,
   }
+}
+
+export async function reorderSupportSections(orderedIds: string[]): Promise<SupportSectionRecord[]> {
+  const existing = await listSupportSections()
+  if (orderedIds.length === 0) return existing
+  const byId = new Map(existing.map((row) => [row.id, row]))
+  if (orderedIds.length !== existing.length) {
+    throw new Error('Нужен полный список разделов')
+  }
+  const seen = new Set<string>()
+  for (const id of orderedIds) {
+    if (!byId.has(id) || seen.has(id)) {
+      throw new Error('Некорректный порядок разделов')
+    }
+    seen.add(id)
+  }
+  await withTransaction(async (client) => {
+    for (let index = 0; index < orderedIds.length; index += 1) {
+      const sortOrder = (index + 1) * 10
+      await client.query(`UPDATE support_topic_sections SET sort_order = $2 WHERE id = $1`, [
+        orderedIds[index],
+        sortOrder,
+      ])
+    }
+    await bumpGlobalVersion(client)
+  })
+  return listSupportSections()
 }

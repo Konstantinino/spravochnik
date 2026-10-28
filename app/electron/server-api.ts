@@ -281,22 +281,27 @@ export interface SupportPhoneLineDto {
   tel: string
 }
 
-export async function fetchSupportPhones(): Promise<SupportPhoneLineDto[]> {
-  const data = await serverFetch<{ phones: SupportPhoneLineDto[] }>('/app/support-phones', {
+export type SupportPhonesByDepartmentDto = Record<
+  string,
+  Array<{ label: string; display: string; tel: string }>
+>
+
+export async function fetchSupportPhones(): Promise<SupportPhonesByDepartmentDto> {
+  const data = await serverFetch<{ phones: SupportPhonesByDepartmentDto }>('/app/support-phones', {
     skipRemotePull: true,
   })
-  return data.phones ?? []
+  return data.phones ?? {}
 }
 
 export async function saveSupportPhonesOnServer(
-  phones: SupportPhoneLineDto[],
-): Promise<SupportPhoneLineDto[]> {
-  const data = await serverFetch<{ phones: SupportPhoneLineDto[] }>('/admin/support-phones', {
+  phones: SupportPhonesByDepartmentDto,
+): Promise<SupportPhonesByDepartmentDto> {
+  const data = await serverFetch<{ phones: SupportPhonesByDepartmentDto }>('/admin/support-phones', {
     method: 'PUT',
     body: JSON.stringify({ phones }),
     skipRemotePull: true,
   })
-  return data.phones ?? []
+  return data.phones ?? {}
 }
 
 export interface SupportEmailLineDto {
@@ -304,22 +309,24 @@ export interface SupportEmailLineDto {
   email: string
 }
 
-export async function fetchSupportEmails(): Promise<SupportEmailLineDto[]> {
-  const data = await serverFetch<{ emails: SupportEmailLineDto[] }>('/app/support-emails', {
+export type SupportEmailsByDepartmentDto = Record<string, SupportEmailLineDto[]>
+
+export async function fetchSupportEmails(): Promise<SupportEmailsByDepartmentDto> {
+  const data = await serverFetch<{ emails: SupportEmailsByDepartmentDto }>('/app/support-emails', {
     skipRemotePull: true,
   })
-  return data.emails ?? []
+  return data.emails ?? {}
 }
 
 export async function saveSupportEmailsOnServer(
-  emails: SupportEmailLineDto[],
-): Promise<SupportEmailLineDto[]> {
-  const data = await serverFetch<{ emails: SupportEmailLineDto[] }>('/admin/support-emails', {
+  emails: SupportEmailsByDepartmentDto,
+): Promise<SupportEmailsByDepartmentDto> {
+  const data = await serverFetch<{ emails: SupportEmailsByDepartmentDto }>('/admin/support-emails', {
     method: 'PUT',
     body: JSON.stringify({ emails }),
     skipRemotePull: true,
   })
-  return data.emails ?? []
+  return data.emails ?? {}
 }
 
 export interface AdminSubsectionDto {
@@ -378,6 +385,22 @@ export async function updateSubsectionOnServer(
   return data.subsection
 }
 
+export async function reorderSubsectionsOnServer(payload: {
+  departmentId: string
+  party?: string | null
+  orderedIds: string[]
+}): Promise<AdminSubsectionDto[]> {
+  const data = await serverFetch<{ subsections: AdminSubsectionDto[] }>(
+    '/admin/subsections/reorder',
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+      skipRemotePull: true,
+    },
+  )
+  return data.subsections ?? []
+}
+
 export async function deleteSubsectionOnServer(id: string): Promise<{ movedTopics: number }> {
   const data = await serverFetch<{ ok: boolean; movedTopics?: number }>(
     `/admin/subsections/${encodeURIComponent(id)}`,
@@ -427,6 +450,20 @@ export async function updateSupportSectionOnServer(
     },
   )
   return data.section
+}
+
+export async function reorderSupportSectionsOnServer(
+  orderedIds: string[],
+): Promise<AdminSupportSectionDto[]> {
+  const data = await serverFetch<{ sections: AdminSupportSectionDto[] }>(
+    '/admin/support-sections/reorder',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ orderedIds }),
+      skipRemotePull: true,
+    },
+  )
+  return data.sections ?? []
 }
 
 export async function deleteSupportSectionOnServer(id: string): Promise<{ movedTopics: number }> {

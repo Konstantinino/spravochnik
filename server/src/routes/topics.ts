@@ -4,6 +4,7 @@ import path from 'node:path'
 import type pg from 'pg'
 import { query, withTransaction, bumpGlobalVersion } from '../db/pool.js'
 import { deleteTopicMediaFiles } from '../lib/media-layout.js'
+import { cleanupTopicMediaAfterSave } from '../lib/topic-media-cleanup.js'
 import {
   getDepartmentById,
   isLostDepartmentId,
@@ -38,6 +39,15 @@ export const topicsRouter = Router()
 topicsRouter.use(blockWritesIfClientOutdated)
 
 const MEDIA_DIR = process.env.MEDIA_DIR ?? path.join(process.cwd(), 'data', 'media')
+
+function parseReservedMediaPaths(body: unknown): string[] {
+  if (!body || typeof body !== 'object') return []
+  const raw =
+    (body as { reservedMediaPaths?: unknown }).reservedMediaPaths ??
+    (body as { reserved_media_paths?: unknown }).reserved_media_paths
+  if (!Array.isArray(raw)) return []
+  return raw.map((entry) => String(entry ?? '').trim()).filter(Boolean)
+}
 
 function resolveClientTopicId(
   dept: string,
@@ -267,6 +277,15 @@ topicsRouter.post(
         )
         return result.rows[0]
       })
+
+      fs.mkdirSync(MEDIA_DIR, { recursive: true })
+      try {
+        await cleanupTopicMediaAfterSave(MEDIA_DIR, dept, topic.id, {
+          reserveRelativePaths: parseReservedMediaPaths(req.body),
+        })
+      } catch (cleanupErr) {
+        console.error('topic media cleanup after create failed', cleanupErr)
+      }
 
       res.status(201).json({ topic: rowToGuideItem(topic) })
     } catch (err) {
@@ -613,6 +632,16 @@ topicsRouter.put(
       })
 
       await releaseTopicLock(dept, topicId, req.user!.id)
+
+      fs.mkdirSync(MEDIA_DIR, { recursive: true })
+      try {
+        await cleanupTopicMediaAfterSave(MEDIA_DIR, dept, topicId, {
+          reserveRelativePaths: parseReservedMediaPaths(req.body),
+        })
+      } catch (cleanupErr) {
+        console.error('topic media cleanup after update failed', cleanupErr)
+      }
+
       res.json({ topic: rowToGuideItem(updated), version: updated.version })
     } catch (err) {
       const status = (err as { status?: number }).status

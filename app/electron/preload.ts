@@ -102,6 +102,12 @@ contextBridge.exposeInMainWorld('spravochnik', {
 
   deleteAdminSubsection: (id: string) => ipcRenderer.invoke('admin:delete-subsection', id),
 
+  reorderAdminSubsections: (payload: {
+    departmentId: string
+    party?: string | null
+    orderedIds: string[]
+  }) => ipcRenderer.invoke('admin:reorder-subsections', payload),
+
   getSupportSections: () => ipcRenderer.invoke('get-support-sections'),
 
   createAdminSupportSection: (payload: { label: string }) =>
@@ -111,6 +117,9 @@ contextBridge.exposeInMainWorld('spravochnik', {
     ipcRenderer.invoke('admin:update-support-section', payload),
 
   deleteAdminSupportSection: (id: string) => ipcRenderer.invoke('admin:delete-support-section', id),
+
+  reorderAdminSupportSections: (payload: { orderedIds: string[] }) =>
+    ipcRenderer.invoke('admin:reorder-support-sections', payload),
 
   setServerUrl: (url: string) => ipcRenderer.invoke('sync:set-server-url', url),
 

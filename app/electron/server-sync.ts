@@ -1063,6 +1063,7 @@ export async function tryPushTopicOnline(
   departmentId: DepartmentId,
   payload: Record<string, unknown>,
   expectedVersion?: number,
+  options?: { reservedMediaPaths?: string[] },
 ): Promise<{ ok: true } | { ok: false; offline: boolean; conflict?: SyncConflictInfo }> {
   const reachable = await isServerReachable()
   if (!reachable) {
@@ -1073,9 +1074,13 @@ export async function tryPushTopicOnline(
     await flushPendingMedia()
     if (type === 'create') {
       const clientId = typeof payload.id === 'number' ? payload.id : null
+      const createBody: Record<string, unknown> = { item: payload }
+      if (options?.reservedMediaPaths?.length) {
+        createBody.reservedMediaPaths = options.reservedMediaPaths
+      }
       const result = await serverFetch<{ topic: Record<string, unknown> }>(
         `/departments/${departmentId}/topics`,
-        { method: 'POST', body: JSON.stringify({ item: payload }) },
+        { method: 'POST', body: JSON.stringify(createBody) },
       )
       reconcileCreatedTopic(departmentId, clientId, result.topic, payload)
       ensureRequestedPartyPersisted(
@@ -1093,9 +1098,13 @@ export async function tryPushTopicOnline(
       const id = payload.id as number
       const headers: Record<string, string> = {}
       if (expectedVersion) headers['If-Match'] = String(expectedVersion)
+      const updateBody: Record<string, unknown> = { item: payload }
+      if (options?.reservedMediaPaths?.length) {
+        updateBody.reservedMediaPaths = options.reservedMediaPaths
+      }
       const result = await serverFetch<{ topic: Record<string, unknown> }>(
         `/departments/${departmentId}/topics/${id}`,
-        { method: 'PUT', headers, body: JSON.stringify({ item: payload }) },
+        { method: 'PUT', headers, body: JSON.stringify(updateBody) },
       )
       applyTopicToLocal(departmentId, mergeTopicAfterPush(result.topic, payload))
       ensureRequestedPartyPersisted(departmentId, id, payload.party)

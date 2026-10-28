@@ -65,6 +65,9 @@ export interface SpravochnikApi {
 
     promoteChildren?: boolean
 
+    /** Media kept on server for «Сбросить» after save (not referenced in saved item). */
+    reservedMediaPaths?: string[]
+
   }) => Promise<GuideFile>
 
   pickAndSaveImage: () => Promise<{ markdownPath: string; url: string } | null>
@@ -211,20 +214,20 @@ export interface SpravochnikApi {
   ) => Promise<{ departmentId: WorkDepartmentId; label: string } | null>
 
   getSupportPhones: () => Promise<
-    Array<{ label: string; display: string; tel: string }>
+    Record<string, Array<{ label: string; display: string; tel: string }>>
   >
 
   setSupportPhones: (payload: {
-    phones: Array<{ label: string; display: string; tel: string }>
-  }) => Promise<Array<{ label: string; display: string; tel: string }>>
+    phones: Record<string, Array<{ label: string; display: string; tel: string }>>
+  }) => Promise<Record<string, Array<{ label: string; display: string; tel: string }>>>
 
   onSupportPhonesChanged: (callback: () => void) => () => void
 
-  getSupportEmails: () => Promise<Array<{ label: string; email: string }>>
+  getSupportEmails: () => Promise<Record<string, Array<{ label: string; email: string }>>>
 
   setSupportEmails: (payload: {
-    emails: Array<{ label: string; email: string }>
-  }) => Promise<Array<{ label: string; email: string }>>
+    emails: Record<string, Array<{ label: string; email: string }>>
+  }) => Promise<Record<string, Array<{ label: string; email: string }>>>
 
   onSupportEmailsChanged: (callback: () => void) => () => void
 
@@ -281,6 +284,22 @@ export interface SpravochnikApi {
 
   deleteAdminSubsection: (id: string) => Promise<{ ok: boolean }>
 
+  reorderAdminSubsections: (payload: {
+    departmentId: string
+    party?: string | null
+    orderedIds: string[]
+  }) => Promise<
+    Array<{
+      id: string
+      departmentId: string
+      label: string
+      sortOrder: number
+      party?: string | null
+      isArchiveLost?: boolean
+      isArchiveArchived?: boolean
+    }>
+  >
+
   getSupportSections: () => Promise<
     Array<{
       id: string
@@ -301,6 +320,17 @@ export interface SpravochnikApi {
     id: string
     label: string
   }) => Promise<{ id: string; label: string; sortOrder: number; systemLocked?: boolean }>
+
+  reorderAdminSupportSections: (payload: {
+    orderedIds: string[]
+  }) => Promise<
+    Array<{
+      id: string
+      label: string
+      sortOrder: number
+      systemLocked?: boolean
+    }>
+  >
 
   deleteAdminSupportSection: (id: string) => Promise<{ ok: boolean }>
 

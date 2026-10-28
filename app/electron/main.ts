@@ -121,12 +121,15 @@ import {
   deleteDepartmentOnServer,
   deleteSubsectionOnServer,
   fetchAdminDepartments,
+  reorderSubsectionsOnServer,
+  reorderSupportSectionsOnServer,
   updateDepartmentOnServer,
   updateSubsectionOnServer,
 } from './server-api'
 import { mergeDepartmentPatch } from './departments-store'
 import {
   getSubsectionsForDepartment,
+  applySubsectionSortOrder,
   mergeSubsectionPatch,
   mergeSubsectionsLists,
   readStoredSubsections,
@@ -135,6 +138,7 @@ import {
   type StoredSubsection,
 } from './subsections-store'
 import {
+  applySupportSectionSortOrder,
   applySupportSectionsFromSync,
   mergeSupportSectionPatch,
   readStoredSupportSections,
@@ -1519,6 +1523,52 @@ function registerIpc(): void {
     },
   )
 
+  ipcMain.handle(
+    'admin:reorder-subsections',
+    async (
+      _e,
+      payload: { departmentId: string; party?: string | null; orderedIds: string[] },
+    ) => {
+      requireManageTopicSections(payload.departmentId)
+      const departmentId = payload.departmentId
+      const party =
+        typeof payload.party === 'string' && payload.party.trim() ? payload.party.trim() : null
+      const orderedIds = Array.isArray(payload.orderedIds)
+        ? payload.orderedIds.map((id) => String(id).trim()).filter(Boolean)
+        : []
+      if (orderedIds.length === 0) throw new Error('Укажите порядок')
+
+      const applyLocal = () => applySubsectionSortOrder(departmentId, party, orderedIds)
+
+      const settings = readSettings()
+      if (!settings.serverUrl.trim()) {
+        applyLocal()
+        markLocalChange()
+        return readStoredSubsections()
+      }
+
+      try {
+        const updated = await reorderSubsectionsOnServer({ departmentId, party, orderedIds })
+        for (const row of updated) mergeSubsectionPatch(row)
+        try {
+          await pullFromYandex({ force: true })
+        } catch {
+          /* ok */
+        }
+        return readStoredSubsections()
+      } catch (err) {
+        appendSessionLog(
+          'warn',
+          'admin/subsections',
+          err instanceof Error ? err.message : 'Сохранение порядка на сервере не удалось',
+        )
+        applyLocal()
+        markLocalChange()
+        return readStoredSubsections()
+      }
+    },
+  )
+
   ipcMain.handle('admin:delete-subsection', async (_e, id: string) => {
     requireRole(getCurrentUser(), STAFF_ROLES)
     const existing = readStoredSubsections().find((s) => s.id === id)
@@ -1607,6 +1657,45 @@ function registerIpc(): void {
       const updated = await updateSupportSectionOnServer(payload.id, { label: payload.label })
       mergeSupportSectionPatch(updated)
       return updated
+    },
+  )
+
+  ipcMain.handle(
+    'admin:reorder-support-sections',
+    async (_e, payload: { orderedIds: string[] }) => {
+      requireManageTopicSections('support')
+      const orderedIds = Array.isArray(payload.orderedIds)
+        ? payload.orderedIds.map((id) => String(id).trim()).filter(Boolean)
+        : []
+      if (orderedIds.length === 0) throw new Error('Укажите порядок')
+
+      const applyLocal = () => applySupportSectionSortOrder(orderedIds)
+      const settings = readSettings()
+      if (!settings.serverUrl.trim()) {
+        applyLocal()
+        markLocalChange()
+        return readStoredSupportSections()
+      }
+
+      try {
+        const updated = await reorderSupportSectionsOnServer(orderedIds)
+        for (const row of updated) mergeSupportSectionPatch(row)
+        try {
+          await pullFromYandex({ force: true })
+        } catch {
+          /* ok */
+        }
+        return readStoredSupportSections()
+      } catch (err) {
+        appendSessionLog(
+          'warn',
+          'admin/support-sections',
+          err instanceof Error ? err.message : 'Сохранение порядка на сервере не удалось',
+        )
+        applyLocal()
+        markLocalChange()
+        return readStoredSupportSections()
+      }
     },
   )
 
@@ -2019,9 +2108,13 @@ function registerIpc(): void {
         }
         /** Архив только этой темы: прямые подтемы поднимаются на уровень выше, ветка не архивируется. */
         promoteChildren?: boolean
+        reservedMediaPaths?: string[]
       },
     ) => {
       requireEditDepartment(payload.departmentId)
+      const reserveSet = new Set(
+        (payload.reservedMediaPaths ?? []).map((p) => p.replace(/\\/g, '/').replace(/^\/+/, '')),
+      )
       const dept = departmentById(payload.departmentId)
       const data = readGuideFile(dept.fileName) as Record<string, unknown>
       const listKey = dept.listKey
@@ -2228,6 +2321,7 @@ function registerIpc(): void {
           String(savedItem.answer ?? ''),
           Array.isArray(savedItem.photos) ? savedItem.photos : undefined,
           list as TopicMediaRow[],
+          reserveSet.size > 0 ? reserveSet : undefined,
         )
         cleanupTopicFileOrphans(
           payload.departmentId,
@@ -2235,6 +2329,7 @@ function registerIpc(): void {
           String(savedItem.answer ?? ''),
           Array.isArray(savedItem.documents) ? savedItem.documents : undefined,
           list as TopicMediaRow[],
+          reserveSet.size > 0 ? reserveSet : undefined,
         )
       } catch (err) {
         console.error('media orphan cleanup failed', err)
@@ -2265,6 +2360,10 @@ function registerIpc(): void {
           'update',
           payload.departmentId,
           savedItem as Record<string, unknown>,
+          undefined,
+          payload.reservedMediaPaths?.length
+            ? { reservedMediaPaths: payload.reservedMediaPaths }
+            : undefined,
         )
         if (result.ok) return readGuideFile(dept.fileName)
         if (result.offline) {

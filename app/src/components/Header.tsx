@@ -109,8 +109,8 @@ export function Header({
         </span>
       </div>
 
-      {departmentId === 'support' && SUPPORT_PHONES_PLACEMENT === 'header' ? (
-        <SupportContactBars placement="header" />
+      {SUPPORT_PHONES_PLACEMENT === 'header' ? (
+        <SupportContactBars departmentId={departmentId} placement="header" />
       ) : null}
 
       <label className="app-header__dept">

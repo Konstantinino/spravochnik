@@ -31,6 +31,7 @@ import {
   releaseStaleFocus,
   restoreAppFocus,
 } from './lib/restoreAppFocus'
+import { reserveMediaPathsForUndo } from './lib/topicMediaReserve'
 import {
   loadSavedDepartment,
   saveDepartment,
@@ -849,10 +850,34 @@ export default function App() {
     if (!selected) return
     const topicId = selected.id
     const snapshot = editSnapshotRef.current
+    const undoBaseline =
+      snapshot ??
+      (localUndo?.topicId === topicId && localUndo.departmentId === departmentId
+        ? localUndo.item
+        : null)
+    const savedItem: GuideItem = {
+      ...selected,
+      question: payload.question,
+      answer: payload.answer,
+      parent_id: payload.parent_id,
+      party: payload.party ?? selected.party,
+      photos: selected.photos,
+      documents: selected.documents,
+      image_display: selected.image_display,
+    }
+    const reservedMediaPaths = reserveMediaPathsForUndo(
+      undoBaseline,
+      savedItem,
+      departmentId,
+      localUndo?.topicId === topicId && localUndo.departmentId === departmentId
+        ? localUndo.item
+        : null,
+    )
     pinSelectedTopic(topicId)
     try {
       const data = await window.spravochnik.updateItem({
         departmentId,
+        reservedMediaPaths: reservedMediaPaths.length > 0 ? reservedMediaPaths : undefined,
         item: {
           id: selected.id,
           version: selected.version,
@@ -1116,8 +1141,8 @@ export default function App() {
         interactionLocked={syncBlocking}
       />
 
-      {departmentId === 'support' && SUPPORT_PHONES_PLACEMENT === 'strip' ? (
-        <SupportContactBars placement="strip" />
+      {SUPPORT_PHONES_PLACEMENT === 'strip' ? (
+        <SupportContactBars departmentId={departmentId} placement="strip" />
       ) : null}
 
       <div className="app-body">

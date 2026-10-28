@@ -126,6 +126,27 @@ export function replaceSubsectionsFromSync(rows: SyncSubsectionPayload[]): Store
   return mapped
 }
 
+export function applySubsectionSortOrder(
+  departmentId: string,
+  party: string | null,
+  orderedIds: string[],
+): StoredSubsection[] {
+  const current = readStoredSubsections()
+  const scopeParty = normalizePartyField(party)
+  const scopeIds = new Set(orderedIds)
+  const updates = new Map<string, number>()
+  orderedIds.forEach((id, index) => updates.set(id, (index + 1) * 10))
+  const list = current.map((row) => {
+    if (row.departmentId !== departmentId) return row
+    const rowParty = normalizePartyField(row.party)
+    if (scopeParty !== rowParty) return row
+    if (!scopeIds.has(row.id)) return row
+    return { ...row, sortOrder: updates.get(row.id) ?? row.sortOrder }
+  })
+  writeStoredSubsections(list)
+  return readStoredSubsections()
+}
+
 export function mergeSubsectionPatch(row: SyncSubsectionPayload): StoredSubsection[] {
   const current = readStoredSubsections()
   const idx = current.findIndex((s) => s.id === row.id)

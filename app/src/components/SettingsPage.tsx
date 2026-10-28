@@ -27,22 +27,44 @@ import {
   workDepartmentsFrom,
 } from '../types'
 import {
-  DEFAULT_SUPPORT_PHONES,
-  formatSupportPhoneDisplay,
+  normalizeSupportPhoneLines,
   normalizeSupportPhones,
   normalizeTelDigits,
   type SupportPhoneLine,
+  type SupportPhonesByDepartment,
 } from '../lib/supportPhones'
 import {
-  DEFAULT_SUPPORT_EMAILS,
   normalizeSupportEmail,
+  normalizeSupportEmailLines,
   normalizeSupportEmails,
   type SupportEmailLine,
+  type SupportEmailsByDepartment,
 } from '../lib/supportEmails'
 import {
   formatSubsectionDividerLine,
   normalizeSubsectionLabelInput,
 } from '../lib/subsectionDividerLabel'
+import { SupportContactSettingsList } from './SupportContactSettingsList'
+import { TopicSectionDraggableLi } from './TopicSectionDraggableLi'
+import { moveArrayItem } from '../lib/moveArrayItem'
+
+const SUPPORT_SECTIONS_DRAG_SCOPE = 'support-sections'
+
+function subsectionDragScope(departmentId: string, party: string | null): string {
+  return `sub:${departmentId}:${party ?? '__root__'}`
+}
+
+function parseSubsectionDragScope(
+  scope: string,
+): { departmentId: string; party: string | null } | null {
+  if (!scope.startsWith('sub:')) return null
+  const rest = scope.slice(4)
+  const sep = rest.indexOf(':')
+  if (sep < 0) return null
+  const departmentId = rest.slice(0, sep)
+  const partyRaw = rest.slice(sep + 1)
+  return { departmentId, party: partyRaw === '__root__' ? null : partyRaw }
+}
 
 function assignableRoles(actorIsOwner: boolean): UserRole[] {
   return actorIsOwner ? ['user', 'editor', 'admin'] : ['user', 'editor']
@@ -204,16 +226,20 @@ export function SettingsPage({
   const [sessionLogs, setSessionLogs] = useState<SessionLogEntry[]>([])
   const [copyLogHint, setCopyLogHint] = useState<string | null>(null)
   const [pullingFull, setPullingFull] = useState(false)
-  const [supportPhones, setSupportPhones] = useState<SupportPhoneLine[]>(DEFAULT_SUPPORT_PHONES)
+  const [supportPhonesByDept, setSupportPhonesByDept] = useState<SupportPhonesByDepartment>({})
   const [savingSupportPhones, setSavingSupportPhones] = useState(false)
-  const [supportEmails, setSupportEmails] = useState<SupportEmailLine[]>(DEFAULT_SUPPORT_EMAILS)
+  const [supportEmailsByDept, setSupportEmailsByDept] = useState<SupportEmailsByDepartment>({})
   const [savingSupportEmails, setSavingSupportEmails] = useState(false)
+  const [contactsOfficeId, setContactsOfficeId] = useState<WorkDepartmentId>('support')
+  const [contactsEmailsReorder, setContactsEmailsReorder] = useState(false)
+  const [contactsPhonesReorder, setContactsPhonesReorder] = useState(false)
   const [workDepts, setWorkDepts] = useState<Department[]>(WORK_DEPARTMENTS)
   const [topicSections, setTopicSections] =
     useState<DepartmentSubsection[]>(initialTopicSections)
   const [supportSections, setSupportSections] =
     useState<SupportTopicSection[]>(initialSupportSections)
   const [sectionsOfficeId, setSectionsOfficeId] = useState<WorkDepartmentId>('support')
+  const [sectionsReorderMode, setSectionsReorderMode] = useState(false)
   const [addingNewSection, setAddingNewSection] = useState(false)
   const [addingSubsectionParty, setAddingSubsectionParty] = useState<string | null>(null)
   const [editingPartySectionId, setEditingPartySectionId] = useState<string | null>(null)
@@ -249,6 +275,36 @@ export function SettingsPage({
     }
   }, [topicSectionsDepartments, sectionsOfficeId])
 
+  useEffect(() => {
+    if (topicSectionsDepartments.length === 0) return
+    if (!topicSectionsDepartments.some((d) => d.id === contactsOfficeId)) {
+      setContactsOfficeId(topicSectionsDepartments[0]!.id as WorkDepartmentId)
+    }
+  }, [topicSectionsDepartments, contactsOfficeId])
+
+  useEffect(() => {
+    setContactsEmailsReorder(false)
+    setContactsPhonesReorder(false)
+  }, [contactsOfficeId])
+
+  useEffect(() => {
+    setSectionsReorderMode(false)
+    setAddingNewSection(false)
+    setAddingSubsectionParty(null)
+    setEditingSectionId(null)
+    setEditingPartySectionId(null)
+  }, [sectionsOfficeId])
+
+  const supportEmails = useMemo(
+    () => supportEmailsByDept[contactsOfficeId] ?? [],
+    [supportEmailsByDept, contactsOfficeId],
+  )
+
+  const supportPhones = useMemo(
+    () => supportPhonesByDept[contactsOfficeId] ?? [],
+    [supportPhonesByDept, contactsOfficeId],
+  )
+
   const displaySupportSections = useMemo((): SupportTopicSection[] => {
     if (supportSections.length > 0) return supportSections
     return SUPPORT_PARTIES.map((id, index) => ({
@@ -258,6 +314,40 @@ export function SettingsPage({
       systemLocked: true,
     }))
   }, [supportSections])
+
+  function sortTopicSubsections(a: DepartmentSubsection, b: DepartmentSubsection): number {
+    return a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru')
+  }
+
+  function subsectionIdsInScope(departmentId: string, party: string | null): string[] {
+    return topicSections
+      .filter((s) => {
+        if (s.departmentId !== departmentId) return false
+        if (s.isArchiveLost || s.isArchiveArchived) return false
+        return (s.party ?? null) === party
+      })
+      .sort(sortTopicSubsections)
+      .map((s) => s.id)
+  }
+
+  const canReorderTopicSections = useMemo(() => {
+    if (sectionsOfficeId === 'support') {
+      if (displaySupportSections.length >= 2) return true
+      return displaySupportSections.some(
+        (section) => subsectionIdsInScope('support', section.id).length >= 2,
+      )
+    }
+    if (subsectionIdsInScope(sectionsOfficeId, null).length >= 2) return true
+    return topicSections
+      .filter(
+        (s) =>
+          s.departmentId === sectionsOfficeId &&
+          !s.party &&
+          !s.isArchiveLost &&
+          !s.isArchiveArchived,
+      )
+      .some((section) => subsectionIdsInScope(sectionsOfficeId, section.id).length >= 2)
+  }, [sectionsOfficeId, displaySupportSections, topicSections])
 
   useEffect(() => {
     if (!addingNewSection) return
@@ -280,6 +370,53 @@ export function SettingsPage({
 
   function deptLabel(id: WorkDepartmentId): string {
     return workDepts.find((d) => d.id === id)?.label ?? id
+  }
+
+  async function handleTopicSectionMove(scope: string, from: number, to: number) {
+    if (from === to) return
+    if (typeof window.spravochnik.reorderAdminSupportSections !== 'function') {
+      setTopicSectionsError('Перезапустите приложение — нужна новая версия API разделов.')
+      return
+    }
+    setSavingSection(true)
+    clearTopicSectionsNotice()
+    setError(null)
+    try {
+      if (scope === SUPPORT_SECTIONS_DRAG_SCOPE) {
+        const orderedIds = moveArrayItem(
+          displaySupportSections.map((s) => s.id),
+          from,
+          to,
+        )
+        const saved = await window.spravochnik.reorderAdminSupportSections({ orderedIds })
+        setSupportSections(saved)
+      } else {
+        const parsed = parseSubsectionDragScope(scope)
+        if (!parsed) return
+        const orderedIds = moveArrayItem(
+          subsectionIdsInScope(parsed.departmentId, parsed.party),
+          from,
+          to,
+        )
+        if (typeof window.spravochnik.reorderAdminSubsections !== 'function') {
+          setTopicSectionsError('Перезапустите приложение — нужна новая версия API подразделов.')
+          return
+        }
+        await window.spravochnik.reorderAdminSubsections({
+          departmentId: parsed.departmentId,
+          party: parsed.party,
+          orderedIds,
+        })
+        const subs = await window.spravochnik.getSubsections()
+        setTopicSections(subs ?? [])
+      }
+      setInfo('Порядок сохранён')
+      clearTopicSectionsNotice()
+    } catch (e) {
+      setTopicSectionsError(formatTopicSectionsApiError(e))
+    } finally {
+      setSavingSection(false)
+    }
   }
 
   async function reloadDepartmentsConfig() {
@@ -516,8 +653,8 @@ export function SettingsPage({
         window.spravochnik.getSupportPhones(),
         window.spravochnik.getSupportEmails(),
       ])
-      setSupportPhones(normalizeSupportPhones(phones))
-      setSupportEmails(normalizeSupportEmails(emails))
+      setSupportPhonesByDept(normalizeSupportPhones(phones))
+      setSupportEmailsByDept(normalizeSupportEmails(emails))
       await reloadDepartmentsConfig()
     }
     if (actorIsOwner) {
@@ -795,40 +932,74 @@ export function SettingsPage({
     setSessionLogs(logs)
   }
 
+  function patchSupportPhonesForOffice(
+    updater: (prev: SupportPhoneLine[]) => SupportPhoneLine[],
+  ) {
+    setSupportPhonesByDept((store) => {
+      const prev = store[contactsOfficeId] ?? []
+      const nextLines = updater(prev)
+      const next = { ...store }
+      if (nextLines.length === 0) delete next[contactsOfficeId]
+      else next[contactsOfficeId] = nextLines
+      return next
+    })
+  }
+
   function updateSupportPhone(index: number, patch: Partial<SupportPhoneLine>) {
-    setSupportPhones((prev) =>
+    patchSupportPhonesForOffice((prev) =>
       prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
     )
   }
 
   function addSupportPhoneRow() {
-    setSupportPhones((prev) =>
-      prev.length >= 8
+    patchSupportPhonesForOffice((prev) =>
+      prev.length >= 6
         ? prev
         : [...prev, { label: 'Новый', display: '', tel: '' } satisfies SupportPhoneLine],
     )
   }
 
   function removeSupportPhoneRow(index: number) {
-    setSupportPhones((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
+    patchSupportPhonesForOffice((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function patchSupportEmailsForOffice(
+    updater: (prev: SupportEmailLine[]) => SupportEmailLine[],
+  ) {
+    setSupportEmailsByDept((store) => {
+      const prev = store[contactsOfficeId] ?? []
+      const nextLines = updater(prev)
+      const next = { ...store }
+      if (nextLines.length === 0) delete next[contactsOfficeId]
+      else next[contactsOfficeId] = nextLines
+      return next
+    })
   }
 
   function updateSupportEmail(index: number, patch: Partial<SupportEmailLine>) {
-    setSupportEmails((prev) =>
+    patchSupportEmailsForOffice((prev) =>
       prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
     )
   }
 
   function addSupportEmailRow() {
-    setSupportEmails((prev) =>
-      prev.length >= 8
+    patchSupportEmailsForOffice((prev) =>
+      prev.length >= 6
         ? prev
         : [...prev, { label: 'Новый', email: '' } satisfies SupportEmailLine],
     )
   }
 
   function removeSupportEmailRow(index: number) {
-    setSupportEmails((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
+    patchSupportEmailsForOffice((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function reorderSupportEmails(next: SupportEmailLine[]) {
+    patchSupportEmailsForOffice(() => next)
+  }
+
+  function reorderSupportPhones(next: SupportPhoneLine[]) {
+    patchSupportPhonesForOffice(() => next)
   }
 
   async function saveSupportEmails() {
@@ -836,15 +1007,21 @@ export function SettingsPage({
     setError(null)
     setInfo(null)
     try {
-      const prepared = normalizeSupportEmails(
+      const draft: SupportEmailsByDepartment = { ...supportEmailsByDept }
+      const lines = normalizeSupportEmailLines(
         supportEmails.map((row) => ({
           label: row.label,
           email: normalizeSupportEmail(row.email),
         })),
+        { fallbackToDefault: false },
       )
+      if (lines.length === 0) delete draft[contactsOfficeId]
+      else draft[contactsOfficeId] = lines
+      const prepared = normalizeSupportEmails(draft)
       const saved = await window.spravochnik.setSupportEmails({ emails: prepared })
-      setSupportEmails(saved)
-      setInfo('Почты техподдержки сохранены')
+      setSupportEmailsByDept(normalizeSupportEmails(saved))
+      setContactsEmailsReorder(false)
+      setInfo('Почты сохранены')
     } catch (e) {
       const raw = e instanceof Error ? e.message : ''
       const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
@@ -859,15 +1036,21 @@ export function SettingsPage({
     setError(null)
     setInfo(null)
     try {
-      const prepared = normalizeSupportPhones(
+      const draft: SupportPhonesByDepartment = { ...supportPhonesByDept }
+      const lines = normalizeSupportPhoneLines(
         supportPhones.map((row) => ({
           label: row.label,
           tel: normalizeTelDigits(row.tel),
         })),
+        { fallbackToDefault: false },
       )
+      if (lines.length === 0) delete draft[contactsOfficeId]
+      else draft[contactsOfficeId] = lines
+      const prepared = normalizeSupportPhones(draft)
       const saved = await window.spravochnik.setSupportPhones({ phones: prepared })
-      setSupportPhones(saved)
-      setInfo('Телефоны техподдержки сохранены.')
+      setSupportPhonesByDept(normalizeSupportPhones(saved))
+      setContactsPhonesReorder(false)
+      setInfo('Телефоны сохранены')
     } catch (e) {
       const raw = e instanceof Error ? e.message : ''
       const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
@@ -1175,26 +1358,57 @@ export function SettingsPage({
               нужно отнести к подразделу. В остальных отделах (СПП, юристы…) тоже можно добавить
               подразделы кнопкой «Добавить» у раздела.
             </p>
-            <label className="field topic-sections-settings__office">
-              <span>Отдел</span>
-              <select
-                value={sectionsOfficeId}
-                disabled={!actorIsOwner && topicSectionsDepartments.length <= 1}
-                onChange={(e) => {
-                  setSectionsOfficeId(e.target.value as WorkDepartmentId)
-                  setAddingNewSection(false)
-                  setAddingSubsectionParty(null)
-                  setEditingSectionId(null)
+            <div className="topic-sections-settings__toolbar">
+              <label className="field topic-sections-settings__office">
+                <span>Отдел</span>
+                <select
+                  value={sectionsOfficeId}
+                  disabled={
+                    sectionsReorderMode ||
+                    (!actorIsOwner && topicSectionsDepartments.length <= 1)
+                  }
+                  onChange={(e) => {
+                    setSectionsOfficeId(e.target.value as WorkDepartmentId)
+                    setAddingNewSection(false)
+                    setAddingSubsectionParty(null)
+                    setEditingSectionId(null)
+                  }}
+                  aria-label="Отдел для настройки разделов"
+                >
+                  {topicSectionsDepartments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={`btn btn-secondary contacts-settings__reorder${
+                  sectionsReorderMode ? ' contacts-settings__reorder--active' : ''
+                }`}
+                disabled={!canReorderTopicSections || savingSection}
+                onClick={() => {
+                  setSectionsReorderMode((v) => {
+                    if (!v) {
+                      setAddingNewSection(false)
+                      setAddingSubsectionParty(null)
+                      setEditingSectionId(null)
+                      setEditingPartySectionId(null)
+                    }
+                    return !v
+                  })
                 }}
-                aria-label="Отдел для настройки разделов"
               >
-                {topicSectionsDepartments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {sectionsReorderMode ? 'Готово' : 'Изменить порядок'}
+              </button>
+            </div>
+            {sectionsReorderMode ? (
+              <p className="muted settings-section__hint">
+                Перетащите раздел или подраздел за маркер ⋮⋮. Подразделы перемещаются только внутри
+                своего раздела.
+              </p>
+            ) : null}
             {!actorIsOwner ? (
               <p className="muted">
                 Администратор настраивает разделы только своего отдела (
@@ -1206,7 +1420,11 @@ export function SettingsPage({
                 {topicSectionsNotice}
               </div>
             ) : null}
-            <ul className="departments-settings">
+            <ul
+              className={`departments-settings${
+                sectionsReorderMode ? ' departments-settings--reorder' : ''
+              }`}
+            >
               <li className="departments-settings__row departments-settings__row--readonly">
                 <span className="departments-settings__label">
                   {TOPIC_VIEW_FILTER_LABELS.all}
@@ -1224,7 +1442,7 @@ export function SettingsPage({
                 </span>
               </li>
               {sectionsOfficeId === 'support'
-                ? displaySupportSections.map((section) => {
+                ? displaySupportSections.map((section, sectionIndex) => {
                     const party = section.id
                     const partySubs = topicSections
                       .filter(
@@ -1234,14 +1452,18 @@ export function SettingsPage({
                           !s.isArchiveArchived &&
                           (s.party ?? null) === party,
                       )
-                      .sort(
-                        (a, b) =>
-                          a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru'),
-                      )
+                      .sort(sortTopicSubsections)
                     const editingParty = editingPartySectionId === party
                     return (
                       <Fragment key={party}>
-                        <li className="departments-settings__row">
+                        <TopicSectionDraggableLi
+                          reorderMode={sectionsReorderMode}
+                          dragScope={SUPPORT_SECTIONS_DRAG_SCOPE}
+                          index={sectionIndex}
+                          className="departments-settings__row"
+                          onMove={handleTopicSectionMove}
+                          disabled={editingParty || savingSection}
+                        >
                           {editingParty ? (
                             <input
                               type="text"
@@ -1258,6 +1480,7 @@ export function SettingsPage({
                                 type="button"
                                 className="btn btn-secondary"
                                 disabled={
+                                  sectionsReorderMode ||
                                   savingSection ||
                                   (addingSubsectionParty != null && addingSubsectionParty !== party)
                                 }
@@ -1270,6 +1493,7 @@ export function SettingsPage({
                               <button
                                 type="button"
                                 className="btn btn-ghost"
+                                disabled={sectionsReorderMode}
                                 onClick={() => {
                                   setEditingPartySectionId(party)
                                   setEditingPartySectionLabel(section.label)
@@ -1303,20 +1527,25 @@ export function SettingsPage({
                               <button
                                 type="button"
                                 className="btn btn-danger"
-                                disabled={savingSection}
+                                disabled={sectionsReorderMode || savingSection}
                                 onClick={() => void removeSupportSection(party, section.label)}
                               >
                                 Удалить
                               </button>
                             ) : null}
                           </div>
-                        </li>
-                        {partySubs.map((section) => {
-                          const editing = editingSectionId === section.id
+                        </TopicSectionDraggableLi>
+                        {partySubs.map((sub, subIndex) => {
+                          const editing = editingSectionId === sub.id
                           return (
-                            <li
-                              key={section.id}
+                            <TopicSectionDraggableLi
+                              key={sub.id}
+                              reorderMode={sectionsReorderMode}
+                              dragScope={subsectionDragScope('support', party)}
+                              index={subIndex}
                               className="departments-settings__row departments-settings__row--nested"
+                              onMove={handleTopicSectionMove}
+                              disabled={editing || savingSection}
                             >
                               <span className="departments-settings__id muted" aria-hidden="true" />
                               {editing ? (
@@ -1330,16 +1559,17 @@ export function SettingsPage({
                                   <SubsectionDividerPreview raw={editingSectionLabel} />
                                 </div>
                               ) : (
-                                <span className="departments-settings__label">{section.label}</span>
+                                <span className="departments-settings__label">{sub.label}</span>
                               )}
                               <div className="departments-settings__actions">
                                 {!editing ? (
                                   <button
                                     type="button"
                                     className="btn btn-ghost"
+                                    disabled={sectionsReorderMode}
                                     onClick={() => {
-                                      setEditingSectionId(section.id)
-                                      setEditingSectionLabel(section.label)
+                                      setEditingSectionId(sub.id)
+                                      setEditingSectionLabel(sub.label)
                                       setAddingNewSection(false)
                                       setAddingSubsectionParty(null)
                                     }}
@@ -1352,7 +1582,7 @@ export function SettingsPage({
                                       type="button"
                                       className="btn btn-primary"
                                       disabled={savingSection}
-                                      onClick={() => void saveTopicSectionLabel(section.id)}
+                                      onClick={() => void saveTopicSectionLabel(sub.id)}
                                     >
                                       Сохранить
                                     </button>
@@ -1369,14 +1599,14 @@ export function SettingsPage({
                                   <button
                                     type="button"
                                     className="btn btn-danger"
-                                    disabled={savingSection}
-                                    onClick={() => void removeTopicSection(section.id, section.label)}
+                                    disabled={sectionsReorderMode || savingSection}
+                                    onClick={() => void removeTopicSection(sub.id, sub.label)}
                                   >
                                     Удалить
                                   </button>
                                 ) : null}
                               </div>
-                            </li>
+                            </TopicSectionDraggableLi>
                           )
                         })}
                         {addingNewSection && addingSubsectionParty === party ? (
@@ -1473,21 +1703,25 @@ export function SettingsPage({
                       (a, b) =>
                         a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru'),
                     )
-                    .map((section) => {
+                    .map((section, sectionIndex) => {
                       const sectionSubs = topicSections
                         .filter(
                           (s) =>
                             s.departmentId === sectionsOfficeId &&
                             (s.party ?? null) === section.id,
                         )
-                        .sort(
-                          (a, b) =>
-                            a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'ru'),
-                        )
+                        .sort(sortTopicSubsections)
                       const editingSection = editingSectionId === section.id
                       return (
                         <Fragment key={section.id}>
-                          <li className="departments-settings__row">
+                          <TopicSectionDraggableLi
+                            reorderMode={sectionsReorderMode}
+                            dragScope={subsectionDragScope(sectionsOfficeId, null)}
+                            index={sectionIndex}
+                            className="departments-settings__row"
+                            onMove={handleTopicSectionMove}
+                            disabled={editingSection || savingSection}
+                          >
                             <span className="departments-settings__id muted" aria-hidden="true" />
                             {editingSection ? (
                               <div className="departments-settings__field-stack">
@@ -1508,6 +1742,7 @@ export function SettingsPage({
                                   type="button"
                                   className="btn btn-secondary"
                                   disabled={
+                                    sectionsReorderMode ||
                                     savingSection ||
                                     (addingNewSection &&
                                       addingSubsectionParty != null &&
@@ -1522,6 +1757,7 @@ export function SettingsPage({
                                 <button
                                   type="button"
                                   className="btn btn-ghost"
+                                  disabled={sectionsReorderMode}
                                   onClick={() => {
                                     setEditingSectionId(section.id)
                                     setEditingSectionLabel(section.label)
@@ -1554,20 +1790,25 @@ export function SettingsPage({
                                 <button
                                   type="button"
                                   className="btn btn-danger"
-                                  disabled={savingSection}
+                                  disabled={sectionsReorderMode || savingSection}
                                   onClick={() => void removeTopicSection(section.id, section.label)}
                                 >
                                   Удалить
                                 </button>
                               ) : null}
                             </div>
-                          </li>
-                          {sectionSubs.map((sub) => {
+                          </TopicSectionDraggableLi>
+                          {sectionSubs.map((sub, subIndex) => {
                             const editing = editingSectionId === sub.id
                             return (
-                              <li
+                              <TopicSectionDraggableLi
                                 key={sub.id}
+                                reorderMode={sectionsReorderMode}
+                                dragScope={subsectionDragScope(sectionsOfficeId, section.id)}
+                                index={subIndex}
                                 className="departments-settings__row departments-settings__row--nested"
+                                onMove={handleTopicSectionMove}
+                                disabled={editing || savingSection}
                               >
                                 <span className="departments-settings__id muted" aria-hidden="true" />
                                 {editing ? (
@@ -1588,6 +1829,7 @@ export function SettingsPage({
                                     <button
                                       type="button"
                                       className="btn btn-ghost"
+                                      disabled={sectionsReorderMode}
                                       onClick={() => {
                                         setEditingSectionId(sub.id)
                                         setEditingSectionLabel(sub.label)
@@ -1620,14 +1862,14 @@ export function SettingsPage({
                                     <button
                                       type="button"
                                       className="btn btn-danger"
-                                      disabled={savingSection}
+                                      disabled={sectionsReorderMode || savingSection}
                                       onClick={() => void removeTopicSection(sub.id, sub.label)}
                                     >
                                       Удалить
                                     </button>
                                   ) : null}
                                 </div>
-                              </li>
+                              </TopicSectionDraggableLi>
                             )
                           })}
                           {addingNewSection && addingSubsectionParty === section.id ? (
@@ -1713,7 +1955,7 @@ export function SettingsPage({
               <button
                 type="button"
                 className="btn btn-secondary"
-                disabled={savingSection || addingNewSection}
+                disabled={sectionsReorderMode || savingSection || addingNewSection}
                 onClick={() => beginAddTopLevelSection()}
               >
                 Добавить раздел
@@ -1724,52 +1966,72 @@ export function SettingsPage({
 
         {actorIsStaff && (
           <section className="settings-section">
-            <h2>Почты техподдержки</h2>
+            <h2>Почты</h2>
             <p className="muted">
-              Блок в шапке слева от телефонов (отдел «Техподдержка»). По клику адрес копируется в
-              буфер обмена.
+              Блок в шапке слева от телефонов для выбранного отдела. По клику адрес копируется в
+              буфер обмена. Не более 6 адресов (в шапке — два столбика по 3).
             </p>
-            <ul className="support-phones-settings">
-              {supportEmails.map((row, index) => (
-                <li key={index} className="support-phones-settings__row">
-                  <label className="support-phones-settings__field">
-                    <span className="support-phones-settings__label">Название</span>
-                    <input
-                      type="text"
-                      value={row.label}
-                      onChange={(e) => updateSupportEmail(index, { label: e.target.value })}
-                    />
-                  </label>
-                  <label className="support-phones-settings__field">
-                    <span className="support-phones-settings__label">E-mail</span>
-                    <input
-                      type="email"
-                      value={row.email}
-                      onChange={(e) =>
-                        updateSupportEmail(index, { email: normalizeSupportEmail(e.target.value) })
-                      }
-                      placeholder="support@r-est.ru"
-                      autoComplete="off"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn btn-ghost support-phones-settings__remove"
-                    onClick={() => removeSupportEmailRow(index)}
-                    disabled={supportEmails.length <= 1}
-                    title="Удалить строку"
+            <div
+              className={`contacts-settings__block${
+                contactsEmailsReorder ? ' contacts-settings__block--reorder' : ''
+              }`}
+            >
+              <div className="contacts-settings__toolbar">
+                <label className="field contacts-settings__office">
+                  <span className="support-phones-settings__label">Отдел</span>
+                  <select
+                    value={contactsOfficeId}
+                    disabled={
+                      contactsEmailsReorder ||
+                      (!actorIsOwner && topicSectionsDepartments.length <= 1)
+                    }
+                    onChange={(e) => setContactsOfficeId(e.target.value as WorkDepartmentId)}
+                    aria-label="Отдел для настройки почт"
                   >
-                    Удалить
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    {topicSectionsDepartments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className={`btn btn-secondary contacts-settings__reorder${
+                    contactsEmailsReorder ? ' contacts-settings__reorder--active' : ''
+                  }`}
+                  disabled={supportEmails.length < 2}
+                  onClick={() => setContactsEmailsReorder((v) => !v)}
+                >
+                  {contactsEmailsReorder ? 'Готово' : 'Изменить порядок'}
+                </button>
+              </div>
+              {!actorIsOwner && topicSectionsDepartments.length === 1 ? (
+                <p className="muted settings-section__hint">
+                  Администратор настраивает почты только своего отдела (
+                  {deptLabel(normalizeWorkDepartmentId(currentUser.departmentId))}).
+                </p>
+              ) : null}
+              {contactsEmailsReorder ? (
+                <p className="muted settings-section__hint">
+                  Перетащите строку за маркер ⋮⋮, затем нажмите «Сохранить почты».
+                </p>
+              ) : null}
+              <SupportContactSettingsList
+                kind="email"
+                rows={supportEmails}
+                reorderMode={contactsEmailsReorder}
+                onReorder={reorderSupportEmails}
+                onUpdate={updateSupportEmail}
+                onRemove={removeSupportEmailRow}
+              />
+            </div>
             <div className="support-phones-settings__actions">
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={addSupportEmailRow}
-                disabled={supportEmails.length >= 8}
+                disabled={supportEmails.length >= 6 || contactsEmailsReorder}
               >
                 Добавить адрес
               </button>
@@ -1787,55 +2049,73 @@ export function SettingsPage({
 
         {actorIsStaff && (
           <section className="settings-section">
-            <h2>Телефоны техподдержки</h2>
+            <h2>Телефоны</h2>
             <p className="muted">
-              Блок в шапке справа от почт (отдел «Техподдержка»). Введите только цифры номера —
-              формат для показа и копирования подставится автоматически.
+              Блок в шапке справа от почт для выбранного отдела. Введите только цифры номера —
+              формат для показа и копирования подставится автоматически. Не более 6 номеров (в
+              шапке — два столбика по 3).
             </p>
-            <ul className="support-phones-settings">
-              {supportPhones.map((row, index) => (
-                <li key={index} className="support-phones-settings__row">
-                  <label className="support-phones-settings__field">
-                    <span className="support-phones-settings__label">Название</span>
-                    <input
-                      type="text"
-                      value={row.label}
-                      onChange={(e) => updateSupportPhone(index, { label: e.target.value })}
-                    />
-                  </label>
-                  <label className="support-phones-settings__field">
-                    <span className="support-phones-settings__label">Номер (цифры)</span>
-                    <input
-                      type="text"
-                      value={row.tel}
-                      onChange={(e) =>
-                        updateSupportPhone(index, {
-                          tel: normalizeTelDigits(e.target.value),
-                          display: formatSupportPhoneDisplay(e.target.value),
-                        })
-                      }
-                      inputMode="numeric"
-                      placeholder="83472468072"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn btn-ghost support-phones-settings__remove"
-                    onClick={() => removeSupportPhoneRow(index)}
-                    disabled={supportPhones.length <= 1}
-                    title="Удалить строку"
+            <div
+              className={`contacts-settings__block${
+                contactsPhonesReorder ? ' contacts-settings__block--reorder' : ''
+              }`}
+            >
+              <div className="contacts-settings__toolbar">
+                <label className="field contacts-settings__office">
+                  <span className="support-phones-settings__label">Отдел</span>
+                  <select
+                    value={contactsOfficeId}
+                    disabled={
+                      contactsPhonesReorder ||
+                      (!actorIsOwner && topicSectionsDepartments.length <= 1)
+                    }
+                    onChange={(e) => setContactsOfficeId(e.target.value as WorkDepartmentId)}
+                    aria-label="Отдел для настройки телефонов"
                   >
-                    Удалить
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    {topicSectionsDepartments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className={`btn btn-secondary contacts-settings__reorder${
+                    contactsPhonesReorder ? ' contacts-settings__reorder--active' : ''
+                  }`}
+                  disabled={supportPhones.length < 2}
+                  onClick={() => setContactsPhonesReorder((v) => !v)}
+                >
+                  {contactsPhonesReorder ? 'Готово' : 'Изменить порядок'}
+                </button>
+              </div>
+              {!actorIsOwner && topicSectionsDepartments.length === 1 ? (
+                <p className="muted settings-section__hint">
+                  Администратор настраивает телефоны только своего отдела (
+                  {deptLabel(normalizeWorkDepartmentId(currentUser.departmentId))}).
+                </p>
+              ) : null}
+              {contactsPhonesReorder ? (
+                <p className="muted settings-section__hint">
+                  Перетащите строку за маркер ⋮⋮, затем нажмите «Сохранить телефоны».
+                </p>
+              ) : null}
+              <SupportContactSettingsList
+                kind="phone"
+                rows={supportPhones}
+                reorderMode={contactsPhonesReorder}
+                onReorder={reorderSupportPhones}
+                onUpdate={updateSupportPhone}
+                onRemove={removeSupportPhoneRow}
+              />
+            </div>
             <div className="support-phones-settings__actions">
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={addSupportPhoneRow}
-                disabled={supportPhones.length >= 8}
+                disabled={supportPhones.length >= 6 || contactsPhonesReorder}
               >
                 Добавить номер
               </button>

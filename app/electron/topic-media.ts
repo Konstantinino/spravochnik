@@ -229,12 +229,38 @@ function isReferencedImageOnDisk(
   return localBasenames.has(fileName)
 }
 
+function isReservedMediaBasename(
+  departmentId: DepartmentId,
+  topicId: number,
+  kind: 'images' | 'files',
+  fileName: string,
+  reserveRelativePaths?: ReadonlySet<string>,
+): boolean {
+  if (!reserveRelativePaths?.size) return false
+  const rel =
+    kind === 'images'
+      ? topicImageRelativePath(departmentId, topicId, fileName)
+      : topicFileRelativePath(departmentId, topicId, fileName)
+  if (reserveRelativePaths.has(rel)) return true
+  const legacy =
+    kind === 'images'
+      ? `media/${topicId}/images/${fileName}`
+      : `media/${topicId}/files/${fileName}`
+  if (reserveRelativePaths.has(legacy)) return true
+  const suffix = kind === 'images' ? `/images/${fileName}` : `/files/${fileName}`
+  for (const p of reserveRelativePaths) {
+    if (p.endsWith(suffix)) return true
+  }
+  return false
+}
+
 export function cleanupTopicImageOrphans(
   departmentId: DepartmentId,
   topicId: number,
   answerMarkdown: string,
   extraRefs?: unknown[],
   allTopicsInDept?: TopicMediaRow[],
+  reserveRelativePaths?: ReadonlySet<string>,
 ): void {
   const localBasenames = collectReferencedImageBasenames(answerMarkdown, extraRefs)
   const globalPaths = allTopicsInDept
@@ -246,6 +272,9 @@ export function cleanupTopicImageOrphans(
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name)
       if (!fs.statSync(full).isFile()) continue
+      if (isReservedMediaBasename(departmentId, topicId, 'images', name, reserveRelativePaths)) {
+        continue
+      }
       if (isReferencedImageOnDisk(departmentId, topicId, name, globalPaths, localBasenames)) continue
       try {
         fs.unlinkSync(full)
@@ -519,6 +548,7 @@ export function cleanupTopicFileOrphans(
   answerMarkdown: string,
   extraRefs?: unknown[],
   allTopicsInDept?: TopicMediaRow[],
+  reserveRelativePaths?: ReadonlySet<string>,
 ): void {
   try {
     const localBasenames = collectReferencedFileBasenames(answerMarkdown, extraRefs)
@@ -531,6 +561,9 @@ export function cleanupTopicFileOrphans(
       for (const name of fs.readdirSync(dir)) {
         const full = path.join(dir, name)
         if (!fs.statSync(full).isFile()) continue
+        if (isReservedMediaBasename(departmentId, topicId, 'files', name, reserveRelativePaths)) {
+          continue
+        }
         if (isReferencedFileOnDisk(departmentId, topicId, name, globalPaths, localBasenames)) continue
         try {
           fs.unlinkSync(full)

@@ -57,10 +57,10 @@ export interface SettingsData {
   hasPendingChanges: boolean
   offlineWarningShown?: boolean
   windowBounds?: SavedWindowBounds
-  /** Cached support dept phone bar (synced from server when online). */
-  supportPhones?: Array<{ label: string; display: string; tel: string }>
-  /** Cached support dept email bar (synced from server when online). */
-  supportEmails?: Array<{ label: string; email: string }>
+  /** Телефоны в шапке по отделам (с сервера при онлайне). */
+  supportPhones?: Record<string, Array<{ label: string; display: string; tel: string }>>
+  /** Почты в шапке по отделам (с сервера при онлайне). */
+  supportEmails?: Record<string, Array<{ label: string; email: string }>>
 }
 
 export interface PublicUser {

@@ -47,9 +47,7 @@ export function resolveSupportArchiveSubsectionId(
   archivedBucketId: string,
 ): string | null {
   if (archived && !wasArchived) return archivedBucketId
-  if (!archived && wasArchived) {
-    return null
-  }
+  if (!archived && wasArchived) return resolvedSubsectionId
   return resolvedSubsectionId
 }
 

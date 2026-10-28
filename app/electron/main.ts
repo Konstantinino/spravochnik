@@ -177,6 +177,7 @@ import {
 import { downloadMediaImage } from './media-download'
 import { normalizeSupportEmails } from '../src/lib/supportEmails'
 import { normalizeSupportPhones } from '../src/lib/supportPhones'
+import { reassignGuideTopicsAfterSubsectionDelete } from '../src/lib/deptTopicSections'
 import { normalizeSubsectionLabelInput } from '../src/lib/subsectionDividerLabel'
 import {
   migrateLegacyLocalMedia,
@@ -261,6 +262,23 @@ function archiveSupportTopicsLocally(match: (row: Record<string, unknown>) => bo
   return moved
 }
 
+function reassignDeptSubsectionTopicsLocally(
+  deleted: StoredSubsection,
+  remainingSubs: StoredSubsection[],
+): number {
+  const dept = departmentById(deleted.departmentId)
+  const data = readGuideFile(dept.fileName) as Record<string, unknown>
+  const listKey = dept.listKey
+  const list = (data[listKey] as Array<Record<string, unknown>>) || []
+  const moved = reassignGuideTopicsAfterSubsectionDelete(list, deleted, remainingSubs)
+  if (moved > 0) {
+    data[listKey] = list
+    writeGuideFile(dept.fileName, data)
+    markLocalChange()
+  }
+  return moved
+}
+
 function clearDeptSubsectionLocally(departmentId: string, subsectionId: string): number {
   const dept = departmentById(departmentId)
   const data = readGuideFile(dept.fileName) as Record<string, unknown>
@@ -268,6 +286,10 @@ function clearDeptSubsectionLocally(departmentId: string, subsectionId: string):
   const list = (data[listKey] as Array<Record<string, unknown>>) || []
   const subs = getSubsectionsForDepartment(departmentId)
   const existing = subs.find((s) => s.id === subsectionId)
+  if (existing?.party) {
+    const remaining = subs.filter((s) => s.id !== subsectionId)
+    return reassignDeptSubsectionTopicsLocally(existing, remaining)
+  }
   const ids = new Set<string>([subsectionId])
   if (existing && !existing.party) {
     for (const s of subs) {
@@ -1592,6 +1614,10 @@ function registerIpc(): void {
       clearSupportSubsectionLocally(id)
     } else if (settings.serverUrl.trim()) {
       await deleteSubsectionOnServer(id)
+      if (existing) {
+        const remaining = readStoredSubsections().filter((s) => s.id !== id)
+        reassignDeptSubsectionTopicsLocally(existing, remaining)
+      }
     } else if (existing) {
       clearDeptSubsectionLocally(existing.departmentId, id)
     }
@@ -2171,6 +2197,7 @@ function registerIpc(): void {
           has_children?: boolean
           party?: SupportPartyValue
           subsection_id?: string | null
+          dept_section_id?: string
           archived?: boolean
           photos?: string[]
           documents?: { file_id: string; file_name: string }[]
@@ -2245,9 +2272,7 @@ function registerIpc(): void {
       let nextSubsectionId: string | undefined
       if (deptSubs.length > 0) {
         if (newParentId == null) {
-          if (unarchivingRoot) {
-            // Служебный subsection архива не входит в party-подразделы — снимется в applySupportArchiveSubsectionToRow.
-          } else if (payload.item.subsection_id !== undefined) {
+          if (payload.item.subsection_id !== undefined) {
             const subId = String(payload.item.subsection_id ?? '').trim()
             if (subId) {
               if (
@@ -2259,6 +2284,8 @@ function registerIpc(): void {
               if (!isSupportArchiveSubsectionId(subId)) {
                 nextSubsectionId = subId
               }
+            } else if (!unarchivingRoot) {
+              /* явно без подраздела */
             }
           }
         } else {
@@ -2288,13 +2315,15 @@ function registerIpc(): void {
       if (
         deptSubs.length > 0 &&
         newParentId == null &&
-        !unarchivingRoot &&
         payload.item.subsection_id !== undefined &&
-        !String(payload.item.subsection_id ?? '').trim()
+        !String(payload.item.subsection_id ?? '').trim() &&
+        !unarchivingRoot
       ) {
         delete list[idx].subsection_id
       } else if (nextSubsectionId) {
         list[idx].subsection_id = nextSubsectionId
+      } else if (unarchivingRoot && isSupportArchiveSubsectionId(list[idx].subsection_id)) {
+        delete list[idx].subsection_id
       } else if (deptSubs.length > 0 && newParentId != null && !list[idx].subsection_id) {
         delete list[idx].subsection_id
       }
@@ -2407,6 +2436,16 @@ function registerIpc(): void {
 
       writeGuideFile(dept.fileName, data)
 
+      const topicPushPayload = (): Record<string, unknown> => {
+        const row: Record<string, unknown> = { ...(savedItem as Record<string, unknown>) }
+        row.archived = nextArchived
+        const deptSectionHint = payload.item.dept_section_id
+        if (typeof deptSectionHint === 'string' && deptSectionHint.trim()) {
+          row.dept_section_id = deptSectionHint.trim()
+        }
+        return row
+      }
+
       const settings = readSettings()
       if (settings.serverUrl.trim()) {
         if (promotedIds.length > 0) {
@@ -2421,7 +2460,7 @@ function registerIpc(): void {
             queueOperation({
               type: 'update_topic',
               departmentId: payload.departmentId,
-              payload: savedItem as Record<string, unknown>,
+              payload: topicPushPayload(),
             })
             return readGuideFile(dept.fileName)
           }
@@ -2429,7 +2468,7 @@ function registerIpc(): void {
         const result = await tryPushTopicOnline(
           'update',
           payload.departmentId,
-          savedItem as Record<string, unknown>,
+          topicPushPayload(),
           undefined,
           payload.reservedMediaPaths?.length
             ? { reservedMediaPaths: payload.reservedMediaPaths }
@@ -2440,7 +2479,7 @@ function registerIpc(): void {
           queueOperation({
             type: 'update_topic',
             departmentId: payload.departmentId,
-            payload: list[idx] as Record<string, unknown>,
+            payload: topicPushPayload(),
           })
           markOfflinePending()
           return data

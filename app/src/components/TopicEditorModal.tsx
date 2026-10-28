@@ -6,12 +6,8 @@ import type {
   GuideItem,
   SupportTopicSection,
 } from '../types'
-import {
-  DEPARTMENTS,
-  supportPartySelectOptions,
-  TOPIC_VIEW_FILTER_LABELS,
-  workDepartmentsFrom,
-} from '../types'
+import { isSupportArchiveSubsectionId } from '../lib/archiveLost'
+import { DEPARTMENTS, supportPartySelectOptions, workDepartmentsFrom } from '../types'
 import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
   filterTopicsForClientLinkPicker,
@@ -173,12 +169,12 @@ export function TopicEditorModal({
     [subsections, targetDept, party, archiveSection, showParty, editorDeptSectionId],
   )
 
-  const showPartyPicker = showParty && isRootTopic && !topicArchived
+  const showPartyPicker = showParty && isRootTopic
   const showDeptSectionPicker =
     !showParty &&
     isRootTopic &&
     departmentHasNestedSubsections(subsections, targetDept) &&
-    !defaultDeptSectionId
+    (!defaultDeptSectionId || topicArchived)
   const deptSectionOptions = useMemo(
     () => deptTopLevelSections(subsections, targetDept),
     [subsections, targetDept],
@@ -193,7 +189,6 @@ export function TopicEditorModal({
     !showParty && isRootTopic && !deptHasNestedLayout && targetDeptSubsections.length > 0
   const showNestedSubsectionPicker =
     !showParty && isRootTopic && deptHasNestedLayout && nestedUnderEditorSection.length > 0
-  const showArchiveSectionReadonly = isRootTopic && topicArchived
   const deptHasNestedSubsections = deptHasNestedLayout
   const showSubsectionOptionalNone =
     archiveSection ||
@@ -201,11 +196,8 @@ export function TopicEditorModal({
     (deptHasNestedSubsections && isRootTopic && Boolean(editorDeptSectionId))
 
   const partySelectOptions = useMemo(
-    () =>
-      supportPartySelectOptions(supportSections, party, {
-        includeArchive: topicArchived,
-      }),
-    [supportSections, party, topicArchived],
+    () => supportPartySelectOptions(supportSections, party),
+    [supportSections, party],
   )
 
   const linkPickerItems = useMemo(() => filterTopicsForLinkPicker(items), [items])
@@ -235,11 +227,17 @@ export function TopicEditorModal({
       Boolean(initial?.archived),
       initialPartySelect,
     )
-    const nextDeptSection =
-      defaultDeptSectionId?.trim() ||
-      (mode === 'edit' && initial
-        ? deptSectionIdForTopicSubsection(initial.subsection_id, subsections) ?? ''
-        : '')
+    const restoreFromArchive =
+      mode === 'edit' &&
+      initial?.archived &&
+      initial.parent_id == null &&
+      isSupportArchiveSubsectionId(initial.subsection_id)
+    const nextDeptSection = restoreFromArchive
+      ? ''
+      : defaultDeptSectionId?.trim() ||
+        (mode === 'edit' && initial
+          ? deptSectionIdForTopicSubsection(initial.subsection_id, subsections) ?? ''
+          : '')
     setDeptSectionId(nextDeptSection)
     const subsForDept = editorSubsectionsForDepartment(
       subsections,
@@ -248,11 +246,13 @@ export function TopicEditorModal({
       { archiveSection: initialArchiveSection, deptSectionId: nextDeptSection || null },
     )
     const initialSub =
-      mode === 'edit' && initial
-        ? rootSubsectionSelectValueFromTopic(initial.subsection_id, subsForDept, {
-            deptSectionId: nextDeptSection || null,
-          })
-        : defaultSubsectionId
+      restoreFromArchive
+        ? SUBSECTION_NONE_SELECT_VALUE
+        : mode === 'edit' && initial
+          ? rootSubsectionSelectValueFromTopic(initial.subsection_id, subsForDept, {
+              deptSectionId: nextDeptSection || null,
+            })
+          : defaultSubsectionId
           ? rootSubsectionSelectValueFromTopic(defaultSubsectionId, subsForDept, {
               deptSectionId: nextDeptSection || null,
             })
@@ -584,15 +584,6 @@ export function TopicEditorModal({
                     {p.label}
                   </option>
                 ))}
-              </select>
-            </label>
-          )}
-
-          {showArchiveSectionReadonly && (
-            <label className="field">
-              <span>Раздел</span>
-              <select value="archive" disabled aria-readonly="true">
-                <option value="archive">{TOPIC_VIEW_FILTER_LABELS.archive}</option>
               </select>
             </label>
           )}

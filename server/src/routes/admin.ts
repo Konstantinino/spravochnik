@@ -1382,19 +1382,26 @@ adminRouter.delete('/subsections/:id', async (req: AuthRequest, res) => {
             await client.query(`DELETE FROM department_subsections WHERE id = $1`, [row.id])
           }
         }
-        const others = await client.query<{ id: string }>(
-          `SELECT id FROM department_subsections
-            WHERE department_id = $1 AND id <> $2 AND party IS NULL
-            ORDER BY sort_order ASC, id ASC
-            LIMIT 1`,
-          [existing.departmentId, id],
-        )
-        const fallbackId = others.rows[0]?.id ?? null
-        if (fallbackId) {
+        const parentSectionId =
+          typeof existing.party === 'string' && existing.party.trim()
+            ? existing.party.trim()
+            : null
+        let reassignTo: string | null = parentSectionId
+        if (!reassignTo) {
+          const others = await client.query<{ id: string }>(
+            `SELECT id FROM department_subsections
+              WHERE department_id = $1 AND id <> $2 AND party IS NULL
+              ORDER BY sort_order ASC, id ASC
+              LIMIT 1`,
+            [existing.departmentId, id],
+          )
+          reassignTo = others.rows[0]?.id ?? null
+        }
+        if (reassignTo) {
           await client.query(
             `UPDATE topics SET subsection_id = $3
               WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
-            [existing.departmentId, id, fallbackId],
+            [existing.departmentId, id, reassignTo],
           )
         } else {
           await client.query(

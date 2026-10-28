@@ -8,6 +8,7 @@ import {
   deptTopLevelSections,
 } from './deptTopicSections'
 import { getItemParty } from './data'
+import { isSupportArchiveSubsectionId } from './archiveLost'
 import { normalizeSubsectionLabelInput } from './subsectionDividerLabel'
 
 /** Значение «Раздел» в редакторе для архивных тем техподдержки (не поле party в JSON). */
@@ -58,24 +59,46 @@ export function isEditableRootTopic(
 
 export function editorArchiveSectionActive(
   departmentId: DepartmentId,
-  topicArchived: boolean,
+  _topicArchived: boolean,
   partySelectValue?: string,
 ): boolean {
   if (departmentId !== 'support') return false
-  return (
-    topicArchived || partySelectValue === SUPPORT_EDITOR_ARCHIVE_PARTY_ID
-  )
+  return partySelectValue === SUPPORT_EDITOR_ARCHIVE_PARTY_ID
 }
 
 export function editorPartySelectValue(
-  departmentId: DepartmentId,
+  _departmentId: DepartmentId,
   item: Pick<GuideItem, 'archived' | 'party'> | null | undefined,
   fallbackParty = 'supplier',
 ): string {
-  if (departmentId === 'support' && item?.archived) {
-    return SUPPORT_EDITOR_ARCHIVE_PARTY_ID
-  }
   return item ? getItemParty(item) : fallbackParty
+}
+
+/** Снять архив при сохранении корневой темы с выбранным разделом / подразделом. */
+export function shouldUnarchiveRootTopicOnSectionSave(
+  departmentId: DepartmentId,
+  wasArchived: boolean,
+  parentId: number | null,
+  params: {
+    isRootTopic: boolean
+    showParty: boolean
+    party?: string
+    subsection_id?: string | null
+    dept_section_id?: string | null
+    subsections: DepartmentSubsection[]
+  },
+): boolean {
+  if (!wasArchived || !params.isRootTopic || parentId != null) return false
+  if (params.showParty) {
+    const p = params.party?.trim()
+    return Boolean(p && p !== SUPPORT_EDITOR_ARCHIVE_PARTY_ID)
+  }
+  const forDept = params.subsections.filter((s) => s.departmentId === departmentId)
+  if (deptTopLevelSections(forDept, departmentId).length === 0) return true
+  const sid = String(
+    params.subsection_id ?? params.dept_section_id ?? '',
+  ).trim()
+  return Boolean(sid && !isSupportArchiveSubsectionId(sid))
 }
 
 /** party в JSON темы; «archive» в select — только UI. */

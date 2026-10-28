@@ -13,7 +13,9 @@ import {
   type WhitelistEntry,
   type WorkDepartmentId,
 } from '@app/types'
+import { reassignGuideTopicsAfterSubsectionDelete } from '@app/lib/deptTopicSections'
 import { canonicalImageStoragePath } from '@app/lib/markdown'
+import { getItems } from '@app/lib/data'
 import { ApiError, apiFetch, uploadMediaFile, validateServerUrl } from './api-client'
 import {
   applyDepartmentPayload,
@@ -807,8 +809,31 @@ const api: SpravochnikApi = {
   },
 
   deleteAdminSubsection: async (id) => {
+    const before = getCachedSubsections()
+    const existing = before.find((s) => s.id === id)
     await apiFetch(`/admin/subsections/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    setCachedSubsections(getCachedSubsections().filter((s) => s.id !== id))
+    const remaining = before.filter((s) => s.id !== id)
+    setCachedSubsections(remaining)
+    if (existing) {
+      const deptId = existing.departmentId as DepartmentId
+      const listKey = listKeyForDept(deptId)
+      const data = departmentGuide(deptId)
+      const list = getItems(data).map((item) => ({ ...item })) as Array<
+        Record<string, unknown>
+      >
+      reassignGuideTopicsAfterSubsectionDelete(list, existing, remaining)
+      setDepartmentGuide(deptId, { [listKey]: list as GuideItem[] })
+      try {
+        await refreshDepartmentFromServer(deptId)
+      } catch {
+        /* локальное переназначение уже отражено в UI */
+      }
+      emitSync({
+        code: 'up_to_date',
+        label: 'Актуально',
+        lastPulledAt: new Date().toISOString(),
+      })
+    }
     return { ok: true }
   },
 

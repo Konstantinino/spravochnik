@@ -25,7 +25,10 @@ import {
   isDeptTopLevelSectionFilter,
   topicMatchesDeptSection,
 } from './lib/deptTopicSections'
-import { deptSectionListFilterForSubsection } from './lib/topicSectionPickers'
+import {
+  deptSectionListFilterForSubsection,
+  shouldUnarchiveRootTopicOnSectionSave,
+} from './lib/topicSectionPickers'
 import {
   installInputFocusGuard,
   releaseStaleFocus,
@@ -759,6 +762,23 @@ export default function App() {
       const existing = items.find((i) => i.id === payload.id)
       if (!existing) throw new Error('Тема не найдена')
       pinSelectedTopic(payload.id)
+      const isRootTopic = payload.parent_id == null
+      const unarchiveOnSave = shouldUnarchiveRootTopicOnSectionSave(
+        payload.departmentId,
+        Boolean(existing.archived),
+        payload.parent_id,
+        {
+          isRootTopic,
+          showParty: payload.departmentId === 'support',
+          party: payload.party ?? existing.party,
+          subsection_id:
+            payload.subsection_id !== undefined
+              ? payload.subsection_id
+              : existing.subsection_id,
+          dept_section_id: payload.dept_section_id,
+          subsections,
+        },
+      )
       const data = await window.spravochnik.updateItem({
         departmentId: payload.departmentId,
         item: {
@@ -769,7 +789,7 @@ export default function App() {
           parent_id: payload.parent_id,
           party: payload.party ?? existing.party,
           has_children: existing.has_children,
-          archived: existing.archived,
+          archived: unarchiveOnSave ? false : existing.archived,
           sort_index: existing.sort_index,
           photos: existing.photos,
           documents: existing.documents,
@@ -791,6 +811,10 @@ export default function App() {
       })
       setGuide(data)
       pinSelectedTopic(payload.id)
+      if (unarchiveOnSave && listFilter === 'archive') {
+        setListFilter('all')
+        if (user) saveListFilter(user.id, payload.departmentId, 'all')
+      }
       if (payload.departmentId === 'support' && payload.party) {
         syncListFilterAfterPartySave(payload.party)
       } else if (payload.departmentId !== 'support') {
@@ -874,6 +898,23 @@ export default function App() {
         : null,
     )
     pinSelectedTopic(topicId)
+    const isRootTopic = payload.parent_id == null
+    const unarchiveOnSave = shouldUnarchiveRootTopicOnSectionSave(
+      departmentId,
+      Boolean(selected.archived),
+      payload.parent_id,
+      {
+        isRootTopic,
+        showParty: departmentId === 'support',
+        party: payload.party ?? selected.party,
+        subsection_id:
+          payload.subsection_id !== undefined
+            ? payload.subsection_id
+            : selected.subsection_id,
+        dept_section_id: payload.dept_section_id,
+        subsections,
+      },
+    )
     try {
       const data = await window.spravochnik.updateItem({
         departmentId,
@@ -886,7 +927,7 @@ export default function App() {
           parent_id: payload.parent_id,
           party: payload.party ?? selected.party,
           has_children: selected.has_children,
-          archived: selected.archived,
+          archived: unarchiveOnSave ? false : selected.archived,
           sort_index: selected.sort_index,
           photos: selected.photos,
           documents: selected.documents,
@@ -912,6 +953,10 @@ export default function App() {
         setLocalUndo({ departmentId, topicId, item: snapshot })
       }
       editSnapshotRef.current = null
+      if (unarchiveOnSave && listFilter === 'archive') {
+        setListFilter('all')
+        if (user) saveListFilter(user.id, departmentId, 'all')
+      }
       if (departmentId === 'support' && payload.party) {
         syncListFilterAfterPartySave(payload.party)
       } else if (departmentId !== 'support') {

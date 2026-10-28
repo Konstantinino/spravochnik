@@ -120,3 +120,36 @@ export function deptReorderSectionKey(
   if (!sid) return ''
   return deptSectionIdForTopicSubsection(sid, subsections) ?? sid
 }
+
+/** Куда перенести темы с удалённым subsection_id (до удаления записи из списка разделов). */
+export function subsectionIdAfterDelete(
+  deleted: Pick<DepartmentSubsection, 'id' | 'departmentId' | 'party'>,
+  remainingSubsections: DepartmentSubsection[],
+): string | null {
+  if (deleted.departmentId === 'support') return null
+  const party = typeof deleted.party === 'string' ? deleted.party.trim() : ''
+  if (party) return party
+  const top = deptTopLevelSections(
+    remainingSubsections.filter((s) => s.departmentId === deleted.departmentId),
+    deleted.departmentId,
+  ).filter((s) => s.id !== deleted.id)
+  return top[0]?.id ?? null
+}
+
+/** Только темы с subsection_id удалённого подраздела; остальные строки не меняются. */
+export function reassignGuideTopicsAfterSubsectionDelete(
+  list: Array<Record<string, unknown>>,
+  deleted: Pick<DepartmentSubsection, 'id' | 'departmentId' | 'party'>,
+  remainingSubsections: DepartmentSubsection[],
+): number {
+  const deletedId = deleted.id.trim()
+  const nextId = subsectionIdAfterDelete(deleted, remainingSubsections)
+  let n = 0
+  for (const row of list) {
+    if (String(row.subsection_id ?? '').trim() !== deletedId) continue
+    if (nextId) row.subsection_id = nextId
+    else delete row.subsection_id
+    n += 1
+  }
+  return n
+}

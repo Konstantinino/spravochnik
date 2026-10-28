@@ -16,7 +16,8 @@ import {
   deptTopLevelSections,
   isDeptTopLevelSectionFilter,
 } from '../lib/deptTopicSections'
-import { supportPartySelectOptions, TOPIC_VIEW_FILTER_LABELS } from '../types'
+import { isSupportArchiveSubsectionId } from '../lib/archiveLost'
+import { supportPartySelectOptions } from '../types'
 import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
   filterTopicsForClientLinkPicker,
@@ -347,8 +348,13 @@ export function Viewer({
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
     setParty(editorPartySelectValue(departmentId, item))
-    const nextDeptSection =
-      isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
+    const restoreFromArchive =
+      item.archived &&
+      item.parent_id == null &&
+      isSupportArchiveSubsectionId(item.subsection_id)
+    const nextDeptSection = restoreFromArchive
+      ? ''
+      : isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
         ? sidebarListFilter
         : deptSectionIdForTopicSubsection(item.subsection_id, subsections) ?? ''
     setDeptSectionId(nextDeptSection)
@@ -364,9 +370,11 @@ export function Viewer({
       { archiveSection, deptSectionId: nextDeptSection || null },
     )
     setSubsectionId(
-      rootSubsectionSelectValueFromTopic(item.subsection_id, subs, {
-        deptSectionId: nextDeptSection || null,
-      }),
+      restoreFromArchive
+        ? SUBSECTION_NONE_SELECT_VALUE
+        : rootSubsectionSelectValueFromTopic(item.subsection_id, subs, {
+            deptSectionId: nextDeptSection || null,
+          }),
     )
   }, [
     editing,
@@ -412,8 +420,13 @@ export function Viewer({
     setClientTopicId(linkedClient)
     setAttachClientLink(linkedClient != null)
     setParty(editorPartySelectValue(departmentId, item))
-    const nextDeptSection =
-      isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
+    const restoreFromArchive =
+      item.archived &&
+      item.parent_id == null &&
+      isSupportArchiveSubsectionId(item.subsection_id)
+    const nextDeptSection = restoreFromArchive
+      ? ''
+      : isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
         ? sidebarListFilter
         : deptSectionIdForTopicSubsection(item.subsection_id, subsections) ?? ''
     setDeptSectionId(nextDeptSection)
@@ -429,9 +442,11 @@ export function Viewer({
       { archiveSection, deptSectionId: nextDeptSection || null },
     )
     setSubsectionId(
-      rootSubsectionSelectValueFromTopic(item.subsection_id, subs, {
-        deptSectionId: nextDeptSection || null,
-      }),
+      restoreFromArchive
+        ? SUBSECTION_NONE_SELECT_VALUE
+        : rootSubsectionSelectValueFromTopic(item.subsection_id, subs, {
+            deptSectionId: nextDeptSection || null,
+          }),
     )
     onEditStart?.(structuredClone(item))
     setEditing(true)
@@ -493,12 +508,12 @@ export function Viewer({
   )
 
   const topicArchived = Boolean(item?.archived)
-  const showPartyPicker = showParty && isRootTopic && !topicArchived
+  const showPartyPicker = showParty && isRootTopic
   const showDeptSectionPicker =
     !showParty &&
     isRootTopic &&
     departmentHasNestedSubsections(subsections, departmentId) &&
-    sidebarListFilter === 'all'
+    (sidebarListFilter === 'all' || topicArchived)
   const deptSectionOptions = useMemo(
     () => deptTopLevelSections(subsections, departmentId),
     [subsections, departmentId],
@@ -515,18 +530,14 @@ export function Viewer({
     !showParty && isRootTopic && deptHasNestedLayout && nestedUnderEditorSection.length > 0
   const showSupportSubsectionPicker =
     showParty && isRootTopic && targetDeptSubsections.length > 0
-  const showArchiveSectionReadonly = isRootTopic && topicArchived
   const showSubsectionOptionalNone =
     archiveSection ||
     showParty ||
     (deptHasNestedLayout && isRootTopic && Boolean(editorDeptSectionId))
 
   const partySelectOptions = useMemo(
-    () =>
-      supportPartySelectOptions(supportSections, party, {
-        includeArchive: Boolean(item?.archived),
-      }),
-    [supportSections, party, item?.archived],
+    () => supportPartySelectOptions(supportSections, party),
+    [supportSections, party],
   )
 
   function handlePartyChange(next: string) {
@@ -1418,14 +1429,6 @@ export function Viewer({
                     {s.label}
                   </option>
                 ))}
-              </select>
-            </label>
-          )}
-          {showArchiveSectionReadonly && (
-            <label className="field">
-              <span>Раздел</span>
-              <select value="archive" disabled aria-readonly="true">
-                <option value="archive">{TOPIC_VIEW_FILTER_LABELS.archive}</option>
               </select>
             </label>
           )}

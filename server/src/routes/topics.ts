@@ -195,11 +195,11 @@ topicsRouter.post(
         item.parent_id === null || item.parent_id === undefined
           ? null
           : parseInt(String(item.parent_id), 10)
-      let party =
+      let party: string | null =
         dept === 'support' ? normalizeSupportParty(item.party, 'supplier') : null
       if (dept === 'support') {
         const raw = typeof item.party === 'string' ? item.party.trim() : ''
-        if (raw && (await isKnownSupportParty(raw))) party = raw as typeof party
+        if (raw && (await isKnownSupportParty(raw))) party = raw
       }
       const clientTopicId = resolveClientTopicId(dept, party, item.client_topic_id, null)
 
@@ -245,7 +245,7 @@ topicsRouter.post(
         if (dept === 'support') {
           party = normalizeSupportParty(resolvedParty ?? party, 'supplier')
           const raw = typeof resolvedParty === 'string' ? resolvedParty.trim() : ''
-          if (raw && (await isKnownSupportParty(raw))) party = raw as typeof party
+          if (raw && (await isKnownSupportParty(raw))) party = raw
         } else {
           party = resolvedParty
         }
@@ -522,7 +522,7 @@ topicsRouter.put(
             : parseInt(String(item.parent_id), 10)
           : current.parent_id
       const archived = item.archived !== undefined ? Boolean(item.archived) : current.archived
-      let party =
+      let party: string | null =
         dept === 'support'
           ? normalizeSupportParty(
               item.party,
@@ -531,7 +531,7 @@ topicsRouter.put(
           : null
       if (dept === 'support') {
         const raw = typeof item.party === 'string' ? item.party.trim() : ''
-        if (raw && (await isKnownSupportParty(raw))) party = raw as typeof party
+        if (raw && (await isKnownSupportParty(raw))) party = raw
       }
       const clientTopicId = resolveClientTopicId(
         dept,
@@ -613,7 +613,7 @@ topicsRouter.put(
             isSupportParty(current.party) ? current.party : 'supplier',
           )
           const raw = typeof resolvedParty === 'string' ? resolvedParty.trim() : ''
-          if (raw && (await isKnownSupportParty(raw))) party = raw as typeof party
+          if (raw && (await isKnownSupportParty(raw))) party = raw
         } else {
           party = resolvedParty ?? current.party
         }

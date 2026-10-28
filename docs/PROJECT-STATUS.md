@@ -1,16 +1,18 @@
 # REST INFO — статус проекта (handoff)
 
-Обновлено: 2026-10-27
+Обновлено: 2026-10-28
 
 ## Текущая фаза
 
-**v2 реализована.** Яндекс.Диск выведен из основного потока (sync + updates). Ожидается production-deploy серверным программистом.
+**v2 реализована.** Яндекс.Диск выведен из основного потока (sync + updates).
+
+**Ожидается production-deploy (28 окт.):** миграция **`016_unified_party_and_dept_archive`**, пересборка API (SPA + server в образе), Setup **1.5.0** с унификацией party/архива. Инструкция: [server/migrations/DEPLOY_016.md](../server/migrations/DEPLOY_016.md).
 
 **Веб-клиент (`web/`)** в `main` и на production (**https://info.r-est.ru**): Vite SPA + cookie-auth; UI общий с десктопом (`@app`). SPA **вшита в образ API** (`WEB_DIST=/data/web`, без bind-mount `./web/dist`). Без офлайна. Dev: [web/README.md](../web/README.md).
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows (27 окт.): клиент **1.5.0** (Setup уже собран; **новый Setup с copy/reorder-clientId — позже**, когда накопится пачка правок). **Production web (27 окт.):** медиа URL `/media/media/…`, buffered GET + `/media/status`; favicon R на красном; lock порядка с **`clientId`** (сайт ≠ приложение, даже один аккаунт); копирование текста в просмотре (CSS + Electron Edit/context menu). Миграции **004–014** (`014` — `topic_order_locks.client_id`). Host nginx → `:3000`; `CORS_ORIGIN` / `COOKIE_SECURE`.
+Локально на Windows (28 окт.): клиент **1.5.0**; Setup пересобран (`app/release-staging/`, party/archive — в `main`). **`web/dist`** в git, вшивается в образ API при `docker compose build api`. **Production web (27 окт.):** медиа URL `/media/media/…`, buffered GET + `/media/status`; favicon R на красном; lock порядка с **`clientId`**; копирование текста в просмотре. Миграции **004–015** в коде; **016** — unified party + per-dept archive (деploy на prod — по чеклисту DEPLOY_016). Host nginx → `:3000`; `CORS_ORIGIN` / `COOKIE_SECURE`.
 
 **Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
@@ -48,6 +50,8 @@
 - [x] Миграция **`010_department_subsections.sql`** — `department_subsections`, `topics.subsection_id`; admin CRUD подразделов; sync `subsections`; `resolveTopicSubsectionId` при создании тем
 - [x] **`lib/move-topics-to-lost.ts`** — темы удалённого раздела → «Потерялись»
 - [x] **`GET /health`** — флаг `features.adminDepartments` (диагностика деплоя)
+- [x] Миграция **`016_unified_party_and_dept_archive.sql`** — `topics.party` для всех отделов; `{deptId}__archive__archived|lost`; удаление верхнего раздела → архив «Потерянные» (`lib/department-archive.ts`, `lib/topic-party.ts`; `routes/topics.ts`, `routes/admin.ts`)
+- [x] [DEPLOY_016.md](../server/migrations/DEPLOY_016.md) — handoff для production
 
 ### Клиент (`app/`)
 
@@ -107,6 +111,7 @@
 - [x] Fix: фото не пропадают при правке текста — `ensureTopicMediaDownloaded` + учёт `photos`/`documents` при cleanup
 - [x] `upload-release.js` / **`publish-release.ps1`** — публикация Setup + `latest.yml` + `.blockmap`; секреты в `.env.deploy` (не в git)
 - [x] IPC `focusAppWindow` — восстановление фокуса окна Electron после модалок
+- [x] **Унификация с техподдержкой (party + архив):** все отделы с разделами — `topics.party` = id верхнего раздела; список «Все» — `groupRootsByParty`; редактор/«Из архива» без фейкового «Архив» в select; Electron `backfillTopicPartyInList` при `load-guide`; offline delete верхнего раздела → «Потерянные» (`departmentArchive.ts`, `departmentTaxonomy.ts`, `TopicList`, `SettingsPage`, `main.ts`)
 
 ### Скрипты и восстановление
 
@@ -127,7 +132,8 @@
 - [x] `docs/server-deploy.md`, `migration-from-yandex.md`, `legacy-yandex-disk.md`
 - [x] `docs/testing-checklist.md`
 - [x] `docs/fix-media-paths.md` — инструкция по разовому fix legacy-путей медиа
-- [x] `AGENTS.md`, `PROJECT-STATUS.md`
+- [x] `AGENTS.md`, `PROJECT-STATUS.md` (в т.ч. правила **graphify** и «ключевые файлы» для агентов)
+- [x] `graphify-out/` — карта кода (commit `9f9d1b4+`; не участвует в runtime)
 
 ### Исправления в ходе dev
 
@@ -157,9 +163,9 @@
 | Задача | Приоритет | Кто |
 |---|---|---|
 | Production web **info.r-est.ru** (SPA в образе API) | **Сделано** | — |
-| Залить Setup с пачкой правок (copy text, order `clientId`, …) — **не срочно**, накопим | Средний | Админ |
-| Залить Setup **1.5.0** + `latest.yml` + blockmap (если ещё не на production) | Средний | Админ / программист |
-| E2E по testing-checklist на production (web + desktop) | Средний | QA |
+| **`git pull` + миграция 016 + `docker compose build --no-cache api && up -d api`** | **Высокий** | Программист |
+| Setup **1.5.0** (party/archive) + `latest.yml` + blockmap на `/app/updates/` | **Высокий** | Админ |
+| E2E: разделы/party/архив/«Из архива»/удаление раздела (см. testing-checklist) | Средний | QA |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |
 | Progress bar full media sync | Низкий | Dev |
@@ -199,7 +205,8 @@ spravochnik-repo/
 │   ├── PROJECT-STATUS.md   ← этот файл
 │   ├── DEPLOY-FOR-PROGRAMMER.md
 │   └── ...
-├── AGENTS.md               # инструкция для AI
+├── AGENTS.md               # инструкция для AI (+ graphify, «ключевые файлы»)
+├── graphify-out/           # карта связей кода (опционально для агентов)
 └── README.md
 ```
 
@@ -207,13 +214,13 @@ spravochnik-repo/
 
 ## Следующие шаги (для администратора)
 
-1. Сайт: https://info.r-est.ru (после `git pull` + `COMPOSE_FILE=docker-compose.yml docker compose up -d --build`)
-2. Накопить правки десктопа → один новый Setup (copy / order clientId / …) и залить на сервер
-3. Раздать установщик; URL: `https://info.r-est.ru`
-4. Отозвать OAuth-токен Яндекс.Диска (больше не нужен)
+1. После деплоя программистом: https://info.r-est.ru — проверить фильтры/архив в non-support отделах
+2. Залить Setup **1.5.0** (`upload-release.js`) и раздать пользователям; URL: `https://info.r-est.ru`
+3. Отозвать OAuth-токен Яндекс.Диска (больше не нужен)
 
 ---
 
 ## Следующие шаги (для программиста)
 
-См. [DEPLOY-FOR-PROGRAMMER.md](DEPLOY-FOR-PROGRAMMER.md).
+1. Бекап БД → `git pull` → `docker compose build --no-cache api && docker compose up -d api` (миграция **016** применится в `migrate-cli` при старте; см. [DEPLOY_016.md](../server/migrations/DEPLOY_016.md))
+2. Общее: [DEPLOY-FOR-PROGRAMMER.md](DEPLOY-FOR-PROGRAMMER.md)

@@ -34,21 +34,48 @@
 - Разовый fix legacy-путей медиа после import: `app/scripts/fix-media-paths.js` → `POST /admin/fix-media-paths` (см. `docs/fix-media-paths.md`)
 - Яндекс.Диск в `updates.ts` **удалён**
 
-## graphify
+## graphify — навигация по коду (не часть runtime)
 
-Перед исследованием кодовой базы:
+Graphify **не участвует** в сборке, Docker, API и клиенте. Это карта связей (код + доки) для людей и агентов: `graphify-out/graph.json`, `graph.html`, `GRAPH_REPORT.md`. Папки `graphify-out/20XX-…/` — архивные снимки; `graphify-out/cache/` — локальный кэш AST.
+
+### Когда агент **обязан** вспомнить про graphify
+
+Перед разбором — **один** `graphify query` (из корня `spravochnik-repo/`), если задача **обзорная** и адрес в коде неочевиден:
+
+- «как устроено …», «где обрабатывается …», «кто вызывает …» без известного файла/символа;
+- сквозной сценарий: UI → IPC → sync → API → migrations;
+- новый агент / handoff после давних правок;
+- рефакторинг, затрагивающий **несколько слоёв** (client + server + migrations).
 
 ```powershell
-graphify query "<вопрос>"
+cd spravochnik-repo
+graphify query "<краткий вопрос по-русски или по терминам проекта>"
 ```
 
-После изменений кода:
+После ответа query — **всё равно** открыть и прочитать найденные файлы (`Read`/grep). Graphify показывает связи, не семантику и не edge cases.
+
+### Когда graphify **не нужен** (не трать время)
+
+- Узкая правка: известный путь, один символ, текст UI, тип, миграция по номеру.
+- Точный поиск: `grep` / `rg` по имени функции, IPC-каналу, `016_unified_party`.
+- Проверка поведения: только чтение кода и при необходимости запуск команд.
+
+**Не** делать `graphify update` после каждого мелкого патча.
+
+### Когда обновлять граф в git
+
+После **законченной серии** изменений структуры/связей (новые модули, перенос логики между файлами, крупный рефакторинг):
 
 ```powershell
+cd spravochnik-repo
 graphify update .
 ```
 
-См. также `graphify-out/GRAPH_REPORT.md`.
+Затем commit `graphify-out/` (корневые `graph.json`, `graph.html`, `GRAPH_REPORT.md`, при необходимости labels) — **если пользователь просил обновить ключевые файлы** или явно graphify. Hook на `git commit` может пересобрать граф в фоне, но **не коммитит** — не полагаться на него.
+
+Опционально: `graphify label` — если communities переименовались и нужны свежие LLM-названия (нужен API key).
+
+См. обзор: `graphify-out/GRAPH_REPORT.md`.
 
 ## Ключевые модули
 
@@ -80,8 +107,10 @@ graphify update .
 | `routes/admin.ts` | users, роли (owner/admin/editor/user), whitelist, releases, передача владения, **место на сервере** (owner), **`POST /admin/fix-media-paths`**, **`GET/POST/PUT/DELETE /admin/departments`**, **подразделы** (`/admin/departments/:id/subsections`, `/admin/subsections/:id`) |
 | `lib/departments.ts` | CRUD разделов, `lost`, `sort_order`, `system_locked` |
 | `lib/subsections.ts` | CRUD подразделов, `resolveTopicSubsectionId` |
-| `lib/move-topics-to-lost.ts` | перенос тем в раздел `lost` при удалении раздела |
-| `routes/topics.ts` | CRUD тем, блокировки, topic-order + **`clientId`** в lock/unlock/renew/PUT; поле **`client_topic_id`** (admin → client) |
+| `lib/department-archive.ts` | per-dept `{id}__archive__archived|lost`, `moveTopicsToArchiveLostByParty` |
+| `lib/topic-party.ts` | `resolveRootTopicPartyForWrite` (party = id верхнего раздела) |
+| `lib/move-topics-to-lost.ts` | перенос тем в отдел `lost` при удалении **отдела** (009) |
+| `routes/topics.ts` | CRUD тем, архив с bucket subsection, party на write, topic-order + **`clientId`** |
 | `middleware/min-client-version.ts` | запись на API только с актуальной версией клиента (см. `lib/app-version.ts`) |
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status; в changes: **`departments`**, **`subsections`** |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
@@ -175,7 +204,7 @@ COMPOSE_FILE=docker-compose.yml docker compose up -d --build
 docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```
 
-Фраза **«обнови ключевые файлы»** = актуализировать `docs/PROJECT-STATUS.md`, `AGENTS.md`, при необходимости `README.md` / `docs/testing-checklist.md` / deploy-доки под свежие изменения, затем commit + push (Setup — только по явной просьбе).
+Фраза **«обнови ключевые файлы»** — см. раздел [«Ключевые файлы проекта»](#ключевые-файлы-проекта-handoff-и-агенты) (это **не** «пересобрать весь код», а handoff + инструкции для агентов). Setup — только по явной просьбе.
 
 ### Сборка установщика
 
@@ -209,11 +238,30 @@ npm run dist:ascii
 13. **Минимальная версия клиента:** API отклоняет запись (426), если `X-Rest-Info-Client-Version` старее последнего `app_releases`; без записи в `app_releases` проверка выключена.
 14. **Admin↔client link:** пока production API без **008**, связь держится локально после push; для общей БД — деплой **008** + клиент с заголовком версии.
 15. **Терминология UI:** **отдел** = support/СПП/юристы (шапка); **раздел** = группировка тем внутри отдела (`department_subsections`, поле `subsection_id` в JSON/API). Не путать с CRUD `/admin/departments` (отдельные JSON-справочники на диске; в настройках не редактируются).
-16. **«Потерялись»:** отдел `lost` (009) в шапке только при наличии тем. **Разделы тем:** миграция **010**; без деплоя — 404 на `/admin/departments/:id/subsections`.
+16. **«Потерялись»:** отдел `lost` (009) в шапке только при наличии тем. **Разделы тем:** **010**; **016** — party + архивные подразделы в каждом рабочем отделе; без **016** на prod — рассинхрон party/архива с клиентом 1.5.0.
 17. **Телефоны в шапке:** блок справа (`supportPhonesUi.ts` → `header`); копирование форматированного номера.
 18. **Разделы тем (настройки):** `canManageTopicSectionsForDepartment` — owner все отделы, admin только `departmentId` пользователя (UI + `admin.ts` + IPC `admin:*-subsection` / `admin:*-support-section`).
 19. **Список «Все»:** `groupRootsByParty` для всех отделов; non-support — плашки `department_subsections`; support — party + подразделы.
 20. **Редактор темы:** корневая тема — обязательный раздел (`topicSectionPickers.ts`, `TopicEditorModal`, `Viewer`); client link только support / party `additional`.
+
+## Ключевые файлы проекта (handoff и агенты)
+
+Когда пользователь просит **«обнови ключевые файлы»**, он имеет в виду **не исходники приложения**, а **систему сопровождения**: актуальные инструкции, статус и карта кода для следующих людей/агентов.
+
+### Чеклист (выполнить по смыслу сессии, без лишних рефакторингов)
+
+1. **`docs/PROJECT-STATUS.md`** — что сделано, что в проде, блокеры, следующие шаги.
+2. **`AGENTS.md`** (этот файл) — архитектура, модули, правила, версии, если изменились.
+3. **Deploy / миграции** — при новых SQL: `server/migrations/DEPLOY_*.md` или правки `docs/server-deploy.md`, `docs/DEPLOY-FOR-PROGRAMMER.md`.
+4. **Чеклисты и README** — при изменении UX/сценариев: `docs/testing-checklist.md`, корневой `README.md`, `web/README.md` по необходимости.
+5. **Graphify** — `graphify update .` + commit `graphify-out/` (см. раздел [graphify](#graphify--навигация-по-коду-не-часть-runtime)), если менялась **структура** кода или пользователь ждёт актуальную карту.
+6. **Commit + push** — только по просьбе пользователя; не включать `.env`, токены, `REST-INFO-export/`, `graphify-out/cache/` (если не принято иное).
+
+### Не входит в «ключевые файлы» по умолчанию
+
+- Пересборка **`web/dist`**, **`npm run dist`** (Setup) — только если явно просят деплой/установщик.
+- Массовое обновление `graphify-out/20XX-…/` архивов — не обязательно.
+- Правка бизнес-логики без запроса «обнови ключевые» — только код задачи.
 
 ## Правила для агента
 
@@ -221,8 +269,8 @@ npm run dist:ascii
 - Коммиты — только по явной просьбе пользователя
 - Работать только в `spravochnik-repo/`
 - Не коммитить `.env`, токены, `REST-INFO-export/`
-- После правок кода: `graphify update .`
-- Фраза **«обнови ключевые файлы»** = `graphify update .` + актуализировать `docs/PROJECT-STATUS.md`, `AGENTS.md`, при необходимости `README.md` и `docs/testing-checklist.md` под свежие изменения сессии (без лишних рефакторингов)
+- **Graphify:** обзорная задача без адреса в коде → сначала `graphify query`; после крупной серии правок или по запросу «ключевые файлы» → `graphify update .` (см. раздел graphify выше)
+- **«Обнови ключевые файлы»** → раздел [«Ключевые файлы проекта»](#ключевые-файлы-проекта-handoff-и-агенты)
 
 ## Версии
 

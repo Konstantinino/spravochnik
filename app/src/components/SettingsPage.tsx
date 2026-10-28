@@ -864,15 +864,15 @@ export function SettingsPage({
   }
 
   async function removeTopicSection(id: string, label: string) {
-    if (
-      !window.confirm(
-        sectionsOfficeId === 'support'
-          ? `Удалить подраздел «${label}»? Темы из него останутся в том же разделе списка (Поставщик, Заказчик и т.д.), без группировки по подразделу.`
-          : topicSections.find((s) => s.id === id)?.party
-            ? `Удалить подраздел «${label}»? Темы из него останутся в том же разделе списка без группировки по подразделу.`
-            : `Удалить раздел «${label}»? Темы, привязанные к нему, останутся в отделе без раздела.`,
-      )
-    ) {
+    const row = topicSections.find((s) => s.id === id)
+    const isNested = Boolean(row?.party)
+    const isSupportSub = sectionsOfficeId === 'support'
+    const confirmMessage = isSupportSub
+      ? `Удалить подраздел «${label}»? Темы из него останутся в том же разделе списка (Поставщик, Заказчик и т.д.), без группировки по подразделу.`
+      : isNested
+        ? `Удалить подраздел «${label}»? Темы из него останутся в том же разделе списка без группировки по подразделу.`
+        : `Удалить раздел «${label}»? Его темы будут перенесены в архив, в подраздел «Потерянные».`
+    if (!window.confirm(confirmMessage)) {
       return
     }
     setSavingSection(true)
@@ -880,9 +880,9 @@ export function SettingsPage({
     try {
       await window.spravochnik.deleteAdminSubsection(id)
       setInfo(
-        sectionsOfficeId === 'support'
+        isSupportSub || isNested
           ? 'Подраздел удалён, темы остались в разделе списка'
-          : 'Раздел удалён',
+          : 'Раздел удалён, темы перенесены в архив',
       )
       await reloadDepartmentsConfig()
     } catch (e) {
@@ -1704,9 +1704,8 @@ export function SettingsPage({
                   {TOPIC_VIEW_FILTER_LABELS.archive}
                 </span>
                 <span className="muted departments-settings__system-tag">
-                  {sectionsOfficeId === 'support'
-                    ? 'Подразделы «Архивированные» (кнопка «Архив») и «Потерянные» (удаление раздела)'
-                    : 'Архивированные темы (кнопка «Архив» в карточке темы)'}
+                  Подразделы «Архивированные» (кнопка «Архив») и «Потерянные» (удаление
+                  раздела)
                 </span>
               </li>
               {sectionsOfficeId === 'support'

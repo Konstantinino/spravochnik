@@ -24,18 +24,27 @@ export function applySupportArchiveSubsectionToRow(
   applyDeptArchiveSubsectionToRow('support', row, nextArchived, wasArchived)
 }
 
-export function moveGuideTopicsToArchiveLost(
+export function moveGuideTopicsToDeptArchiveLost(
   list: Array<Record<string, unknown>>,
+  departmentId: string,
   match: (row: Record<string, unknown>) => boolean,
 ): number {
+  const lostId = archiveLostSubsectionId(departmentId)
   let n = 0
   for (const row of list) {
     if (!match(row)) continue
     row.archived = true
-    row.subsection_id = ARCHIVE_LOST_SUBSECTION_ID
+    row.subsection_id = lostId
     n += 1
   }
   return n
+}
+
+export function moveGuideTopicsToArchiveLost(
+  list: Array<Record<string, unknown>>,
+  match: (row: Record<string, unknown>) => boolean,
+): number {
+  return moveGuideTopicsToDeptArchiveLost(list, 'support', match)
 }
 
 /** Убрать привязку к подразделу — темы остаются в том же разделе (party). */

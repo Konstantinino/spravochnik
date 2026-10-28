@@ -153,10 +153,16 @@ import {
   ARCHIVE_ARCHIVED_SUBSECTION_ID,
   ARCHIVE_LOST_SUBSECTION_ID,
   clearGuideTopicSubsectionId,
-  isSupportArchiveSubsectionId,
   moveGuideTopicsToArchiveLost,
+  moveGuideTopicsToDeptArchiveLost,
 } from '../src/lib/archiveLost'
-import { applyDeptArchiveSubsectionToRow } from '../src/lib/departmentArchive'
+import {
+  applyDeptArchiveSubsectionToRow,
+  archiveArchivedSubsectionId,
+  archiveLostSubsectionId,
+  isAnyArchiveSubsectionId,
+} from '../src/lib/departmentArchive'
+import { deptSectionIdForTopicSubsection } from '../src/lib/deptTopicSections'
 import { backfillTopicPartyInList } from '../src/lib/backfillTopicParty'
 import type { GuideItem } from '../src/types'
 import {
@@ -250,6 +256,57 @@ function ensureArchiveArchivedSubsectionLocal(): void {
   })
 }
 
+function ensureDeptArchiveSubsectionsLocal(departmentId: string): void {
+  if (departmentId === 'support') {
+    ensureArchiveArchivedSubsectionLocal()
+    ensureArchiveLostSubsectionLocal()
+    return
+  }
+  const lostId = archiveLostSubsectionId(departmentId)
+  const archivedId = archiveArchivedSubsectionId(departmentId)
+  const list = readStoredSubsections()
+  if (!list.some((s) => s.id === archivedId)) {
+    mergeSubsectionPatch({
+      id: archivedId,
+      departmentId,
+      label: 'Архивированные',
+      sortOrder: 9998,
+      party: null,
+      isArchiveArchived: true,
+    })
+  }
+  if (!list.some((s) => s.id === lostId)) {
+    mergeSubsectionPatch({
+      id: lostId,
+      departmentId,
+      label: 'Потерянные',
+      sortOrder: 9999,
+      party: null,
+      isArchiveLost: true,
+    })
+  }
+}
+
+function archiveDeptTopicsByPartyLocally(departmentId: string, party: string): number {
+  ensureDeptArchiveSubsectionsLocal(departmentId)
+  const dept = departmentById(departmentId)
+  const data = readGuideFile(dept.fileName) as Record<string, unknown>
+  const listKey = dept.listKey
+  const list = (data[listKey] as Array<Record<string, unknown>>) || []
+  const p = party.trim()
+  const moved = moveGuideTopicsToDeptArchiveLost(
+    list,
+    departmentId,
+    (row) => String(row.party ?? '').trim() === p,
+  )
+  if (moved > 0) {
+    data[listKey] = list
+    writeGuideFile(dept.fileName, data)
+    markLocalChange()
+  }
+  return moved
+}
+
 function archiveSupportTopicsLocally(match: (row: Record<string, unknown>) => boolean): number {
   const dept = departmentById('support')
   const data = readGuideFile(dept.fileName) as Record<string, unknown>
@@ -291,6 +348,9 @@ function clearDeptSubsectionLocally(departmentId: string, subsectionId: string):
   if (existing?.party) {
     const remaining = subs.filter((s) => s.id !== subsectionId)
     return reassignDeptSubsectionTopicsLocally(existing, remaining)
+  }
+  if (existing && !existing.party && departmentId !== 'support') {
+    return archiveDeptTopicsByPartyLocally(departmentId, existing.id)
   }
   const ids = new Set<string>([subsectionId])
   if (existing && !existing.party) {
@@ -1624,12 +1684,24 @@ function registerIpc(): void {
       clearSupportSubsectionLocally(id)
     } else if (settings.serverUrl.trim()) {
       await deleteSubsectionOnServer(id)
-      if (existing) {
+      if (existing?.party) {
         const remaining = readStoredSubsections().filter((s) => s.id !== id)
         reassignDeptSubsectionTopicsLocally(existing, remaining)
       }
     } else if (existing) {
       clearDeptSubsectionLocally(existing.departmentId, id)
+    }
+    if (existing && !existing.party && existing.departmentId !== 'support') {
+      const nestedIds = readStoredSubsections()
+        .filter(
+          (s) =>
+            s.departmentId === existing.departmentId &&
+            (s.party ?? null) === existing.id &&
+            !s.isArchiveLost &&
+            !s.isArchiveArchived,
+        )
+        .map((s) => s.id)
+      for (const nestedId of nestedIds) removeSubsectionLocal(nestedId)
     }
     removeSubsectionLocal(id)
     try {
@@ -2116,10 +2188,12 @@ function registerIpc(): void {
         )
       }
 
-      const topicParty =
+      let topicParty: string | undefined =
         payload.departmentId === 'support'
           ? normalizeSupportPartyId(payload.item.party)
-          : undefined
+          : typeof payload.item.party === 'string' && payload.item.party.trim()
+            ? payload.item.party.trim()
+            : undefined
       const deptSubs = rootSubsectionsForTopic(payload.departmentId, topicParty)
       const pickSubMsg =
         payload.departmentId === 'support' ? 'Выберите подраздел' : 'Выберите раздел'
@@ -2137,6 +2211,29 @@ function registerIpc(): void {
       } else if (newItem.parent_id != null && deptSubs.length > 0) {
         const parent = list.find((item) => item.id === newItem.parent_id)
         if (parent?.subsection_id) newItem.subsection_id = parent.subsection_id
+      }
+
+      if (payload.departmentId !== 'support') {
+        if (!topicParty && newItem.parent_id != null) {
+          const parent = list.find((item) => item.id === newItem.parent_id)
+          const parentParty =
+            typeof parent?.party === 'string' && parent.party.trim()
+              ? parent.party.trim()
+              : ''
+          if (parentParty) topicParty = parentParty
+        }
+        if (!topicParty) {
+          const sid =
+            typeof newItem.subsection_id === 'string' ? newItem.subsection_id.trim() : ''
+          if (sid) {
+            topicParty =
+              deptSectionIdForTopicSubsection(
+                sid,
+                getSubsectionsForDepartment(payload.departmentId),
+              ) ?? undefined
+          }
+        }
+        if (topicParty) newItem.party = topicParty
       }
 
       list.push(newItem)
@@ -2293,11 +2390,11 @@ function registerIpc(): void {
             if (subId) {
               if (
                 !deptSubs.some((s) => s.id === subId) &&
-                !isSupportArchiveSubsectionId(subId)
+                !isAnyArchiveSubsectionId(subId)
               ) {
                 throw new Error(pickSubMsg)
               }
-              if (!isSupportArchiveSubsectionId(subId)) {
+              if (!isAnyArchiveSubsectionId(subId)) {
                 nextSubsectionId = subId
               }
             } else if (!unarchivingRoot) {
@@ -2348,7 +2445,7 @@ function registerIpc(): void {
         delete list[idx].subsection_id
       } else if (nextSubsectionId) {
         list[idx].subsection_id = nextSubsectionId
-      } else if (unarchivingRoot && isSupportArchiveSubsectionId(list[idx].subsection_id)) {
+      } else if (unarchivingRoot && isAnyArchiveSubsectionId(list[idx].subsection_id)) {
         delete list[idx].subsection_id
       } else if (deptSubs.length > 0 && newParentId != null && !list[idx].subsection_id) {
         delete list[idx].subsection_id
@@ -2364,20 +2461,13 @@ function registerIpc(): void {
       const promoteChildren = Boolean(payload.promoteChildren) && nextArchived && !oldArchived
       const promotedIds = promoteChildren ? promoteDirectChildren(list, payload.item.id) : []
 
-      if (payload.departmentId === 'support') {
-        ensureArchiveArchivedSubsectionLocal()
-        ensureArchiveLostSubsectionLocal()
-        applyDeptArchiveSubsectionToRow(
-          payload.departmentId,
-          list[idx],
-          nextArchived,
-          oldArchived,
-        )
-      } else if (nextArchived) {
-        list[idx].archived = true
-      } else {
-        delete list[idx].archived
-      }
+      ensureDeptArchiveSubsectionsLocal(payload.departmentId)
+      applyDeptArchiveSubsectionToRow(
+        payload.departmentId,
+        list[idx],
+        nextArchived,
+        oldArchived,
+      )
 
       function collectDescendants(rootId: number): number[] {
         const byParent = new Map<number, number[]>()
@@ -2404,18 +2494,12 @@ function registerIpc(): void {
         for (const id of collectDescendants(payload.item.id)) {
           const row = list.find((r) => r.id === id)
           if (!row) continue
-          if (payload.departmentId === 'support') {
-            applyDeptArchiveSubsectionToRow(
-              payload.departmentId,
-              row,
-              nextArchived,
-              oldArchived,
-            )
-          } else if (nextArchived) {
-            row.archived = true
-          } else {
-            delete row.archived
-          }
+          applyDeptArchiveSubsectionToRow(
+            payload.departmentId,
+            row,
+            nextArchived,
+            oldArchived,
+          )
         }
       }
 

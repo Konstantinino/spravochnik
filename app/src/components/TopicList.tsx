@@ -20,7 +20,6 @@ import {
   deptNestedSubsections,
   deptReorderSectionKey,
   deptTopLevelSections,
-  topicMatchesDeptSection,
 } from '../lib/deptTopicSections'
 import {
   formatSubsectionDividerLine,
@@ -305,13 +304,6 @@ function subsectionsForPartyScope(
   party: string,
 ): DepartmentSubsection[] {
   return sortSubsections(subsections.filter((s) => s.party === party))
-}
-
-function deptLevelSubsections(
-  subsections: DepartmentSubsection[],
-  departmentId: string,
-): DepartmentSubsection[] {
-  return sortSubsections(deptTopLevelSections(subsections, departmentId))
 }
 
 function isDeptSectionFilter(

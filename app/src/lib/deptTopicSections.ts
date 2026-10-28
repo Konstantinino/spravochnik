@@ -57,6 +57,25 @@ export function topicMatchesDeptSection(
   return (sub?.party ?? null) === sectionId
 }
 
+/** Раздел темы или любого предка (подтемы часто без subsection_id). */
+export function topicInDeptSectionView(
+  item: GuideItem,
+  sectionId: string,
+  subsections: DepartmentSubsection[],
+  activeItems: GuideItem[],
+): boolean {
+  if (topicMatchesDeptSection(item, sectionId, subsections)) return true
+  const byId = new Map(activeItems.map((row) => [row.id, row]))
+  let parentId = item.parent_id ?? null
+  while (parentId != null) {
+    const parent = byId.get(parentId)
+    if (!parent) break
+    if (topicMatchesDeptSection(parent, sectionId, subsections)) return true
+    parentId = parent.parent_id ?? null
+  }
+  return false
+}
+
 export function isDeptTopLevelSectionFilter(
   value: TopicViewFilter,
   departmentId: string,

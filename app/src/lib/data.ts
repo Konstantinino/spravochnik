@@ -1,5 +1,9 @@
 import type { DepartmentSubsection, GuideItem, TopicViewFilter } from '../types'
-import { deptReorderSectionKey, topicMatchesDeptSection } from './deptTopicSections'
+import {
+  deptReorderSectionKey,
+  topicInDeptSectionView,
+  topicMatchesDeptSection,
+} from './deptTopicSections'
 
 export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[] }): GuideItem[] {
   return data.questions ?? data.templates ?? []
@@ -48,7 +52,7 @@ export function filterItemsByView(
   if (filter === 'all') return active
   if (options?.deptSectionIds?.has(filter)) {
     const subs = options.deptSubsections ?? []
-    return active.filter((item) => topicMatchesDeptSection(item, filter, subs))
+    return active.filter((item) => topicInDeptSectionView(item, filter, subs, active))
   }
   return active.filter((item) => getItemParty(item) === filter)
 }

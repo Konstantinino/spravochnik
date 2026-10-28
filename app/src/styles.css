@@ -234,21 +234,22 @@ option {
   max-width: min(440px, 36vw);
 }
 
-.app-header:has(.support-contact-bars--header) {
+/* Только когда в шапке реально есть почты/телефоны (:empty — оба бара вернули null). */
+.app-header:has(.support-contact-bars--header:not(:empty)) {
   align-items: center;
   padding-top: 8px;
   padding-bottom: 8px;
 }
 
-.app-header:has(.support-contact-bars--header) .app-header__sync {
+.app-header:has(.support-contact-bars--header:not(:empty)) .app-header__sync {
   margin-right: 0;
 }
 
-.app-header:has(.support-contact-bars--header) .support-contact-bars--header {
+.app-header:has(.support-contact-bars--header:not(:empty)) .support-contact-bars--header {
   margin-left: auto;
 }
 
-.app-header:has(.support-contact-bars--header) .app-header__dept {
+.app-header:has(.support-contact-bars--header:not(:empty)) .app-header__dept {
   margin-left: 0;
 }
 

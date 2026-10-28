@@ -1,25 +1,25 @@
 # Graph Report - spravochnik-repo  (2026-10-28)
 
 ## Corpus Check
-- 179 files · ~128,512 words
+- 179 files · ~129,171 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2125 nodes · 5292 edges · 112 communities (81 shown, 12 thin omitted)
+- 2129 nodes · 5298 edges · 102 communities (75 shown, 11 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 59 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `18a5343c`
+- Built from commit: `ac1f9730`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - SupportEmailsBar.tsx
-- TopicList
+- TopicList.tsx
 - lib/media-layout.ts
 - compilerOptions
-- App
+- App.tsx
 - usePreserveTextareaFocus
 - topic-media.ts
 - devDependencies
@@ -46,6 +46,7 @@
 - pull-yandex-export.mjs
 - REST INFO — развёртывание сервера (Docker)
 - REST INFO — сервер API
+- AGENTS.md
 - REST INFO — изолированный пользователь на сервере
 - Чеклист тестирования REST INFO v2
 - REST INFO — клиент (Electron)
@@ -62,11 +63,11 @@
 - dependencies
 - scripts
 - 001_initial.sql
-- SupportPhonesBar.tsx
+- SettingsPage.tsx
 - auth-store.ts
 - clone-or-update.sh
 - fix-media-paths.js
-- Viewer.tsx
+- Viewer
 - deploy.sh
 - install-git-hooks.sh
 - setup-deploy-key.sh
@@ -75,36 +76,28 @@
 - REST INFO — план веб-версии
 - compilerOptions
 - План: автообновление «как Telegram Desktop»
-- normalizeWorkDepartmentId
-- TopicList.tsx
+- Viewer.tsx
+- departments.ts
 - subsections-store.ts
 - archive-lost.ts
-- paths.ts
-- pushToYandex
+- topicMediaReserve.ts
+- archiveLost.ts
 - electron/updates.ts
 - departmentById
-- TopicEditorModal.tsx
-- reloadDepartmentsConfig
-- guide-merge.ts
+- topicSectionPickers.ts
 - 012_support_sections_archive_lost.sql
 - yandex-sync.ts
 - subsections.ts
-- export-for-server.ts
 - query-subsections.mjs
-- markdown.ts
+- TopicEditorModal.tsx
 - media.ts
-- DEPLOY_016.md
 - support-sections-store.ts
 - readSettings
 - normalizeWorkDepartmentId
-- pending-operations.ts
 - main.ts
 - TopicSectionDraggableLi
-- ensureLocalUpdateManifest
-- electron
-- SettingsErrorBoundary
+- getUserDataRoot
 - REST INFO — веб-клиент
-- departments-store.ts
 - web/vite.config.ts
 - registerIpc
 - session-log.ts
@@ -117,54 +110,54 @@
 5. `App()` - 55 edges
 6. `readSettings()` - 50 edges
 7. `TopicEditorModal()` - 37 edges
-8. `pullFromServer()` - 34 edges
-9. `query()` - 34 edges
+8. `query()` - 34 edges
+9. `pullFromServer()` - 34 edges
 10. `readAccounts()` - 29 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `publicUserFromRow()` --calls--> `normalizeWorkDepartmentId()`  [EXTRACTED]
   web/src/platform/browser-spravochnik.ts → app/src/types.ts
+- `rejectForeignDepartmentEdit()` --calls--> `canEditDepartment()`  [EXTRACTED]
+  server/src/routes/topics.ts → server/src/lib/auth-utils.ts
+- `StoredSubsection` --references--> `SupportParty`  [EXTRACTED]
+  web/src/platform/guide-store.ts → app/src/types.ts
 - `AuthScreenProps` --references--> `PublicUser`  [EXTRACTED]
   app/src/components/AuthScreen.tsx → app/src/types.ts
-- `ParentTopicFieldProps` --references--> `GuideItem`  [EXTRACTED]
-  app/src/components/ParentTopicField.tsx → app/src/types.ts
-- `openEditUser()` --calls--> `normalizeWorkDepartmentId()`  [EXTRACTED]
-  app/src/components/SettingsPage.tsx → app/src/types.ts
-- `TopicLinkPickerProps` --references--> `GuideItem`  [EXTRACTED]
-  app/src/components/TopicLinkPicker.tsx → app/src/types.ts
+- `SupportContactBarsProps` --references--> `DepartmentId`  [EXTRACTED]
+  app/src/components/SupportContactBars.tsx → app/src/types.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (112 total, 12 thin omitted)
+## Communities (102 total, 11 thin omitted)
 
 ### Community 0 - "SupportEmailsBar.tsx"
-Cohesion: 0.18
-Nodes (19): saveSupportEmails(), copyText(), SupportEmailsBar(), applyStore(), handleCopy(), renderItem(), SupportEmailsBarProps, DEFAULT_SUPPORT_EMAILS (+11 more)
+Cohesion: 0.16
+Nodes (21): saveSupportEmails(), copyText(), SupportEmailsBar(), applyStore(), handleCopy(), renderItem(), SupportEmailsBarProps, DEFAULT_SUPPORT_EMAILS (+13 more)
 
-### Community 1 - "TopicList"
-Cohesion: 0.12
-Nodes (28): autoScrollContainer(), findScrollParent(), groupRootsBySubsections(), isDeptSectionFilter(), isRowVisibleInScroll(), renderTreeNode(), scrollRowToListCenter(), sortSubsections() (+20 more)
+### Community 1 - "TopicList.tsx"
+Cohesion: 0.08
+Nodes (46): DeptSectionListPreview(), SubsectionDividerPreview(), autoScrollContainer(), DeptSectionHeading(), findScrollParent(), groupRootsBySubsections(), guideX(), highlightTitle() (+38 more)
 
 ### Community 2 - "lib/media-layout.ts"
 Cohesion: 0.09
-Nodes (53): bumpGlobalVersion(), main(), printLine(), DbRow, DiscoveredFile, discoverMediaFilesOnDisk(), consider(), walk() (+45 more)
+Nodes (51): main(), printLine(), DbRow, DiscoveredFile, discoverMediaFilesOnDisk(), consider(), walk(), fixMediaPaths() (+43 more)
 
 ### Community 3 - "compilerOptions"
 Cohesion: 0.10
 Nodes (20): compilerOptions, allowImportingTsExtensions, isolatedModules, lib, module, moduleDetection, moduleResolution, noEmit (+12 more)
 
-### Community 4 - "App"
-Cohesion: 0.11
-Nodes (27): App(), alignListFilterForTopic(), collectSortIndexChanges(), executeLocalReset(), flashReorderLockBanner(), handleEnterReorderMode(), handleInlineSave(), handleListFilterChange() (+19 more)
+### Community 4 - "App.tsx"
+Cohesion: 0.07
+Nodes (47): App(), alignListFilterForTopic(), collectSortIndexChanges(), executeLocalReset(), flashReorderLockBanner(), handleAuthenticated(), handleDepartmentChange(), handleEnterReorderMode() (+39 more)
 
 ### Community 5 - "usePreserveTextareaFocus"
 Cohesion: 0.24
 Nodes (11): shouldKeepExternalFocus(), usePreserveTextareaFocus(), clearBlurTimer(), onBlur(), onFocusIn(), restoreFocusIfNeeded(), saveSelection(), focusTextControl() (+3 more)
 
 ### Community 6 - "topic-media.ts"
-Cohesion: 0.07
-Nodes (74): resolveImageOwner(), absFromRoot(), canonicalizeMediaRelativePath(), DEFAULT_MEDIA_DEPARTMENT, departmentIdFromMediaPath(), isMediaDepartmentId(), MEDIA_DEPARTMENT_IDS, MediaDepartmentId (+66 more)
+Cohesion: 0.08
+Nodes (65): absFromRoot(), canonicalizeMediaRelativePath(), DEFAULT_MEDIA_DEPARTMENT, departmentIdFromMediaPath(), isMediaDepartmentId(), MEDIA_DEPARTMENT_IDS, MediaDepartmentId, mediaRelativePathCandidates() (+57 more)
 
 ### Community 7 - "devDependencies"
 Cohesion: 0.11
@@ -179,12 +172,12 @@ Cohesion: 0.13
 Nodes (15): build, appId, directories, executableName, extraResources, files, productName, publish (+7 more)
 
 ### Community 10 - "REST INFO — инструкция для AI-агента"
-Cohesion: 0.11
-Nodes (18): graphify, Linux / production, REST INFO — инструкция для AI-агента, UI (`app/src/components/` + `lib/`), Windows (машина пользователя), Архитектура v2 (текущая), Версии, Владелец / bootstrap (+10 more)
+Cohesion: 0.08
+Nodes (24): graphify — навигация по коду (не часть runtime), Linux / production, REST INFO — инструкция для AI-агента, UI (`app/src/components/` + `lib/`), Windows (машина пользователя), Архитектура v2 (текущая), Версии, Владелец / bootstrap (+16 more)
 
 ### Community 11 - "routes/topics.ts"
-Cohesion: 0.08
-Nodes (42): DepartmentListKey, DepartmentRecord, getDepartmentById(), isDepartmentIdSlug(), isEditableInSettings(), isLostDepartmentId(), isMissingDepartmentsColumnError(), isTemplatesDepartmentId() (+34 more)
+Cohesion: 0.12
+Nodes (27): getGlobalVersion(), WorkDepartmentId, resolveArchiveSubsectionId(), getDepartmentById(), isValidDepartmentId(), supportSectionToClient(), Client, deptSectionIdFromSubsectionRow() (+19 more)
 
 ### Community 12 - "dist-ascii.js"
 Cohesion: 0.17
@@ -200,7 +193,7 @@ Nodes (9): Legacy: Яндекс.Диск, REST INFO, Архитектура v2, 
 
 ### Community 16 - "auth-utils.ts"
 Cohesion: 0.12
-Nodes (33): CONTENT_EDITOR_ROLES, generateSalt(), hashPassword(), isOwnerEmail(), isOwnerRole(), isUserRole(), JwtUser, LOST_DEPARTMENT_ID (+25 more)
+Nodes (31): canEditContent(), canEditDepartment(), CONTENT_EDITOR_ROLES, hashPassword(), isOwnerEmail(), isOwnerRole(), isStaffRole(), isUserRole() (+23 more)
 
 ### Community 17 - "devDependencies"
 Cohesion: 0.04
@@ -208,7 +201,7 @@ Nodes (46): cookie-parser, cors, embedded-postgres, express, jsonwebtoken, multe
 
 ### Community 18 - "browser-spravochnik.ts"
 Cohesion: 0.06
-Nodes (65): isUserRole(), parseUserRole(), SupportParty, ApiError, apiFetch(), hasConfiguredServer(), INVALID_SERVER_URL_MESSAGE, uploadMediaFile() (+57 more)
+Nodes (62): SupportParty, ApiError, apiFetch(), hasConfiguredServer(), INVALID_SERVER_URL_MESSAGE, uploadMediaFile(), validateServerUrl(), WEB_CLIENT_VERSION (+54 more)
 
 ### Community 19 - "web/package.json"
 Cohesion: 0.07
@@ -219,8 +212,8 @@ Cohesion: 0.18
 Nodes (17): args, countTopics(), DEFAULT_SRC, __dirname, diskPath(), dryRun, ensureDir(), JSON_FILES (+9 more)
 
 ### Community 21 - "prefs.ts"
-Cohesion: 0.16
-Nodes (16): AuthScreen(), forgetSavedLogin(), handleSubmit(), AuthScreenProps, ServerUrlForm(), findRememberedLogin(), isDepartmentId(), loadRememberedLogin() (+8 more)
+Cohesion: 0.14
+Nodes (18): AuthScreen(), forgetSavedLogin(), handleSubmit(), AuthScreenProps, ServerUrlForm(), findRememberedLogin(), isDepartmentId(), loadRememberedLogin() (+10 more)
 
 ### Community 22 - "REST INFO — инструкция для серверного программиста"
 Cohesion: 0.12
@@ -248,7 +241,7 @@ Nodes (14): REST INFO — статус проекта (handoff), Данные, �
 
 ### Community 28 - "types.ts"
 Cohesion: 0.06
-Nodes (80): handleAuthenticated(), handleDepartmentChange(), defaultSync, resolveListFilter(), resolveUserDepartment(), Header(), HeaderProps, Search() (+72 more)
+Nodes (46): Header(), HeaderProps, SettingsPageProps, SupportContactBars(), SupportContactBarsProps, SyncConflictModal(), SyncConflictModalProps, AdminDepartment (+38 more)
 
 ### Community 29 - "pull-yandex-export.mjs"
 Cohesion: 0.32
@@ -279,20 +272,20 @@ Cohesion: 0.27
 Nodes (8): __dirname, fileName, main(), releaseDir, serverUrl, uploadHeaders(), uploadUpdateFile(), versionMatch
 
 ### Community 37 - "data.ts"
-Cohesion: 0.09
-Nodes (36): handleReorderSiblings(), ParentTopicField(), handleBlur(), handleInputChange(), pick(), resolveBlurSelection(), ParentTopicFieldProps, TopicLinkPicker() (+28 more)
+Cohesion: 0.07
+Nodes (45): handleReorderSiblings(), ParentTopicField(), handleBlur(), handleInputChange(), pick(), resolveBlurSelection(), ParentTopicFieldProps, TopicLinkPicker() (+37 more)
 
 ### Community 39 - "index.ts"
-Cohesion: 0.12
-Nodes (23): getPool(), dataDir, __dirname, main(), mediaDir, root, updatesDir, AccountsData (+15 more)
+Cohesion: 0.11
+Nodes (28): getPool(), dataDir, __dirname, main(), mediaDir, root, updatesDir, AccountsData (+20 more)
 
 ### Community 40 - "admin.ts"
-Cohesion: 0.09
-Nodes (36): query(), withTransaction(), canManageTopicSectionsForDepartment(), isWorkDepartmentId(), acquireSettingsOrderLock(), foreignSettingsOrderBlock(), KIND_LABEL, LockRow (+28 more)
+Cohesion: 0.10
+Nodes (36): bumpGlobalVersion(), query(), withTransaction(), canManageTopicSectionsForDepartment(), isWorkDepartmentId(), acquireSettingsOrderLock(), foreignSettingsOrderBlock(), KIND_LABEL (+28 more)
 
 ### Community 41 - "server-sync.ts"
-Cohesion: 0.09
-Nodes (62): setPendingChanges(), reconcileHasChildren(), resolveExistingMediaAbsolutePath(), getDepartments(), getUserDataRoot(), clearPendingOperations(), hasPendingOperations(), downloadMediaFile() (+54 more)
+Cohesion: 0.08
+Nodes (54): setPendingChanges(), reconcileHasChildren(), DepartmentId, getDepartments(), PENDING_OPERATIONS_FILE, clearPendingOperations(), hasPendingOperations(), OperationType (+46 more)
 
 ### Community 42 - "Deploy keys (REST INFO)"
 Cohesion: 0.40
@@ -300,7 +293,7 @@ Nodes (4): Deploy keys (REST INFO), GitHub, Дополнительная защ�
 
 ### Community 43 - "SettingsPage"
 Cohesion: 0.08
-Nodes (36): assignableRoles(), coerceUsers(), coerceWhitelist(), formatBytes(), formatLogLine(), formatLogTime(), levelLabel(), SettingsPage() (+28 more)
+Nodes (47): coerceUsers(), coerceWhitelist(), formatLogLine(), formatLogTime(), formatTopicSectionsApiError(), parseSubsectionDragScope(), SettingsPage(), acquireOrderLock() (+39 more)
 
 ### Community 44 - "app/package.json"
 Cohesion: 0.18
@@ -322,21 +315,21 @@ Nodes (8): scripts, build, dev, dist, dist:ascii, electron:dev, pack, preview
 Cohesion: 0.15
 Nodes (13): app_releases, departments, media_files, removed_emails, sync_state, topic_id_counters, topic_locks, topics (+5 more)
 
-### Community 50 - "SupportPhonesBar.tsx"
-Cohesion: 0.14
-Nodes (21): saveSupportPhones(), SupportContactSettingsList(), commitReorder(), handleDrop(), SupportContactSettingsListProps, copyText(), SupportPhonesBar(), applyStore() (+13 more)
+### Community 50 - "SettingsPage.tsx"
+Cohesion: 0.11
+Nodes (29): assignableRoles(), formatBytes(), levelLabel(), openEditUser(), saveSupportPhones(), subsectionDragScope(), SupportContactSettingsList(), commitReorder() (+21 more)
 
 ### Community 51 - "auth-store.ts"
-Cohesion: 0.20
-Nodes (32): accountsPath(), addWhitelistEmail(), coerceAccountsData(), defaultAccounts(), defaultSettings(), ensureAuthFiles(), ensureLocalOwner(), findOwner() (+24 more)
+Cohesion: 0.05
+Nodes (94): accountsPath(), addWhitelistEmail(), clearEphemeralSessionOnStartup(), clearSession(), coerceAccountsData(), defaultAccounts(), defaultSettings(), deleteUser() (+86 more)
 
 ### Community 54 - "fix-media-paths.js"
 Cohesion: 0.33
 Nodes (6): apply, args, main(), positional, printLine(), serverUrl
 
-### Community 56 - "Viewer.tsx"
-Cohesion: 0.06
-Nodes (41): onKey(), openLocalResetConfirm(), ImageScaleDialog(), ImageScaleDialogProps, TopicMarkdownImage(), fileExtLabel(), ImgMenuState, nodeText() (+33 more)
+### Community 56 - "Viewer"
+Cohesion: 0.08
+Nodes (26): fileExtLabel(), nodeText(), Viewer(), applyDraftScale(), cancelEditing(), closeBranchAction(), closeFind(), closeScaleEditor() (+18 more)
 
 ### Community 61 - "Исправление путей к фото на сервере"
 Cohesion: 0.20
@@ -354,133 +347,109 @@ Nodes (19): ../app/src/*, compilerOptions, baseUrl, isolatedModules, jsx, lib, m
 Cohesion: 0.07
 Nodes (30): 1.1 Зависимости и сборка (`app/`), 1.2 Клиент — `app/electron/updates.ts`, 1.3 Клиент — UI, 1.4 Клиент — IPC (`main.ts`, `preload.ts`, `vite-env.d.ts`), 1.5 Сервер — раздача артефактов, 1.6 Публикация — `upload-release.js`, 1.7 Обратная совместимость API, Edge cases (+22 more)
 
-### Community 65 - "normalizeWorkDepartmentId"
-Cohesion: 0.18
-Nodes (17): clearEphemeralSessionOnStartup(), clearSession(), deleteUser(), getCurrentUser(), loginUser(), requireRole(), sessionPath(), toPublicUser() (+9 more)
+### Community 65 - "Viewer.tsx"
+Cohesion: 0.13
+Nodes (24): ImageScaleDialog(), ImageScaleDialogProps, TopicEditorModalProps, TopicListProps, TopicMarkdownImage(), TopicMarkdownImageProps, ImgMenuState, ScaleEditorState (+16 more)
 
-### Community 66 - "TopicList.tsx"
-Cohesion: 0.11
-Nodes (26): DeptSectionListPreview(), SubsectionDividerPreview(), DeptSectionHeading(), guideX(), highlightTitle(), ReorderDragGhost, ReorderDragSession, ReorderPending (+18 more)
+### Community 66 - "departments.ts"
+Cohesion: 0.13
+Nodes (20): DepartmentListKey, DepartmentRecord, isDepartmentIdSlug(), isEditableInSettings(), isLostDepartmentId(), isMissingDepartmentsColumnError(), isTemplatesDepartmentId(), isWorkDepartmentRecord() (+12 more)
 
 ### Community 67 - "subsections-store.ts"
-Cohesion: 0.27
-Nodes (17): ensureArchiveArchivedSubsectionLocal(), ensureArchiveLostSubsectionLocal(), ensureDeptArchiveSubsectionsLocal(), applySubsectionsFromSync(), applySubsectionSortOrder(), mergeSubsectionPatch(), mergeSubsectionRecords(), mergeSubsectionsLists() (+9 more)
+Cohesion: 0.24
+Nodes (19): ensureArchiveArchivedSubsectionLocal(), ensureArchiveLostSubsectionLocal(), ensureDeptArchiveSubsectionsLocal(), applySubsectionsFromSync(), applySubsectionSortOrder(), getSubsectionsForDepartment(), mergeSubsectionPatch(), mergeSubsectionRecords() (+11 more)
 
 ### Community 68 - "archive-lost.ts"
-Cohesion: 0.15
-Nodes (17): ARCHIVE_ARCHIVED_SUBSECTION_ID, ARCHIVE_LOST_SUBSECTION_ID, Client, isSupportArchiveSubsectionId(), moveTopicsToArchiveLostByParty(), archiveArchivedSubsectionId(), archiveLostSubsectionId(), Client (+9 more)
+Cohesion: 0.16
+Nodes (16): ARCHIVE_ARCHIVED_SUBSECTION_ID, ARCHIVE_LOST_SUBSECTION_ID, Client, isSupportArchiveSubsectionId(), moveTopicsToArchiveLostByParty(), archiveArchivedSubsectionId(), archiveLostSubsectionId(), Client (+8 more)
 
-### Community 69 - "paths.ts"
-Cohesion: 0.10
-Nodes (23): PublicUser, StoredUser, WhitelistEntry, BOOTSTRAP_ADMIN_EMAIL, canEditContent(), CONTENT_EDITOR_ROLES, Department, DEPARTMENTS (+15 more)
+### Community 69 - "topicMediaReserve.ts"
+Cohesion: 0.43
+Nodes (7): canonicalImageStoragePath(), parseFileAttachmentHref(), canonicalFileStoragePath(), collectTopicMediaRelativePaths(), reserveMediaPathsForUndo(), stripRef(), resolveMediaHttpUrl()
 
-### Community 71 - "pushToYandex"
-Cohesion: 0.23
-Nodes (15): baseDir(), basePathFor(), readBaseGuide(), writeAllGuideBasesFromLocal(), writeBaseFromLocalFile(), writeBaseGuide(), listKeyForFile(), mergeGuidesWithRemote() (+7 more)
+### Community 71 - "archiveLost.ts"
+Cohesion: 0.29
+Nodes (12): applySupportArchiveSubsectionToRow(), ARCHIVE_ARCHIVED_SUBSECTION_ID, ARCHIVE_LOST_SUBSECTION_ID, moveGuideTopicsToArchiveLost(), moveGuideTopicsToDeptArchiveLost(), applyDeptArchiveSubsectionToRow(), archiveArchivedSubsectionId(), archiveLostSubsectionId() (+4 more)
 
 ### Community 73 - "electron/updates.ts"
 Cohesion: 0.13
-Nodes (29): APP_UPDATE_FILE, checkForUpdates(), checkForUpdatesAuto(), checkForUpdatesLegacy(), clearPartialUpdateCache(), configureAutoUpdaterFeed(), downloadLatestRelease(), downloadUpdate() (+21 more)
+Nodes (29): checkForUpdates(), checkForUpdatesAuto(), checkForUpdatesLegacy(), clearPartialUpdateCache(), configureAutoUpdaterFeed(), downloadLatestRelease(), downloadUpdate(), electronUpdaterCacheDir() (+21 more)
 
 ### Community 74 - "departmentById"
-Cohesion: 0.30
-Nodes (15): archiveDeptTopicsByPartyLocally(), archiveSupportTopicsLocally(), clearDeptSubsectionLocally(), clearSupportSubsectionLocally(), inferSubsectionsFromLocalGuides(), normalizeSupportPartyId(), readGuideFile(), reassignDeptSubsectionTopicsLocally() (+7 more)
+Cohesion: 0.47
+Nodes (11): archiveDeptTopicsByPartyLocally(), archiveSupportTopicsLocally(), clearDeptSubsectionLocally(), clearSupportSubsectionLocally(), readGuideFile(), reassignDeptSubsectionTopicsLocally(), refreshDeptTopicOrderFromServer(), writeGuideFile() (+3 more)
 
-### Community 75 - "TopicEditorModal.tsx"
-Cohesion: 0.10
-Nodes (56): newDraftId(), TopicEditorModal(), handleParentIdChange(), handlePartyChange(), handleSubmit(), imageOwnerPayload(), insertFile(), insertPhoto() (+48 more)
-
-### Community 80 - "reloadDepartmentsConfig"
-Cohesion: 0.23
-Nodes (15): formatTopicSectionsApiError(), parseSubsectionDragScope(), beginAddSubsection(), beginAddTopLevelSection(), clearTopicSectionsNotice(), createSupportSectionRow(), createTopicSection(), handleToggleSectionsReorder() (+7 more)
-
-### Community 81 - "guide-merge.ts"
-Cohesion: 0.25
-Nodes (13): applyConflictResolutions(), asTopicMap(), deepEqual(), detectListKey(), GuideListKey, GuideTopic, mergeGuideFile(), MergeGuideResult (+5 more)
+### Community 75 - "topicSectionPickers.ts"
+Cohesion: 0.08
+Nodes (56): newDraftId(), TopicEditorModal(), handleParentIdChange(), handlePartyChange(), handleSubmit(), isPartySectionFilter(), handleParentIdChange(), handlePartyChange() (+48 more)
 
 ### Community 83 - "yandex-sync.ts"
-Cohesion: 0.11
-Nodes (37): AccountsData, acquireSyncLock(), ConflictResolution, currentStatus, deleteRemoteFile(), discardLocalChanges(), downloadRemoteFile(), emit() (+29 more)
+Cohesion: 0.07
+Nodes (69): AccountsData, applyConflictResolutions(), asTopicMap(), deepEqual(), detectListKey(), GuideListKey, GuideTopic, mergeGuideFile() (+61 more)
 
 ### Community 84 - "subsections.ts"
 Cohesion: 0.16
 Nodes (23): allocateSubsectionId(), Client, departmentHasNestedSubsectionRecords(), departmentHasSubsections(), deptTopLevelSectionRecords(), filterSubsectionsForTopicScope(), getSubsectionById(), isMissingColumn() (+15 more)
 
-### Community 85 - "export-for-server.ts"
-Cohesion: 0.22
-Nodes (11): defaultSource, manifest, copyFileSafe(), copyMediaTree(), countItems(), exportForServer(), ExportManifest, GUIDE_LIST_KEY (+3 more)
-
-### Community 89 - "markdown.ts"
-Cohesion: 0.08
-Nodes (46): handleAnswerCopy(), handleAnswerPaste(), copyImageLink(), copyTopicLink(), handleAnswerCopy(), handleAnswerPaste(), insertFile(), insertPhoto() (+38 more)
+### Community 89 - "TopicEditorModal.tsx"
+Cohesion: 0.11
+Nodes (41): handleAnswerCopy(), handleAnswerPaste(), imageOwnerPayload(), insertFile(), insertPhoto(), resolvedTextareaSelection(), handleAnswerCopy(), handleAnswerPaste() (+33 more)
 
 ### Community 90 - "media.ts"
-Cohesion: 0.12
-Nodes (21): getGlobalVersion(), CLIENT_VERSION_HEADER, compareVersions(), getLatestAppReleaseVersion(), normalizeVersionLabel(), parseClientVersionHeader(), requiredClientVersion(), canEditContent() (+13 more)
+Cohesion: 0.16
+Nodes (16): CLIENT_VERSION_HEADER, compareVersions(), getLatestAppReleaseVersion(), normalizeVersionLabel(), parseClientVersionHeader(), requiredClientVersion(), requireRole(), blockWritesIfClientOutdated() (+8 more)
 
 ### Community 92 - "support-sections-store.ts"
 Cohesion: 0.31
 Nodes (12): applySupportSectionsFromSync(), applySupportSectionSortOrder(), configPath(), DEFAULT_SUPPORT_SECTIONS, defaultSupportSections(), mergeSupportSectionPatch(), readStoredSupportSections(), removeSupportSectionLocal() (+4 more)
 
 ### Community 93 - "readSettings"
-Cohesion: 0.29
-Nodes (12): parseWindowBounds(), readSettings(), saveWindowBounds(), setAuthToken(), setLastSyncAt(), setServerUrl(), settingsPath(), setYandexToken() (+4 more)
+Cohesion: 0.24
+Nodes (14): readSettings(), saveWindowBounds(), setAuthToken(), setLastSyncAt(), setServerUrl(), settingsPath(), setYandexToken(), writeSettings() (+6 more)
 
 ### Community 94 - "normalizeWorkDepartmentId"
 Cohesion: 0.13
 Nodes (22): normalizeWorkDepartmentId(), DEFAULT_SUPPORT_EMAILS, isPlausibleSupportEmail(), normalizeSupportEmail(), normalizeSupportEmailLines(), normalizeSupportEmails(), readSupportEmailsFromDb(), SUPPORT_EMAILS_SYNC_KEY (+14 more)
 
-### Community 95 - "pending-operations.ts"
-Cohesion: 0.39
-Nodes (8): OperationType, opsPath(), PendingOperation, PendingOperationsData, queueOperation(), readPendingOperations(), removeOperation(), writePendingOperations()
-
 ### Community 96 - "main.ts"
-Cohesion: 0.06
-Nodes (58): SavedWindowBounds, applyClientTopicLink(), attachWindowBoundsPersistence(), attachWindowsInputFixes(), compareTopicRows(), createWindow(), fetchAdminUsersFromServer(), isWindowBoundsVisible() (+50 more)
+Cohesion: 0.07
+Nodes (48): requireRole(), applyClientTopicLink(), attachWindowBoundsPersistence(), attachWindowsInputFixes(), cacheServerUser(), compareTopicRows(), createWindow(), inferSubsectionsFromLocalGuides() (+40 more)
 
-### Community 101 - "ensureLocalUpdateManifest"
-Cohesion: 0.50
-Nodes (5): ensureDataReady(), getSeedDataDir(), require, ensureLocalUpdateManifest(), parseManifest()
-
-### Community 102 - "electron"
-Cohesion: 0.43
-Nodes (5): downloadMediaImage(), IMAGE_EXTENSIONS, localPathFromSpravochnikUrl(), suggestedNameFromSrc(), electron
+### Community 102 - "getUserDataRoot"
+Cohesion: 0.12
+Nodes (32): ensureDataReady(), downloadMediaImage(), IMAGE_EXTENSIONS, localPathFromSpravochnikUrl(), suggestedNameFromSrc(), resolveExistingMediaAbsolutePath(), getMediaDir(), getSeedDataDir() (+24 more)
 
 ### Community 105 - "REST INFO — веб-клиент"
 Cohesion: 0.40
 Nodes (5): Dev (Windows), Production, REST INFO — веб-клиент, Решения, Сборка
 
-### Community 106 - "departments-store.ts"
-Cohesion: 0.20
-Nodes (17): applyDepartmentsFromSync(), DEFAULT_DEPARTMENTS, departmentById(), departmentFileName(), DEPARTMENTS_CONFIG_FILE, departmentsConfigPath(), ensureGuideFileForDepartment(), getActiveDepartments() (+9 more)
-
 ### Community 109 - "registerIpc"
 Cohesion: 0.08
-Nodes (51): normalizeServerUrl(), registerIpc(), putUser(), AdminDepartmentDto, AdminSupportSectionDto, authHeaders(), baseUrl(), CLIENT_VERSION_HEADER (+43 more)
+Nodes (52): normalizeServerUrl(), registerIpc(), putUser(), resolveImageOwner(), normalizeMediaDepartmentId(), AdminDepartmentDto, AdminSupportSectionDto, authHeaders() (+44 more)
 
 ### Community 114 - "session-log.ts"
 Cohesion: 0.22
 Nodes (8): clearSessionLogs(), entries, getSessionLogs(), listeners, notify(), onSessionLog(), SessionLogEntry, SessionLogLevel
 
 ## Knowledge Gaps
-- **560 isolated node(s):** `SettingsData`, `SessionData`, `ROLE_RANK`, `DEPARTMENTS_CONFIG_FILE`, `StoredDepartment` (+555 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 695 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **564 isolated node(s):** `SupportPhonesPlacement`, `ReorderDragGhost`, `ReorderDragSession`, `ReorderPending`, `AdminDepartmentDto` (+559 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 696 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **11 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `GuideItem` connect `types.ts` to `main.ts`, `TopicList.tsx`, `data.ts`, `TopicEditorModal.tsx`, `browser-spravochnik.ts`, `Viewer.tsx`, `markdown.ts`?**
-  _High betweenness centrality (0.031) - this node is a cross-community bridge._
-- **Why does `Viewer()` connect `Viewer.tsx` to `App`, `data.ts`, `usePreserveTextareaFocus`, `TopicEditorModal.tsx`, `markdown.ts`, `types.ts`?**
-  _High betweenness centrality (0.021) - this node is a cross-community bridge._
-- **Why does `registerIpc()` connect `registerIpc` to `SupportEmailsBar.tsx`, `topic-media.ts`, `server-sync.ts`, `SupportPhonesBar.tsx`, `auth-store.ts`, `normalizeWorkDepartmentId`, `TopicList.tsx`, `subsections-store.ts`, `paths.ts`, `electron/updates.ts`, `departmentById`, `TopicEditorModal.tsx`, `support-sections-store.ts`, `readSettings`, `pending-operations.ts`, `main.ts`, `electron`, `departments-store.ts`, `session-log.ts`?**
-  _High betweenness centrality (0.016) - this node is a cross-community bridge._
+- **Why does `GuideItem` connect `data.ts` to `main.ts`, `Viewer.tsx`, `TopicList.tsx`, `App.tsx`, `topicMediaReserve.ts`, `topicSectionPickers.ts`, `browser-spravochnik.ts`, `TopicEditorModal.tsx`, `types.ts`?**
+  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+- **Why does `Viewer()` connect `Viewer` to `Viewer.tsx`, `App.tsx`, `usePreserveTextareaFocus`, `data.ts`, `topicMediaReserve.ts`, `topicSectionPickers.ts`, `TopicEditorModal.tsx`?**
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._
+- **Why does `getUserDataRoot()` connect `getUserDataRoot` to `main.ts`, `subsections-store.ts`, `topic-media.ts`, `server-sync.ts`, `departmentById`, `electron/updates.ts`, `registerIpc`, `auth-store.ts`, `yandex-sync.ts`, `support-sections-store.ts`, `readSettings`?**
+  _High betweenness centrality (0.019) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Viewer()` (e.g. with `close()` and `onKey()`) actually correct?**
   _`Viewer()` has 2 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `SettingsData`, `SessionData`, `ROLE_RANK` to the rest of the system?**
-  _560 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `TopicList` be split into smaller, more focused modules?**
-  _Cohesion score 0.12043010752688173 - nodes in this community are weakly interconnected._
+- **What connects `SupportPhonesPlacement`, `ReorderDragGhost`, `ReorderDragSession` to the rest of the system?**
+  _564 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `TopicList.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.0792156862745098 - nodes in this community are weakly interconnected._
 - **Should `lib/media-layout.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.09013914095583787 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09480519480519481 - nodes in this community are weakly interconnected._

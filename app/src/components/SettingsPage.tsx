@@ -2019,6 +2019,7 @@ export function SettingsPage({
               ) : null}
               <SupportContactSettingsList
                 kind="email"
+                scopeKey={contactsOfficeId}
                 rows={supportEmails}
                 reorderMode={contactsEmailsReorder}
                 onReorder={reorderSupportEmails}
@@ -2103,6 +2104,7 @@ export function SettingsPage({
               ) : null}
               <SupportContactSettingsList
                 kind="phone"
+                scopeKey={contactsOfficeId}
                 rows={supportPhones}
                 reorderMode={contactsPhonesReorder}
                 onReorder={reorderSupportPhones}

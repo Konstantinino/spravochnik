@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SupportEmailLine } from '../lib/supportEmails'
 import { normalizeSupportEmail } from '../lib/supportEmails'
 import type { SupportPhoneLine } from '../lib/supportPhones'
@@ -8,11 +8,10 @@ import {
 } from '../lib/supportPhones'
 import { moveArrayItem } from '../lib/moveArrayItem'
 
-type ContactKind = 'email' | 'phone'
-
 type SupportContactSettingsListProps =
   | {
       kind: 'email'
+      scopeKey: string
       rows: SupportEmailLine[]
       reorderMode: boolean
       onReorder: (next: SupportEmailLine[]) => void
@@ -21,6 +20,7 @@ type SupportContactSettingsListProps =
     }
   | {
       kind: 'phone'
+      scopeKey: string
       rows: SupportPhoneLine[]
       reorderMode: boolean
       onReorder: (next: SupportPhoneLine[]) => void
@@ -31,11 +31,28 @@ type SupportContactSettingsListProps =
 export function SupportContactSettingsList(props: SupportContactSettingsListProps) {
   const { kind, rows, reorderMode, onRemove } = props
   const dragFromRef = useRef<number | null>(null)
+  const rowKeysRef = useRef<string[]>([])
+  const scopeRef = useRef(props.scopeKey)
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
+  useEffect(() => {
+    if (scopeRef.current !== props.scopeKey) {
+      scopeRef.current = props.scopeKey
+      rowKeysRef.current = []
+    }
+    const keys = rowKeysRef.current
+    while (keys.length < rows.length) {
+      keys.push(`${kind}-${crypto.randomUUID()}`)
+    }
+    if (keys.length > rows.length) {
+      keys.splice(rows.length)
+    }
+  }, [kind, props.scopeKey, rows.length])
+
   function commitReorder(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return
+    rowKeysRef.current = moveArrayItem(rowKeysRef.current, fromIndex, toIndex)
     const next = moveArrayItem(rows, fromIndex, toIndex)
     props.onReorder(next)
   }
@@ -79,7 +96,7 @@ export function SupportContactSettingsList(props: SupportContactSettingsListProp
         const dragOver = reorderMode && dragOverIndex === index
         return (
           <li
-            key={`${kind}-${index}-${kind === 'email' ? row.email : row.tel}-${row.label}`}
+            key={rowKeysRef.current[index] ?? `${kind}-row-${index}`}
             className={`support-phones-settings__row${dragging ? ' is-dragging' : ''}${
               dragOver ? ' is-drag-over' : ''
             }`}

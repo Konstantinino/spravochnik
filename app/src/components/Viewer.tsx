@@ -15,7 +15,10 @@ import {
   deptTopLevelSections,
   isDeptTopLevelSectionFilter,
 } from '../lib/deptTopicSections'
-import { supportPartySelectOptionsForTopicEditor } from '../types'
+import {
+  departmentTopicSectionSelectOptions,
+  departmentUsesPartyTopicModel,
+} from '../lib/departmentTaxonomy'
 import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
   filterTopicsForClientLinkPicker,
@@ -435,7 +438,7 @@ export function Viewer({
     return () => window.removeEventListener('mousedown', close)
   }, [imgMenu, topicMenu])
 
-  const showParty = departmentId === 'support'
+  const showParty = departmentUsesPartyTopicModel(departmentId, subsections, supportSections)
 
   const isRootTopic = isEditableRootTopic(
     attachParent,
@@ -503,8 +506,14 @@ export function Viewer({
   })
 
   const partySelectOptions = useMemo(
-    () => supportPartySelectOptionsForTopicEditor(supportSections, party),
-    [supportSections, party],
+    () =>
+      departmentTopicSectionSelectOptions(
+        departmentId,
+        subsections,
+        supportSections,
+        party,
+      ),
+    [departmentId, subsections, supportSections, party],
   )
 
   function handlePartyChange(next: string) {
@@ -727,7 +736,8 @@ export function Viewer({
     const sectionPayload = rootTopicSubsectionPayloadForSave(departmentId, subsections, {
       isRootTopic,
       showParty,
-      hasSupportSubsectionPicker: showSupportSubsectionPicker,
+      hasSupportSubsectionPicker: showSupportSubsectionPicker || showNestedSubsectionPicker,
+      partySelectValue: party,
       subsectionSelectValue: subsectionId,
       editorDeptSectionId,
       defaultDeptSectionId,
@@ -745,6 +755,7 @@ export function Viewer({
     setSaving(true)
     setError(null)
     try {
+      const { party: payloadParty, ...sectionRest } = sectionPayload
       await onSave({
         question: question.trim(),
         answer: markdownFromEdit(answer),
@@ -755,8 +766,10 @@ export function Viewer({
               ? clientTopicId
               : null
             : undefined,
-        party: showParty ? editorPartyForSave(party, departmentId, current) : undefined,
-        ...sectionPayload,
+        party: showParty
+          ? editorPartyForSave(party, departmentId, current)
+          : payloadParty,
+        ...sectionRest,
       })
       setEditing(false)
     } catch (e) {

@@ -32,6 +32,10 @@ import {
   topicItemPatchForArchiveToggle,
 } from './lib/topicSectionPickers'
 import {
+  departmentTopicSectionFilterIds,
+  departmentUsesPartyTopicModel,
+} from './lib/departmentTaxonomy'
+import {
   installInputFocusGuard,
   releaseStaleFocus,
   restoreAppFocus,
@@ -461,17 +465,18 @@ export default function App() {
   const visibleItems: GuideItem[] = useMemo(
     () =>
       filterItemsByView(items, listFilter, {
+        departmentId,
         deptSectionIds: departmentId === 'support' ? undefined : deptTopicSectionIdSet,
-        deptSubsections: departmentId === 'support' ? undefined : subsections,
+        deptSubsections: subsections,
       }),
     [items, listFilter, departmentId, deptTopicSectionIdSet, subsections],
   )
 
   const filterOptions: TopicViewFilter[] = useMemo(() => {
-    const base =
-      departmentId === 'support'
-        ? (['all', ...supportSections.map((s) => s.id)] as TopicViewFilter[])
-        : (['all', ...deptTopicSectionIdsForDepartment(departmentId, subsections)] as TopicViewFilter[])
+    const base = [
+      'all',
+      ...departmentTopicSectionFilterIds(departmentId, subsections, supportSections),
+    ] as TopicViewFilter[]
     if (canEdit) base.push('archive')
     return base
   }, [departmentId, canEdit, supportSections, subsections])
@@ -771,7 +776,11 @@ export default function App() {
         payload.parent_id,
         {
           isRootTopic,
-          showParty: payload.departmentId === 'support',
+          showParty: departmentUsesPartyTopicModel(
+            payload.departmentId,
+            subsections,
+            supportSections,
+          ),
           party: payload.party ?? existing.party,
           subsection_id:
             payload.subsection_id !== undefined
@@ -907,7 +916,11 @@ export default function App() {
       payload.parent_id,
       {
         isRootTopic,
-        showParty: departmentId === 'support',
+        showParty: departmentUsesPartyTopicModel(
+          departmentId,
+          subsections,
+          supportSections,
+        ),
         party: payload.party ?? selected.party,
         subsection_id:
           payload.subsection_id !== undefined
@@ -1049,9 +1062,10 @@ export default function App() {
           setListFilter('all')
           if (user) saveListFilter(user.id, departmentId, 'all')
         }
-        if (departmentId === 'support' && updated?.party) {
-          syncListFilterAfterPartySave(getItemParty(updated))
-        } else if (departmentId !== 'support' && updated) {
+        if (updated) {
+          syncListFilterAfterPartySave(
+            getItemParty(updated, { departmentId, subsections }),
+          )
           syncListFilterAfterDeptSectionSave(updated.subsection_id)
         }
       }

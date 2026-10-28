@@ -212,7 +212,9 @@ export function rootTopicEditorFieldsFromGuideItem(
   item: GuideItem,
   sidebarListFilter: TopicViewFilter = 'all',
 ): { party: string; deptSectionId: string; subsectionSelectValue: string } {
-  const party = editorPartySelectValue(departmentId, item, 'supplier')
+  const party =
+    getItemParty(item, { departmentId, subsections }) ||
+    editorPartySelectValue(departmentId, item, 'supplier')
   const archivedRoot = Boolean(item.archived) && item.parent_id == null
   if (archivedRoot) {
     const preferred = isDeptTopLevelSectionFilter(
@@ -228,15 +230,13 @@ export function rootTopicEditorFieldsFromGuideItem(
       party,
       preferred,
     )
-    return { party, ...fields }
+    return { party, deptSectionId: fields.deptSectionId, subsectionSelectValue: fields.subsectionSelectValue }
   }
-  const deptSectionId = isDeptTopLevelSectionFilter(
-    sidebarListFilter,
-    departmentId,
-    subsections,
-  )
-    ? sidebarListFilter
-    : deptSectionIdForTopicSubsection(item.subsection_id, subsections) ?? ''
+  const deptSectionId =
+    party ||
+    (isDeptTopLevelSectionFilter(sidebarListFilter, departmentId, subsections)
+      ? sidebarListFilter
+      : deptSectionIdForTopicSubsection(item.subsection_id, subsections) ?? '')
   const subs = editorSubsectionsForDepartment(subsections, departmentId, party, {
     deptSectionId: deptSectionId || null,
   })
@@ -296,18 +296,23 @@ export function editorSubsectionsForDepartment(
   options?: { deptSectionId?: string | null },
 ): DepartmentSubsection[] {
   const forDept = subsections.filter((s) => s.departmentId === departmentId)
+  const sectionKey =
+    party.trim() || (options?.deptSectionId ?? '').trim() || ''
+  const byParty =
+    sectionKey &&
+    forDept.filter(
+      (s) =>
+        (s.party ?? '') === sectionKey &&
+        !s.isArchiveLost &&
+        !s.isArchiveArchived,
+    )
   const scoped =
-    departmentId === 'support'
-      ? forDept.filter(
-          (s) =>
-            s.party === party &&
-            !s.isArchiveLost &&
-            !s.isArchiveArchived,
-        )
+    byParty && byParty.length > 0
+      ? byParty
       : assignableSubsectionsForDeptEditor(
           forDept,
           departmentId,
-          options?.deptSectionId ?? null,
+          sectionKey || null,
         )
   return sortSubsectionsForEditor(scoped).map((s) => ({
     ...s,
@@ -391,17 +396,28 @@ export function rootTopicSubsectionPayloadForSave(
     isRootTopic: boolean
     showParty: boolean
     hasSupportSubsectionPicker: boolean
+    partySelectValue?: string
     subsectionSelectValue: string
     editorDeptSectionId?: string | null
     defaultDeptSectionId?: string | null
     deptSectionSelectValue?: string
   },
-): { subsection_id?: string | null; dept_section_id?: string } {
+): { party?: string; subsection_id?: string | null; dept_section_id?: string } {
   if (!params.isRootTopic) return {}
 
   if (params.showParty) {
-    if (!params.hasSupportSubsectionPicker) return {}
-    return { subsection_id: rootSubsectionIdForSave(params.subsectionSelectValue) }
+    const party =
+      params.partySelectValue?.trim() ||
+      effectiveDeptEditorSectionId(params) ||
+      undefined
+    const payload: { party?: string; subsection_id?: string | null } = {}
+    if (party) payload.party = party
+    if (params.hasSupportSubsectionPicker) {
+      payload.subsection_id = rootSubsectionIdForSave(params.subsectionSelectValue)
+    } else if (!departmentHasNestedSubsections(subsections, departmentId) && party) {
+      payload.subsection_id = party
+    }
+    return payload
   }
 
   const forDept = subsections.filter((s) => s.departmentId === departmentId)
@@ -420,6 +436,7 @@ export function rootTopicSubsectionPayloadForSave(
     params.subsectionSelectValue,
   )
   return {
+    party: dept_section_id,
     subsection_id,
     ...(dept_section_id ? { dept_section_id } : {}),
   }

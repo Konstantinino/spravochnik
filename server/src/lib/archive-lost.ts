@@ -1,42 +1,27 @@
 import type pg from 'pg'
 import { query } from '../db/pool.js'
+import {
+  LEGACY_SUPPORT_ARCHIVE_ARCHIVED,
+  LEGACY_SUPPORT_ARCHIVE_LOST,
+  archiveArchivedSubsectionId,
+  archiveLostSubsectionId,
+  ensureArchiveArchivedSubsection as ensureDeptArchiveArchived,
+  ensureArchiveLostSubsection as ensureDeptArchiveLost,
+  isAnyArchiveSubsectionId,
+  moveTopicsToArchiveLostByParty as moveTopicsToArchiveLostByPartyDept,
+} from './department-archive.js'
 
-export const ARCHIVE_LOST_SUBSECTION_ID = 'support__archive__lost'
-export const ARCHIVE_ARCHIVED_SUBSECTION_ID = 'support__archive__archived'
+export const ARCHIVE_LOST_SUBSECTION_ID = LEGACY_SUPPORT_ARCHIVE_LOST
+export const ARCHIVE_ARCHIVED_SUBSECTION_ID = LEGACY_SUPPORT_ARCHIVE_ARCHIVED
 
 export function isSupportArchiveSubsectionId(subsectionId: unknown): boolean {
-  const sid = String(subsectionId ?? '').trim()
-  return sid === ARCHIVE_ARCHIVED_SUBSECTION_ID || sid === ARCHIVE_LOST_SUBSECTION_ID
+  return isAnyArchiveSubsectionId(subsectionId)
 }
 
 type Client = pg.PoolClient
 
 export async function ensureArchiveArchivedSubsection(client?: Client): Promise<string> {
-  const q = client ? client.query.bind(client) : query
-  try {
-    await q(
-      `INSERT INTO department_subsections (id, department_id, label, sort_order, party, is_archive_lost, is_archive_archived)
-       VALUES ($1, 'support', 'Архивированные', 3, NULL, false, true)
-       ON CONFLICT (id) DO UPDATE SET label = 'Архивированные', is_archive_archived = true`,
-      [ARCHIVE_ARCHIVED_SUBSECTION_ID],
-    )
-  } catch (err) {
-    const code =
-      typeof err === 'object' && err !== null && 'code' in err
-        ? (err as { code: string }).code
-        : ''
-    if (code === '42703') {
-      await q(
-        `INSERT INTO department_subsections (id, department_id, label, sort_order, party)
-         VALUES ($1, 'support', 'Архивированные', 3, NULL)
-         ON CONFLICT (id) DO UPDATE SET label = 'Архивированные'`,
-        [ARCHIVE_ARCHIVED_SUBSECTION_ID],
-      )
-    } else {
-      throw err
-    }
-  }
-  return ARCHIVE_ARCHIVED_SUBSECTION_ID
+  return ensureDeptArchiveArchived('support', client)
 }
 
 export function resolveSupportArchiveSubsectionId(
@@ -52,39 +37,17 @@ export function resolveSupportArchiveSubsectionId(
 }
 
 export async function ensureArchiveLostSubsection(client?: Client): Promise<string> {
-  const q = client ? client.query.bind(client) : query
-  try {
-    await q(
-      `INSERT INTO department_subsections (id, department_id, label, sort_order, party, is_archive_lost)
-       VALUES ($1, 'support', 'Потерянные', 5, NULL, true)
-       ON CONFLICT (id) DO UPDATE SET label = 'Потерянные', is_archive_lost = true`,
-      [ARCHIVE_LOST_SUBSECTION_ID],
-    )
-  } catch (err) {
-    const code =
-      typeof err === 'object' && err !== null && 'code' in err
-        ? (err as { code: string }).code
-        : ''
-    if (code === '42703') {
-      await q(
-        `INSERT INTO department_subsections (id, department_id, label, sort_order, party)
-         VALUES ($1, 'support', 'Потерянные', 5, NULL)
-         ON CONFLICT (id) DO UPDATE SET label = 'Потерянные'`,
-        [ARCHIVE_LOST_SUBSECTION_ID],
-      )
-    } else {
-      throw err
-    }
-  }
-  return ARCHIVE_LOST_SUBSECTION_ID
+  return ensureDeptArchiveLost('support', client)
 }
+
+export { archiveArchivedSubsectionId, archiveLostSubsectionId }
 
 export async function moveTopicsToArchiveLostBySubsection(
   departmentId: string,
   subsectionId: string,
   client: Client,
 ): Promise<number> {
-  const lostId = await ensureArchiveLostSubsection(client)
+  const lostId = await ensureDeptArchiveLost(departmentId, client)
   const res = await client.query(
     `UPDATE topics SET archived = true, subsection_id = $3
       WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
@@ -98,11 +61,5 @@ export async function moveTopicsToArchiveLostByParty(
   party: string,
   client: Client,
 ): Promise<number> {
-  const lostId = await ensureArchiveLostSubsection(client)
-  const res = await client.query(
-    `UPDATE topics SET archived = true, subsection_id = $3
-      WHERE department_id = $1 AND party = $2 AND deleted_at IS NULL`,
-    [departmentId, party, lostId],
-  )
-  return res.rowCount ?? 0
+  return moveTopicsToArchiveLostByPartyDept(departmentId, party, client)
 }

@@ -1,6 +1,7 @@
 import type { DepartmentSubsection, GuideItem, TopicViewFilter } from '../types'
 import {
   deptReorderSectionKey,
+  deptSectionIdForTopicSubsection,
   topicInDeptSectionView,
   topicMatchesDeptSection,
 } from './deptTopicSections'
@@ -9,11 +10,18 @@ export function getItems(data: { questions?: GuideItem[]; templates?: GuideItem[
   return data.questions ?? data.templates ?? []
 }
 
-/** Legacy topics without party are treated as supplier. */
-export function getItemParty(item: Pick<GuideItem, 'party'>): string {
+export function getItemParty(
+  item: Pick<GuideItem, 'party' | 'subsection_id'>,
+  context?: { departmentId?: string; subsections?: DepartmentSubsection[] },
+): string {
   const raw = item.party
   if (typeof raw === 'string' && raw.trim()) return raw.trim()
-  return 'supplier'
+  if (context?.subsections?.length && context.departmentId && context.departmentId !== 'support') {
+    const sectionId = deptSectionIdForTopicSubsection(item.subsection_id, context.subsections)
+    if (sectionId) return sectionId
+  }
+  if (!context?.departmentId || context.departmentId === 'support') return 'supplier'
+  return ''
 }
 
 export function normalizeTopicIdRef(value: unknown): number | null {
@@ -41,6 +49,7 @@ export function filterItemsByView(
   items: GuideItem[],
   filter: TopicViewFilter,
   options?: {
+    departmentId?: string
     deptSectionIds?: ReadonlySet<string>
     deptSubsections?: DepartmentSubsection[]
   },
@@ -50,11 +59,15 @@ export function filterItemsByView(
   }
   const active = items.filter((item) => !isArchived(item))
   if (filter === 'all') return active
-  if (options?.deptSectionIds?.has(filter)) {
-    const subs = options.deptSubsections ?? []
-    return active.filter((item) => topicInDeptSectionView(item, filter, subs, active))
-  }
-  return active.filter((item) => getItemParty(item) === filter)
+  const subs = options?.deptSubsections ?? []
+  const ctx = { departmentId: options?.departmentId, subsections: subs }
+  return active.filter((item) => {
+    if (getItemParty(item, ctx) === filter) return true
+    if (options?.deptSectionIds?.has(filter)) {
+      return topicInDeptSectionView(item, filter, subs, active)
+    }
+    return getItemParty(item) === filter
+  })
 }
 
 /** @deprecated use filterItemsByView */
@@ -157,23 +170,27 @@ export function resolveReorderSiblingScope(
       }
     }
     const party = listFilter
+    const ctx = { subsections: deptSubs }
     return {
-      matchSibling: (item) => !isArchived(item) && getItemParty(item) === party,
+      matchSibling: (item) => !isArchived(item) && getItemParty(item, ctx) === party,
     }
   }
   if (listFilter === 'all') {
     const dragged = allItems.find((item) => item.id === draggedId)
     if (!dragged) return undefined
-    if (options?.departmentId && options.departmentId !== 'support') {
-      const key = deptReorderSectionKey(dragged, deptSubs)
+    const ctx = { departmentId: options?.departmentId, subsections: deptSubs }
+    const partyKey =
+      getItemParty(dragged, ctx) || deptReorderSectionKey(dragged, deptSubs)
+    if (options?.departmentId && options?.departmentId !== 'support') {
       return {
         matchSibling: (item) =>
-          !isArchived(item) && deptReorderSectionKey(item, deptSubs) === key,
+          !isArchived(item) &&
+          (getItemParty(item, ctx) || deptReorderSectionKey(item, deptSubs)) === partyKey,
       }
     }
-    const party = getItemParty(dragged)
+    const party = getItemParty(dragged, ctx)
     return {
-      matchSibling: (item) => !isArchived(item) && getItemParty(item) === party,
+      matchSibling: (item) => !isArchived(item) && getItemParty(item, ctx) === party,
     }
   }
   return undefined
@@ -181,11 +198,10 @@ export function resolveReorderSiblingScope(
 
 /** Whether root-level drag targets must share the same party (support dept). */
 export function rootReorderRequiresSameParty(
-  departmentId: string,
+  _departmentId: string,
   listFilter: TopicViewFilter,
 ): boolean {
   if (listFilter === 'archive') return false
-  if (departmentId === 'support') return true
   return listFilter === 'all'
 }
 

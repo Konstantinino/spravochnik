@@ -1,25 +1,27 @@
-export const ARCHIVE_LOST_SUBSECTION_ID = 'support__archive__lost'
-export const ARCHIVE_ARCHIVED_SUBSECTION_ID = 'support__archive__archived'
+import {
+  LEGACY_SUPPORT_ARCHIVE_ARCHIVED,
+  LEGACY_SUPPORT_ARCHIVE_LOST,
+  applyDeptArchiveSubsectionToRow,
+  archiveArchivedSubsectionId,
+  archiveLostSubsectionId,
+  isAnyArchiveSubsectionId,
+} from './departmentArchive'
+
+export const ARCHIVE_LOST_SUBSECTION_ID = LEGACY_SUPPORT_ARCHIVE_LOST
+export const ARCHIVE_ARCHIVED_SUBSECTION_ID = LEGACY_SUPPORT_ARCHIVE_ARCHIVED
 
 export function isSupportArchiveSubsectionId(subsectionId: unknown): boolean {
-  const sid = String(subsectionId ?? '').trim()
-  return sid === ARCHIVE_ARCHIVED_SUBSECTION_ID || sid === ARCHIVE_LOST_SUBSECTION_ID
+  return isAnyArchiveSubsectionId(subsectionId)
 }
+
+export { archiveArchivedSubsectionId, archiveLostSubsectionId }
 
 export function applySupportArchiveSubsectionToRow(
   row: Record<string, unknown>,
   nextArchived: boolean,
   wasArchived: boolean,
 ): void {
-  if (nextArchived && !wasArchived) {
-    row.archived = true
-    row.subsection_id = ARCHIVE_ARCHIVED_SUBSECTION_ID
-    return
-  }
-  if (!nextArchived && wasArchived) {
-    delete row.archived
-    delete row.subsection_id
-  }
+  applyDeptArchiveSubsectionToRow('support', row, nextArchived, wasArchived)
 }
 
 export function moveGuideTopicsToArchiveLost(

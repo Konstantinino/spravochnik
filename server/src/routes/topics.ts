@@ -10,11 +10,12 @@ import {
   isLostDepartmentId,
   isValidDepartmentId,
 } from '../lib/departments.js'
+import { isSupportArchiveSubsectionId } from '../lib/archive-lost.js'
 import {
-  ensureArchiveArchivedSubsection,
-  isSupportArchiveSubsectionId,
-  resolveSupportArchiveSubsectionId,
-} from '../lib/archive-lost.js'
+  ensureArchiveArchivedSubsection as ensureDeptArchiveArchivedSubsection,
+  resolveArchiveSubsectionId,
+} from '../lib/department-archive.js'
+import { resolveRootTopicPartyForWrite } from '../lib/topic-party.js'
 import { resolveTopicSubsectionId } from '../lib/subsections.js'
 import { isKnownSupportParty } from '../lib/support-sections.js'
 import {
@@ -223,7 +224,7 @@ topicsRouter.post(
                 : sid
           }
         }
-        const subsectionId = await resolveTopicSubsectionId(
+        let subsectionId = await resolveTopicSubsectionId(
           dept,
           parentId,
           createRequested,
@@ -233,6 +234,21 @@ topicsRouter.post(
             deptSectionId: createDeptSectionHint,
           },
         )
+
+        const resolvedParty = await resolveRootTopicPartyForWrite(
+          dept,
+          parentId,
+          dept === 'support' ? party : item.party ?? createDeptSectionHint,
+          subsectionId,
+          client,
+        )
+        if (dept === 'support') {
+          party = normalizeSupportParty(resolvedParty ?? party, 'supplier')
+          const raw = typeof resolvedParty === 'string' ? resolvedParty.trim() : ''
+          if (raw && (await isKnownSupportParty(raw))) party = raw as typeof party
+        } else {
+          party = resolvedParty
+        }
 
         const idRes = await client.query<{ next_id: number }>(
           `UPDATE topic_id_counters SET next_id = next_id + 1
@@ -538,7 +554,6 @@ topicsRouter.put(
               ? item.subsectionId
               : current.subsection_id
         if (
-          dept === 'support' &&
           !archived &&
           current.archived &&
           isSupportArchiveSubsectionId(requestedSubsection)
@@ -575,15 +590,32 @@ topicsRouter.put(
             deptSectionId: deptSectionHint,
           },
         )
+        const archivedBucketId = await ensureDeptArchiveArchivedSubsection(dept, client)
+        subsectionId = resolveArchiveSubsectionId(
+          dept,
+          archived,
+          current.archived,
+          current.subsection_id,
+          subsectionId,
+          archivedBucketId,
+        )
+
+        const resolvedParty = await resolveRootTopicPartyForWrite(
+          dept,
+          parentId,
+          dept === 'support' ? item.party ?? party : item.party ?? deptSectionHint ?? current.party,
+          subsectionId,
+          client,
+        )
         if (dept === 'support') {
-          const archivedBucketId = await ensureArchiveArchivedSubsection(client)
-          subsectionId = resolveSupportArchiveSubsectionId(
-            archived,
-            current.archived,
-            current.subsection_id,
-            subsectionId,
-            archivedBucketId,
+          party = normalizeSupportParty(
+            resolvedParty ?? party,
+            isSupportParty(current.party) ? current.party : 'supplier',
           )
+          const raw = typeof resolvedParty === 'string' ? resolvedParty.trim() : ''
+          if (raw && (await isKnownSupportParty(raw))) party = raw as typeof party
+        } else {
+          party = resolvedParty ?? current.party
         }
 
         await client.query(
@@ -727,21 +759,13 @@ async function archiveDescendants(
   rootId: number,
 ): Promise<void> {
   const ids = await collectDescendantIds(client, dept, rootId)
-  const archivedSubId = dept === 'support' ? await ensureArchiveArchivedSubsection(client) : null
+  const archivedSubId = await ensureDeptArchiveArchivedSubsection(dept, client)
   for (const id of ids) {
-    if (archivedSubId) {
-      await client.query(
-        `UPDATE topics SET archived = true, subsection_id = $3, version = version + 1, updated_at = NOW()
-         WHERE department_id = $1 AND id = $2`,
-        [dept, id, archivedSubId],
-      )
-    } else {
-      await client.query(
-        `UPDATE topics SET archived = true, version = version + 1, updated_at = NOW()
-         WHERE department_id = $1 AND id = $2`,
-        [dept, id],
-      )
-    }
+    await client.query(
+      `UPDATE topics SET archived = true, subsection_id = $3, version = version + 1, updated_at = NOW()
+       WHERE department_id = $1 AND id = $2`,
+      [dept, id, archivedSubId],
+    )
   }
 }
 
@@ -752,18 +776,10 @@ async function unarchiveDescendants(
 ): Promise<void> {
   const ids = await collectDescendantIds(client, dept, rootId)
   for (const id of ids) {
-    if (dept === 'support') {
-      await client.query(
-        `UPDATE topics SET archived = false, subsection_id = NULL, version = version + 1, updated_at = NOW()
-         WHERE department_id = $1 AND id = $2`,
-        [dept, id],
-      )
-    } else {
-      await client.query(
-        `UPDATE topics SET archived = false, version = version + 1, updated_at = NOW()
-         WHERE department_id = $1 AND id = $2`,
-        [dept, id],
-      )
-    }
+    await client.query(
+      `UPDATE topics SET archived = false, version = version + 1, updated_at = NOW()
+       WHERE department_id = $1 AND id = $2`,
+      [dept, id],
+    )
   }
 }

@@ -6,7 +6,11 @@ import type {
   GuideItem,
   SupportTopicSection,
 } from '../types'
-import { DEPARTMENTS, supportPartySelectOptionsForTopicEditor, workDepartmentsFrom } from '../types'
+import { DEPARTMENTS, workDepartmentsFrom } from '../types'
+import {
+  departmentTopicSectionSelectOptions,
+  departmentUsesPartyTopicModel,
+} from '../lib/departmentTaxonomy'
 import { ADMIN_CLIENT_TOPIC_LINK_UI_ENABLED } from '../lib/adminClientTopicLinkUi'
 import {
   filterTopicsForClientLinkPicker,
@@ -146,7 +150,7 @@ export function TopicEditorModal({
     return textareaSelectionRef.current
   }
 
-  const showParty = targetDept === 'support' || (mode === 'edit' && departmentId === 'support')
+  const showParty = departmentUsesPartyTopicModel(targetDept, subsections, supportSections)
 
   const isRootTopic = isEditableRootTopic(
     attachParent,
@@ -211,8 +215,14 @@ export function TopicEditorModal({
   })
 
   const partySelectOptions = useMemo(
-    () => supportPartySelectOptionsForTopicEditor(supportSections, party),
-    [supportSections, party],
+    () =>
+      departmentTopicSectionSelectOptions(
+        targetDept,
+        subsections,
+        supportSections,
+        party,
+      ),
+    [targetDept, subsections, supportSections, party],
   )
 
   const linkPickerItems = useMemo(() => filterTopicsForLinkPicker(items), [items])
@@ -516,17 +526,19 @@ export function TopicEditorModal({
     const sectionPayload = rootTopicSubsectionPayloadForSave(targetDept, subsections, {
       isRootTopic,
       showParty,
-      hasSupportSubsectionPicker: showSupportSubsectionPicker,
+      hasSupportSubsectionPicker:
+        showSupportSubsectionPicker || showNestedSubsectionPicker,
+      partySelectValue: party,
       subsectionSelectValue: targetSubsectionId,
       editorDeptSectionId,
       defaultDeptSectionId,
       deptSectionSelectValue: deptSectionId,
     })
     if (
-      !showParty &&
       isRootTopic &&
       deptTopLevelSections(subsections, targetDept).length > 0 &&
-      sectionPayload.subsection_id == null
+      sectionPayload.subsection_id == null &&
+      !sectionPayload.party
     ) {
       setError('Выберите раздел')
       return

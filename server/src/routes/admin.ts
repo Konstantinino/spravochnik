@@ -1368,47 +1368,48 @@ adminRouter.delete('/subsections/:id', async (req: AuthRequest, res) => {
       } else {
         const isTopLevel = !existing.party
         if (isTopLevel) {
+          movedTopics = await moveTopicsToArchiveLostByParty(
+            existing.departmentId,
+            id,
+            client,
+          )
           const nested = await client.query<{ id: string }>(
             `SELECT id FROM department_subsections
               WHERE department_id = $1 AND party = $2`,
             [existing.departmentId, id],
           )
           for (const row of nested.rows) {
+            await client.query(`DELETE FROM department_subsections WHERE id = $1`, [row.id])
+          }
+        } else {
+          const parentSectionId =
+            typeof existing.party === 'string' && existing.party.trim()
+              ? existing.party.trim()
+              : null
+          let reassignTo: string | null = parentSectionId
+          if (!reassignTo) {
+            const others = await client.query<{ id: string }>(
+              `SELECT id FROM department_subsections
+                WHERE department_id = $1 AND id <> $2 AND party IS NULL
+                ORDER BY sort_order ASC, id ASC
+                LIMIT 1`,
+              [existing.departmentId, id],
+            )
+            reassignTo = others.rows[0]?.id ?? null
+          }
+          if (reassignTo) {
+            await client.query(
+              `UPDATE topics SET subsection_id = $3
+                WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
+              [existing.departmentId, id, reassignTo],
+            )
+          } else {
             await client.query(
               `UPDATE topics SET subsection_id = NULL
                 WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
-              [existing.departmentId, row.id],
+              [existing.departmentId, id],
             )
-            await client.query(`DELETE FROM department_subsections WHERE id = $1`, [row.id])
           }
-        }
-        const parentSectionId =
-          typeof existing.party === 'string' && existing.party.trim()
-            ? existing.party.trim()
-            : null
-        let reassignTo: string | null = parentSectionId
-        if (!reassignTo) {
-          const others = await client.query<{ id: string }>(
-            `SELECT id FROM department_subsections
-              WHERE department_id = $1 AND id <> $2 AND party IS NULL
-              ORDER BY sort_order ASC, id ASC
-              LIMIT 1`,
-            [existing.departmentId, id],
-          )
-          reassignTo = others.rows[0]?.id ?? null
-        }
-        if (reassignTo) {
-          await client.query(
-            `UPDATE topics SET subsection_id = $3
-              WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
-            [existing.departmentId, id, reassignTo],
-          )
-        } else {
-          await client.query(
-            `UPDATE topics SET subsection_id = NULL
-              WHERE department_id = $1 AND subsection_id = $2 AND deleted_at IS NULL`,
-            [existing.departmentId, id],
-          )
         }
       }
       await client.query(`DELETE FROM department_subsections WHERE id = $1`, [id])

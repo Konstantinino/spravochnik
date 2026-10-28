@@ -152,11 +152,11 @@ import {
 import {
   ARCHIVE_ARCHIVED_SUBSECTION_ID,
   ARCHIVE_LOST_SUBSECTION_ID,
-  applySupportArchiveSubsectionToRow,
   clearGuideTopicSubsectionId,
   isSupportArchiveSubsectionId,
   moveGuideTopicsToArchiveLost,
 } from '../src/lib/archiveLost'
+import { applyDeptArchiveSubsectionToRow } from '../src/lib/departmentArchive'
 import {
   createSupportSectionOnServer,
   deleteSupportSectionOnServer,
@@ -330,11 +330,19 @@ function rootSubsectionsForTopic(
   party: string | undefined,
 ): StoredSubsection[] {
   const all = getSubsectionsForDepartment(departmentId)
-  if (departmentId === 'support') {
-    const p = normalizeSupportPartyId(party)
-    return all.filter((s) => (s.party ?? null) === p)
+  const raw = typeof party === 'string' ? party.trim() : ''
+  const p = departmentId === 'support' ? normalizeSupportPartyId(party) : raw
+  if (p) {
+    const scoped = all.filter(
+      (s) =>
+        (s.party ?? null) === p && !s.isArchiveLost && !s.isArchiveArchived,
+    )
+    if (scoped.length > 0) return scoped
   }
-  return all.filter((s) => !s.isArchiveLost && !s.isArchiveArchived)
+  if (departmentId === 'support') {
+    return all.filter((s) => !s.isArchiveLost && !s.isArchiveArchived)
+  }
+  return all.filter((s) => !s.party && !s.isArchiveLost && !s.isArchiveArchived)
 }
 
 function rowParentId(row: Record<string, unknown>): number | null {
@@ -2260,8 +2268,15 @@ function registerIpc(): void {
 
       const topicParty =
         payload.departmentId === 'support'
-          ? normalizeSupportPartyId(payload.item.party, normalizeSupportPartyId(list[idx].party))
-          : undefined
+          ? normalizeSupportPartyId(
+              payload.item.party,
+              normalizeSupportPartyId(list[idx].party),
+            )
+          : typeof payload.item.party === 'string' && payload.item.party.trim()
+            ? payload.item.party.trim()
+            : typeof list[idx].party === 'string'
+              ? String(list[idx].party).trim()
+              : undefined
       const oldArchived = Boolean(list[idx].archived)
       const nextArchived =
         payload.item.archived !== undefined ? Boolean(payload.item.archived) : oldArchived
@@ -2308,9 +2323,19 @@ function registerIpc(): void {
         documents: payload.item.documents ?? list[idx].documents ?? [],
         ...(payload.departmentId === 'support'
           ? {
-              party: normalizeSupportPartyId(payload.item.party, normalizeSupportPartyId(list[idx].party)),
+              party: normalizeSupportPartyId(
+                payload.item.party,
+                normalizeSupportPartyId(list[idx].party),
+              ),
             }
-          : {}),
+          : payload.item.party !== undefined
+            ? {
+                party:
+                  typeof payload.item.party === 'string' && payload.item.party.trim()
+                    ? payload.item.party.trim()
+                    : undefined,
+              }
+            : {}),
       }
       if (
         deptSubs.length > 0 &&
@@ -2341,7 +2366,12 @@ function registerIpc(): void {
       if (payload.departmentId === 'support') {
         ensureArchiveArchivedSubsectionLocal()
         ensureArchiveLostSubsectionLocal()
-        applySupportArchiveSubsectionToRow(list[idx], nextArchived, oldArchived)
+        applyDeptArchiveSubsectionToRow(
+          payload.departmentId,
+          list[idx],
+          nextArchived,
+          oldArchived,
+        )
       } else if (nextArchived) {
         list[idx].archived = true
       } else {
@@ -2374,7 +2404,12 @@ function registerIpc(): void {
           const row = list.find((r) => r.id === id)
           if (!row) continue
           if (payload.departmentId === 'support') {
-            applySupportArchiveSubsectionToRow(row, nextArchived, oldArchived)
+            applyDeptArchiveSubsectionToRow(
+              payload.departmentId,
+              row,
+              nextArchived,
+              oldArchived,
+            )
           } else if (nextArchived) {
             row.archived = true
           } else {

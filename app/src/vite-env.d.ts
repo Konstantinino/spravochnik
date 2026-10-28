@@ -219,6 +219,7 @@ export interface SpravochnikApi {
 
   setSupportPhones: (payload: {
     phones: Record<string, Array<{ label: string; display: string; tel: string }>>
+    departmentIds?: string[]
   }) => Promise<Record<string, Array<{ label: string; display: string; tel: string }>>>
 
   onSupportPhonesChanged: (callback: () => void) => () => void
@@ -227,6 +228,7 @@ export interface SpravochnikApi {
 
   setSupportEmails: (payload: {
     emails: Record<string, Array<{ label: string; email: string }>>
+    departmentIds?: string[]
   }) => Promise<Record<string, Array<{ label: string; email: string }>>>
 
   onSupportEmailsChanged: (callback: () => void) => () => void
@@ -393,6 +395,21 @@ export interface SpravochnikApi {
     error?: string
     lockedByName?: string
   }>
+
+  lockSettingsOrder: (payload: {
+    kind: 'sections' | 'emails' | 'phones'
+    departmentId: string
+  }) => Promise<{ ok: boolean; error?: string; lockedByName?: string }>
+
+  unlockSettingsOrder: (payload: {
+    kind: 'sections' | 'emails' | 'phones'
+    departmentId: string
+  }) => Promise<{ ok: boolean }>
+
+  renewSettingsOrderLock: (payload: {
+    kind: 'sections' | 'emails' | 'phones'
+    departmentId: string
+  }) => Promise<{ ok: boolean }>
 
   onSyncStatus: (callback: (status: SyncStatus) => void) => () => void
 

@@ -267,6 +267,53 @@ export async function renewTopicOrderLock(departmentId: string): Promise<void> {
   })
 }
 
+export type SettingsOrderKind = 'sections' | 'emails' | 'phones'
+
+export async function lockSettingsOrder(
+  kind: SettingsOrderKind,
+  departmentId: string,
+): Promise<void> {
+  await serverFetch('/admin/settings-order/lock', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind,
+      departmentId,
+      clientId: getTopicOrderClientId(),
+    }),
+    skipRemotePull: true,
+  })
+}
+
+export async function unlockSettingsOrder(
+  kind: SettingsOrderKind,
+  departmentId: string,
+): Promise<void> {
+  await serverFetch('/admin/settings-order/unlock', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind,
+      departmentId,
+      clientId: getTopicOrderClientId(),
+    }),
+    skipRemotePull: true,
+  })
+}
+
+export async function renewSettingsOrderLock(
+  kind: SettingsOrderKind,
+  departmentId: string,
+): Promise<void> {
+  await serverFetch('/admin/settings-order/renew', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind,
+      departmentId,
+      clientId: getTopicOrderClientId(),
+    }),
+    skipRemotePull: true,
+  })
+}
+
 export async function fetchDepartmentTopics(
   departmentId: string,
 ): Promise<Record<string, unknown>> {
@@ -295,10 +342,15 @@ export async function fetchSupportPhones(): Promise<SupportPhonesByDepartmentDto
 
 export async function saveSupportPhonesOnServer(
   phones: SupportPhonesByDepartmentDto,
+  departmentIds?: string[],
 ): Promise<SupportPhonesByDepartmentDto> {
   const data = await serverFetch<{ phones: SupportPhonesByDepartmentDto }>('/admin/support-phones', {
     method: 'PUT',
-    body: JSON.stringify({ phones }),
+    body: JSON.stringify({
+      phones,
+      departmentIds,
+      clientId: getTopicOrderClientId(),
+    }),
     skipRemotePull: true,
   })
   return data.phones ?? {}
@@ -320,10 +372,15 @@ export async function fetchSupportEmails(): Promise<SupportEmailsByDepartmentDto
 
 export async function saveSupportEmailsOnServer(
   emails: SupportEmailsByDepartmentDto,
+  departmentIds?: string[],
 ): Promise<SupportEmailsByDepartmentDto> {
   const data = await serverFetch<{ emails: SupportEmailsByDepartmentDto }>('/admin/support-emails', {
     method: 'PUT',
-    body: JSON.stringify({ emails }),
+    body: JSON.stringify({
+      emails,
+      departmentIds,
+      clientId: getTopicOrderClientId(),
+    }),
     skipRemotePull: true,
   })
   return data.emails ?? {}
@@ -394,7 +451,7 @@ export async function reorderSubsectionsOnServer(payload: {
     '/admin/subsections/reorder',
     {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, clientId: getTopicOrderClientId() }),
       skipRemotePull: true,
     },
   )
@@ -459,7 +516,7 @@ export async function reorderSupportSectionsOnServer(
     '/admin/support-sections/reorder',
     {
       method: 'PUT',
-      body: JSON.stringify({ orderedIds }),
+      body: JSON.stringify({ orderedIds, clientId: getTopicOrderClientId() }),
       skipRemotePull: true,
     },
   )

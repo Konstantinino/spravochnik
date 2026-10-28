@@ -59,6 +59,17 @@ import {
 } from '../lib/support-sections.js'
 import { isKnownSupportParty } from '../lib/support-sections.js'
 import type { SupportParty } from '../lib/topics.js'
+import {
+  acquireSettingsOrderLock,
+  foreignSettingsOrderBlock,
+  parseSettingsOrderKind,
+  releaseSettingsOrderLock,
+  renewSettingsOrderLock,
+  requireSettingsOrderLock,
+  settingsOrderLockKey,
+  settingsOrderLockedMessage,
+  type SettingsOrderKind,
+} from '../lib/settings-order-lock.js'
 
 const BOOTSTRAP_ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'kostya.alone18@yandex.ru'
 
@@ -97,6 +108,79 @@ function denyTopicSectionsUnlessAllowed(
     return false
   }
   return true
+}
+
+function allowDepartmentSettings(
+  req: AuthRequest,
+  res: Response,
+  departmentId: string,
+): boolean {
+  const user = req.user
+  if (!user) {
+    res.status(401).json({ error: 'Требуется авторизация' })
+    return false
+  }
+  if (!canManageTopicSectionsForDepartment(user.role, user.departmentId, departmentId)) {
+    res.status(403).json({ error: 'Администратор может настраивать только свой отдел' })
+    return false
+  }
+  return true
+}
+
+function readSettingsOrderBody(
+  req: AuthRequest,
+  res: Response,
+): { kind: SettingsOrderKind; departmentId: string; clientId?: string } | null {
+  const kind = parseSettingsOrderKind(req.body?.kind)
+  if (!kind) {
+    res.status(400).json({ error: 'Неизвестный список' })
+    return null
+  }
+  const departmentId = String(req.body?.departmentId ?? '').trim()
+  if (!isWorkDepartmentId(departmentId)) {
+    res.status(400).json({ error: 'Неизвестный отдел' })
+    return null
+  }
+  if (!allowDepartmentSettings(req, res, departmentId)) return null
+  const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+  return { kind, departmentId, clientId }
+}
+
+function contactListSignature(value: unknown): string {
+  return JSON.stringify(value ?? [])
+}
+
+/** Reject when another session holds the order lock and this save would change that list. */
+async function rejectForeignContactOrder<T>(
+  res: Response,
+  kind: 'emails' | 'phones',
+  userId: string,
+  clientId: string | undefined,
+  current: Record<string, T | undefined>,
+  next: Record<string, T | undefined>,
+  touched: string[],
+): Promise<boolean> {
+  for (const dept of touched) {
+    if (contactListSignature(current[dept]) === contactListSignature(next[dept])) continue
+    const block = await foreignSettingsOrderBlock(
+      settingsOrderLockKey(kind, dept),
+      userId,
+      clientId,
+    )
+    if (!block.blocked) continue
+    res.status(423).json({
+      error: settingsOrderLockedMessage(kind, block.lockedByName),
+      lockedByName: block.lockedByName || undefined,
+    })
+    return false
+  }
+  return true
+}
+
+function parseDepartmentIdList(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const ids = value.map((id) => String(id ?? '').trim()).filter(Boolean)
+  return ids.length > 0 ? ids : null
 }
 
 function toPublicUser(row: {
@@ -668,8 +752,39 @@ adminRouter.get('/support-phones', async (_req, res) => {
 
 adminRouter.put('/support-phones', async (req: AuthRequest, res) => {
   try {
-    const phones = normalizeSupportPhones(req.body?.phones)
-    const saved = await writeSupportPhonesToDb(phones)
+    const incoming = normalizeSupportPhones(req.body?.phones)
+    const current = await readSupportPhonesFromDb()
+    const departmentIds = parseDepartmentIdList(req.body?.departmentIds)
+    const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+    let next = incoming
+    let touched = [...new Set([...Object.keys(current), ...Object.keys(incoming)])]
+    if (departmentIds) {
+      for (const id of departmentIds) {
+        if (!isWorkDepartmentId(id)) {
+          res.status(400).json({ error: 'Неизвестный отдел' })
+          return
+        }
+        if (!allowDepartmentSettings(req, res, id)) return
+      }
+      next = { ...current }
+      for (const id of departmentIds) {
+        const lines = incoming[id] ?? []
+        if (lines.length === 0) delete next[id]
+        else next[id] = lines
+      }
+      touched = departmentIds
+    }
+    const allowed = await rejectForeignContactOrder(
+      res,
+      'phones',
+      req.user!.id,
+      clientId,
+      current,
+      next,
+      touched,
+    )
+    if (!allowed) return
+    const saved = await writeSupportPhonesToDb(next)
     res.json({ phones: saved })
   } catch (err) {
     console.error(err)
@@ -689,12 +804,100 @@ adminRouter.get('/support-emails', async (_req, res) => {
 
 adminRouter.put('/support-emails', async (req: AuthRequest, res) => {
   try {
-    const emails = normalizeSupportEmails(req.body?.emails)
-    const saved = await writeSupportEmailsToDb(emails)
+    const incoming = normalizeSupportEmails(req.body?.emails)
+    const current = await readSupportEmailsFromDb()
+    const departmentIds = parseDepartmentIdList(req.body?.departmentIds)
+    const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+    let next = incoming
+    let touched = [...new Set([...Object.keys(current), ...Object.keys(incoming)])]
+    if (departmentIds) {
+      for (const id of departmentIds) {
+        if (!isWorkDepartmentId(id)) {
+          res.status(400).json({ error: 'Неизвестный отдел' })
+          return
+        }
+        if (!allowDepartmentSettings(req, res, id)) return
+      }
+      next = { ...current }
+      for (const id of departmentIds) {
+        const lines = incoming[id] ?? []
+        if (lines.length === 0) delete next[id]
+        else next[id] = lines
+      }
+      touched = departmentIds
+    }
+    const allowed = await rejectForeignContactOrder(
+      res,
+      'emails',
+      req.user!.id,
+      clientId,
+      current,
+      next,
+      touched,
+    )
+    if (!allowed) return
+    const saved = await writeSupportEmailsToDb(next)
     res.json({ emails: saved })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Ошибка сохранения почт' })
+  }
+})
+
+adminRouter.post('/settings-order/lock', async (req: AuthRequest, res) => {
+  try {
+    const body = readSettingsOrderBody(req, res)
+    if (!body) return
+    const lock = await acquireSettingsOrderLock(
+      settingsOrderLockKey(body.kind, body.departmentId),
+      req.user!.id,
+      req.user!.name,
+      body.clientId,
+    )
+    if (!lock.ok) {
+      res.status(423).json({
+        error: settingsOrderLockedMessage(body.kind, lock.lockedByName),
+        lockedBy: lock.lockedBy,
+        lockedByName: lock.lockedByName,
+      })
+      return
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Не удалось заблокировать порядок' })
+  }
+})
+
+adminRouter.post('/settings-order/unlock', async (req: AuthRequest, res) => {
+  try {
+    const body = readSettingsOrderBody(req, res)
+    if (!body) return
+    await releaseSettingsOrderLock(
+      settingsOrderLockKey(body.kind, body.departmentId),
+      req.user!.id,
+      body.clientId,
+    )
+    res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Не удалось снять блокировку порядка' })
+  }
+})
+
+adminRouter.post('/settings-order/renew', async (req: AuthRequest, res) => {
+  try {
+    const body = readSettingsOrderBody(req, res)
+    if (!body) return
+    await renewSettingsOrderLock(
+      settingsOrderLockKey(body.kind, body.departmentId),
+      req.user!.id,
+      body.clientId,
+    )
+    res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Не удалось продлить блокировку порядка' })
   }
 })
 
@@ -936,6 +1139,21 @@ adminRouter.put('/subsections/reorder', async (req: AuthRequest, res) => {
       res.status(400).json({ error: 'Укажите порядок подразделов' })
       return
     }
+    const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+    const orderLock = await requireSettingsOrderLock(
+      settingsOrderLockKey('sections', departmentId),
+      req.user!.id,
+      clientId,
+    )
+    if (!orderLock.ok) {
+      res.status(423).json({
+        error: orderLock.lockedByName
+          ? settingsOrderLockedMessage('sections', orderLock.lockedByName)
+          : 'Сначала включите режим редактирования порядка',
+        lockedByName: orderLock.lockedByName || undefined,
+      })
+      return
+    }
     const updated = await reorderSubsectionsInScope(departmentId, party, orderedIds)
     res.json({
       subsections: updated.map(subsectionToClient),
@@ -1031,6 +1249,21 @@ adminRouter.put('/support-sections/reorder', async (req: AuthRequest, res) => {
       : []
     if (orderedIds.length === 0) {
       res.status(400).json({ error: 'Укажите порядок разделов' })
+      return
+    }
+    const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId : undefined
+    const orderLock = await requireSettingsOrderLock(
+      settingsOrderLockKey('sections', 'support'),
+      req.user!.id,
+      clientId,
+    )
+    if (!orderLock.ok) {
+      res.status(423).json({
+        error: orderLock.lockedByName
+          ? settingsOrderLockedMessage('sections', orderLock.lockedByName)
+          : 'Сначала включите режим редактирования порядка',
+        lockedByName: orderLock.lockedByName || undefined,
+      })
       return
     }
     const sections = await reorderSupportSections(orderedIds)

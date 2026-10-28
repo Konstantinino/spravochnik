@@ -110,6 +110,10 @@ import {
   fetchSupportPhones,
   saveSupportEmailsOnServer,
   saveSupportPhonesOnServer,
+  lockSettingsOrder,
+  unlockSettingsOrder,
+  renewSettingsOrderLock,
+  type SettingsOrderKind,
   serverFetch,
   serverLogin,
   serverRegister,
@@ -1557,6 +1561,7 @@ function registerIpc(): void {
         }
         return readStoredSubsections()
       } catch (err) {
+        if (err instanceof ServerApiError && err.status === 423) throw err
         appendSessionLog(
           'warn',
           'admin/subsections',
@@ -1687,6 +1692,7 @@ function registerIpc(): void {
         }
         return readStoredSupportSections()
       } catch (err) {
+        if (err instanceof ServerApiError && err.status === 423) throw err
         appendSessionLog(
           'warn',
           'admin/support-sections',
@@ -1878,6 +1884,70 @@ function registerIpc(): void {
       const settings = readSettings()
       if (!settings.serverUrl.trim()) return { ok: true }
       await renewTopicOrderLock(payload.departmentId)
+      return { ok: true }
+    },
+  )
+
+  ipcMain.handle(
+    'settings-order:lock',
+    async (
+      _e,
+      payload: { kind: SettingsOrderKind; departmentId: string },
+    ) => {
+      try {
+        requireManageTopicSections(payload.departmentId)
+        const settings = readSettings()
+        if (!settings.serverUrl.trim()) return { ok: true as const }
+        await lockSettingsOrder(payload.kind, payload.departmentId)
+        return { ok: true as const }
+      } catch (e) {
+        if (e instanceof ServerApiError && e.status === 423) {
+          const body = e.body as { lockedByName?: string }
+          const name = body?.lockedByName?.trim()
+          return {
+            ok: false as const,
+            lockedByName: name,
+            error: e.message,
+          }
+        }
+        if (e instanceof ServerApiError && (e.status === 404 || e.status === 405)) {
+          return {
+            ok: false as const,
+            error: 'Сервер ещё не поддерживает блокировку порядка. Обновите сервер.',
+          }
+        }
+        return {
+          ok: false as const,
+          error: e instanceof Error ? e.message : 'Не удалось заблокировать порядок',
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'settings-order:unlock',
+    async (
+      _e,
+      payload: { kind: SettingsOrderKind; departmentId: string },
+    ) => {
+      requireManageTopicSections(payload.departmentId)
+      const settings = readSettings()
+      if (!settings.serverUrl.trim()) return { ok: true }
+      await unlockSettingsOrder(payload.kind, payload.departmentId).catch(() => undefined)
+      return { ok: true }
+    },
+  )
+
+  ipcMain.handle(
+    'settings-order:renew',
+    async (
+      _e,
+      payload: { kind: SettingsOrderKind; departmentId: string },
+    ) => {
+      requireManageTopicSections(payload.departmentId)
+      const settings = readSettings()
+      if (!settings.serverUrl.trim()) return { ok: true }
+      await renewSettingsOrderLock(payload.kind, payload.departmentId)
       return { ok: true }
     },
   )
@@ -2795,16 +2865,19 @@ function registerIpc(): void {
     return normalizeSupportPhones(settings.supportPhones)
   })
 
-  ipcMain.handle('support-phones:set', async (_event, payload: { phones: unknown }) => {
+  ipcMain.handle('support-phones:set', async (_event, payload: { phones: unknown; departmentIds?: string[] }) => {
     requireRole(getCurrentUser(), STAFF_ROLES)
     let phones = normalizeSupportPhones(payload.phones)
+    const departmentIds = Array.isArray(payload.departmentIds)
+      ? payload.departmentIds.map((id) => String(id).trim()).filter(Boolean)
+      : undefined
     const settings = readSettings()
     if (settings.serverUrl.trim() && settings.authToken.trim()) {
       const online = await isServerReachable()
       if (!online) {
         throw new Error('Нет связи с сервером — телефоны не сохранены')
       }
-      phones = await saveSupportPhonesOnServer(phones)
+      phones = await saveSupportPhonesOnServer(phones, departmentIds)
     }
     cacheSupportPhones(phones)
     broadcastSupportPhonesChanged()
@@ -2837,16 +2910,19 @@ function registerIpc(): void {
     return normalizeSupportEmails(settings.supportEmails)
   })
 
-  ipcMain.handle('support-emails:set', async (_event, payload: { emails: unknown }) => {
+  ipcMain.handle('support-emails:set', async (_event, payload: { emails: unknown; departmentIds?: string[] }) => {
     requireRole(getCurrentUser(), STAFF_ROLES)
     let emails = normalizeSupportEmails(payload.emails)
+    const departmentIds = Array.isArray(payload.departmentIds)
+      ? payload.departmentIds.map((id) => String(id).trim()).filter(Boolean)
+      : undefined
     const settings = readSettings()
     if (settings.serverUrl.trim() && settings.authToken.trim()) {
       const online = await isServerReachable()
       if (!online) {
         throw new Error('Нет связи с сервером — почты не сохранены')
       }
-      emails = await saveSupportEmailsOnServer(emails)
+      emails = await saveSupportEmailsOnServer(emails, departmentIds)
     }
     cacheSupportEmails(emails)
     broadcastSupportEmailsChanged()

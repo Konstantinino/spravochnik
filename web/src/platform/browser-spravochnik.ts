@@ -88,6 +88,32 @@ function getTopicOrderClientId(): string {
   }
 }
 
+function settingsOrderLockFailure(e: unknown): {
+  ok: false
+  error: string
+  lockedByName?: string
+} {
+  if (e instanceof ApiError && e.status === 423) {
+    const body = e.body as { lockedByName?: string }
+    const name = body?.lockedByName?.trim()
+    return {
+      ok: false,
+      lockedByName: name,
+      error: e.message,
+    }
+  }
+  if (e instanceof ApiError && (e.status === 404 || e.status === 405)) {
+    return {
+      ok: false,
+      error: 'Сервер ещё не поддерживает блокировку порядка. Обновите сервер.',
+    }
+  }
+  return {
+    ok: false,
+    error: e instanceof Error ? e.message : 'Не удалось заблокировать порядок',
+  }
+}
+
 let currentUser: PublicUser | null = null
 let syncStatus: SyncStatus = {
   code: 'no_server',
@@ -621,7 +647,10 @@ const api: SpravochnikApi = {
   setSupportPhones: async (payload) => {
     const data = await apiFetch<{
       phones: Record<string, Array<{ label: string; display: string; tel: string }>>
-    }>('/admin/support-phones', { method: 'PUT', body: JSON.stringify(payload) })
+    }>('/admin/support-phones', {
+      method: 'PUT',
+      body: JSON.stringify({ ...payload, clientId: getTopicOrderClientId() }),
+    })
     for (const fn of supportPhonesListeners) fn()
     return data.phones ?? {}
   },
@@ -641,7 +670,10 @@ const api: SpravochnikApi = {
   setSupportEmails: async (payload) => {
     const data = await apiFetch<{
       emails: Record<string, Array<{ label: string; email: string }>>
-    }>('/admin/support-emails', { method: 'PUT', body: JSON.stringify(payload) })
+    }>('/admin/support-emails', {
+      method: 'PUT',
+      body: JSON.stringify({ ...payload, clientId: getTopicOrderClientId() }),
+    })
     for (const fn of supportEmailsListeners) fn()
     return data.emails ?? {}
   },
@@ -785,7 +817,7 @@ const api: SpravochnikApi = {
       '/admin/subsections/reorder',
       {
         method: 'PUT',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, clientId: getTopicOrderClientId() }),
       },
     )
     const updated = (data.subsections ?? []).map(mapSubsection)
@@ -837,7 +869,7 @@ const api: SpravochnikApi = {
       '/admin/support-sections/reorder',
       {
         method: 'PUT',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, clientId: getTopicOrderClientId() }),
       },
     )
     const sections = (data.sections ?? []).map(mapSupportSection)
@@ -948,6 +980,34 @@ const api: SpravochnikApi = {
     await apiFetch(`/departments/${payload.departmentId}/topic-order/renew-lock`, {
       method: 'POST',
       body: JSON.stringify({ clientId: getTopicOrderClientId() }),
+    })
+    return { ok: true }
+  },
+
+  lockSettingsOrder: async (payload) => {
+    try {
+      await apiFetch('/admin/settings-order/lock', {
+        method: 'POST',
+        body: JSON.stringify({ ...payload, clientId: getTopicOrderClientId() }),
+      })
+      return { ok: true as const }
+    } catch (e) {
+      return settingsOrderLockFailure(e)
+    }
+  },
+
+  unlockSettingsOrder: async (payload) => {
+    await apiFetch('/admin/settings-order/unlock', {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, clientId: getTopicOrderClientId() }),
+    }).catch(() => undefined)
+    return { ok: true }
+  },
+
+  renewSettingsOrderLock: async (payload) => {
+    await apiFetch('/admin/settings-order/renew', {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, clientId: getTopicOrderClientId() }),
     })
     return { ok: true }
   },

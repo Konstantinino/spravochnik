@@ -204,6 +204,17 @@ export function SettingsPage({
   const [newDepartmentId, setNewDepartmentId] = useState<WorkDepartmentId>('support')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  const statusMessage = error ?? info
+
+  useEffect(() => {
+    if (!statusMessage) return
+    const timer = window.setTimeout(() => {
+      setInfo(null)
+      setError(null)
+    }, 5000)
+    return () => window.clearTimeout(timer)
+  }, [statusMessage])
+
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [ownerEmail, setOwnerEmail] = useState('')
   const [latestRelease, setLatestRelease] = useState<LatestReleaseInfo | null>(null)
@@ -233,6 +244,10 @@ export function SettingsPage({
   const [contactsOfficeId, setContactsOfficeId] = useState<WorkDepartmentId>('support')
   const [contactsEmailsReorder, setContactsEmailsReorder] = useState(false)
   const [contactsPhonesReorder, setContactsPhonesReorder] = useState(false)
+  const [emailsReorderPreparing, setEmailsReorderPreparing] = useState(false)
+  const [phonesReorderPreparing, setPhonesReorderPreparing] = useState(false)
+  const [emailsOrderBanner, setEmailsOrderBanner] = useState<string | null>(null)
+  const [phonesOrderBanner, setPhonesOrderBanner] = useState<string | null>(null)
   const [workDepts, setWorkDepts] = useState<Department[]>(WORK_DEPARTMENTS)
   const [topicSections, setTopicSections] =
     useState<DepartmentSubsection[]>(initialTopicSections)
@@ -240,6 +255,8 @@ export function SettingsPage({
     useState<SupportTopicSection[]>(initialSupportSections)
   const [sectionsOfficeId, setSectionsOfficeId] = useState<WorkDepartmentId>('support')
   const [sectionsReorderMode, setSectionsReorderMode] = useState(false)
+  const [sectionsReorderPreparing, setSectionsReorderPreparing] = useState(false)
+  const [sectionsOrderBanner, setSectionsOrderBanner] = useState<string | null>(null)
   const [addingNewSection, setAddingNewSection] = useState(false)
   const [addingSubsectionParty, setAddingSubsectionParty] = useState<string | null>(null)
   const [editingPartySectionId, setEditingPartySectionId] = useState<string | null>(null)
@@ -251,6 +268,15 @@ export function SettingsPage({
   const [topicSectionsNotice, setTopicSectionsNotice] = useState<string | null>(null)
   const sessionLogRef = useRef<HTMLDivElement>(null)
   const topicSectionsAddRef = useRef<HTMLLIElement | null>(null)
+  const sectionsOrderLockRef = useRef<string | null>(null)
+  const emailsOrderLockRef = useRef<string | null>(null)
+  const phonesOrderLockRef = useRef<string | null>(null)
+  const emailsDirtyRef = useRef<Set<string>>(new Set())
+  const phonesDirtyRef = useRef<Set<string>>(new Set())
+  const sectionsOfficeIdRef = useRef(sectionsOfficeId)
+  const contactsOfficeIdRef = useRef(contactsOfficeId)
+  sectionsOfficeIdRef.current = sectionsOfficeId
+  contactsOfficeIdRef.current = contactsOfficeId
 
   const actorIsOwner = userIsOwner(currentUser)
   const actorIsStaff = isStaffRole(currentUser.role)
@@ -294,6 +320,93 @@ export function SettingsPage({
     setEditingSectionId(null)
     setEditingPartySectionId(null)
   }, [sectionsOfficeId])
+
+  useEffect(() => {
+    if (sectionsReorderMode) return
+    const departmentId = sectionsOrderLockRef.current
+    if (!departmentId) return
+    sectionsOrderLockRef.current = null
+    void window.spravochnik
+      .unlockSettingsOrder({ kind: 'sections', departmentId })
+      .catch(() => undefined)
+  }, [sectionsReorderMode])
+
+  useEffect(() => {
+    if (contactsEmailsReorder) return
+    const departmentId = emailsOrderLockRef.current
+    if (!departmentId) return
+    emailsOrderLockRef.current = null
+    void window.spravochnik
+      .unlockSettingsOrder({ kind: 'emails', departmentId })
+      .catch(() => undefined)
+  }, [contactsEmailsReorder])
+
+  useEffect(() => {
+    if (contactsPhonesReorder) return
+    const departmentId = phonesOrderLockRef.current
+    if (!departmentId) return
+    phonesOrderLockRef.current = null
+    void window.spravochnik
+      .unlockSettingsOrder({ kind: 'phones', departmentId })
+      .catch(() => undefined)
+  }, [contactsPhonesReorder])
+
+  useEffect(() => {
+    if (!sectionsReorderMode) return
+    const departmentId = sectionsOrderLockRef.current
+    if (!departmentId) return
+    const timer = window.setInterval(() => {
+      void window.spravochnik
+        .renewSettingsOrderLock({ kind: 'sections', departmentId })
+        .catch(() => undefined)
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [sectionsReorderMode])
+
+  useEffect(() => {
+    if (!contactsEmailsReorder) return
+    const departmentId = emailsOrderLockRef.current
+    if (!departmentId) return
+    const timer = window.setInterval(() => {
+      void window.spravochnik
+        .renewSettingsOrderLock({ kind: 'emails', departmentId })
+        .catch(() => undefined)
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [contactsEmailsReorder])
+
+  useEffect(() => {
+    if (!contactsPhonesReorder) return
+    const departmentId = phonesOrderLockRef.current
+    if (!departmentId) return
+    const timer = window.setInterval(() => {
+      void window.spravochnik
+        .renewSettingsOrderLock({ kind: 'phones', departmentId })
+        .catch(() => undefined)
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [contactsPhonesReorder])
+
+  useEffect(() => {
+    return () => {
+      const held: Array<{ kind: 'sections' | 'emails' | 'phones'; departmentId: string }> = []
+      if (sectionsOrderLockRef.current) {
+        held.push({ kind: 'sections', departmentId: sectionsOrderLockRef.current })
+        sectionsOrderLockRef.current = null
+      }
+      if (emailsOrderLockRef.current) {
+        held.push({ kind: 'emails', departmentId: emailsOrderLockRef.current })
+        emailsOrderLockRef.current = null
+      }
+      if (phonesOrderLockRef.current) {
+        held.push({ kind: 'phones', departmentId: phonesOrderLockRef.current })
+        phonesOrderLockRef.current = null
+      }
+      for (const lock of held) {
+        void window.spravochnik.unlockSettingsOrder(lock).catch(() => undefined)
+      }
+    }
+  }, [])
 
   const supportEmails = useMemo(
     () => supportEmailsByDept[contactsOfficeId] ?? [],
@@ -370,6 +483,148 @@ export function SettingsPage({
 
   function deptLabel(id: WorkDepartmentId): string {
     return workDepts.find((d) => d.id === id)?.label ?? id
+  }
+
+  async function acquireOrderLock(
+    kind: 'sections' | 'emails' | 'phones',
+    departmentId: string,
+  ): Promise<boolean> {
+    const result = await window.spravochnik.lockSettingsOrder({ kind, departmentId })
+    if (result.ok) return true
+    const message =
+      result.error?.trim() || 'Порядок уже редактируется в другом окне или приложении'
+    if (kind === 'sections') setSectionsOrderBanner(message)
+    if (kind === 'emails') setEmailsOrderBanner(message)
+    if (kind === 'phones') setPhonesOrderBanner(message)
+    return false
+  }
+
+  async function handleToggleSectionsReorder() {
+    if (sectionsReorderPreparing) return
+    if (sectionsReorderMode) {
+      setSectionsReorderMode(false)
+      return
+    }
+    const departmentId = sectionsOfficeId
+    setSectionsReorderPreparing(true)
+    setSectionsOrderBanner(null)
+    try {
+      const ok = await acquireOrderLock('sections', departmentId)
+      if (!ok) return
+      if (sectionsOfficeIdRef.current !== departmentId) {
+        await window.spravochnik
+          .unlockSettingsOrder({ kind: 'sections', departmentId })
+          .catch(() => undefined)
+        return
+      }
+      try {
+        await reloadDepartmentsConfig()
+      } catch (e) {
+        await window.spravochnik
+          .unlockSettingsOrder({ kind: 'sections', departmentId })
+          .catch(() => undefined)
+        setTopicSectionsError(
+          e instanceof Error ? e.message : 'Не удалось загрузить разделы',
+        )
+        return
+      }
+      if (sectionsOfficeIdRef.current !== departmentId) {
+        await window.spravochnik
+          .unlockSettingsOrder({ kind: 'sections', departmentId })
+          .catch(() => undefined)
+        return
+      }
+      sectionsOrderLockRef.current = departmentId
+      setAddingNewSection(false)
+      setAddingSubsectionParty(null)
+      setEditingSectionId(null)
+      setEditingPartySectionId(null)
+      setSectionsReorderMode(true)
+    } catch (e) {
+      setTopicSectionsError(
+        e instanceof Error ? e.message : 'Не удалось начать редактирование порядка',
+      )
+    } finally {
+      setSectionsReorderPreparing(false)
+    }
+  }
+
+  async function handleToggleEmailsReorder() {
+    if (emailsReorderPreparing) return
+    if (contactsEmailsReorder) {
+      setContactsEmailsReorder(false)
+      return
+    }
+    if (supportEmails.length < 2) return
+    const departmentId = contactsOfficeId
+    setEmailsReorderPreparing(true)
+    setEmailsOrderBanner(null)
+    try {
+      const fresh = normalizeSupportEmails(await window.spravochnik.getSupportEmails())
+      const ok = await acquireOrderLock('emails', departmentId)
+      if (!ok) return
+      if (contactsOfficeIdRef.current !== departmentId) {
+        await window.spravochnik
+          .unlockSettingsOrder({ kind: 'emails', departmentId })
+          .catch(() => undefined)
+        return
+      }
+      setSupportEmailsByDept((prev) => {
+        const next = { ...prev }
+        const lines = fresh[departmentId]
+        if (lines && lines.length > 0) next[departmentId] = lines
+        else delete next[departmentId]
+        return next
+      })
+      emailsDirtyRef.current.delete(departmentId)
+      emailsOrderLockRef.current = departmentId
+      setContactsEmailsReorder(true)
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : ''
+      const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
+      setError(cleaned || 'Не удалось начать редактирование порядка')
+    } finally {
+      setEmailsReorderPreparing(false)
+    }
+  }
+
+  async function handleTogglePhonesReorder() {
+    if (phonesReorderPreparing) return
+    if (contactsPhonesReorder) {
+      setContactsPhonesReorder(false)
+      return
+    }
+    if (supportPhones.length < 2) return
+    const departmentId = contactsOfficeId
+    setPhonesReorderPreparing(true)
+    setPhonesOrderBanner(null)
+    try {
+      const fresh = normalizeSupportPhones(await window.spravochnik.getSupportPhones())
+      const ok = await acquireOrderLock('phones', departmentId)
+      if (!ok) return
+      if (contactsOfficeIdRef.current !== departmentId) {
+        await window.spravochnik
+          .unlockSettingsOrder({ kind: 'phones', departmentId })
+          .catch(() => undefined)
+        return
+      }
+      setSupportPhonesByDept((prev) => {
+        const next = { ...prev }
+        const lines = fresh[departmentId]
+        if (lines && lines.length > 0) next[departmentId] = lines
+        else delete next[departmentId]
+        return next
+      })
+      phonesDirtyRef.current.delete(departmentId)
+      phonesOrderLockRef.current = departmentId
+      setContactsPhonesReorder(true)
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : ''
+      const cleaned = raw.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '')
+      setError(cleaned || 'Не удалось начать редактирование порядка')
+    } finally {
+      setPhonesReorderPreparing(false)
+    }
   }
 
   async function handleTopicSectionMove(scope: string, from: number, to: number) {
@@ -935,6 +1190,7 @@ export function SettingsPage({
   function patchSupportPhonesForOffice(
     updater: (prev: SupportPhoneLine[]) => SupportPhoneLine[],
   ) {
+    phonesDirtyRef.current.add(contactsOfficeId)
     setSupportPhonesByDept((store) => {
       const prev = store[contactsOfficeId] ?? []
       const nextLines = updater(prev)
@@ -966,6 +1222,7 @@ export function SettingsPage({
   function patchSupportEmailsForOffice(
     updater: (prev: SupportEmailLine[]) => SupportEmailLine[],
   ) {
+    emailsDirtyRef.current.add(contactsOfficeId)
     setSupportEmailsByDept((store) => {
       const prev = store[contactsOfficeId] ?? []
       const nextLines = updater(prev)
@@ -1007,19 +1264,25 @@ export function SettingsPage({
     setError(null)
     setInfo(null)
     try {
-      const draft: SupportEmailsByDepartment = { ...supportEmailsByDept }
-      const lines = normalizeSupportEmailLines(
-        supportEmails.map((row) => ({
-          label: row.label,
-          email: normalizeSupportEmail(row.email),
-        })),
-        { fallbackToDefault: false },
-      )
-      if (lines.length === 0) delete draft[contactsOfficeId]
-      else draft[contactsOfficeId] = lines
-      const prepared = normalizeSupportEmails(draft)
-      const saved = await window.spravochnik.setSupportEmails({ emails: prepared })
+      const dirty = new Set(emailsDirtyRef.current)
+      dirty.add(contactsOfficeId)
+      const patch: SupportEmailsByDepartment = {}
+      for (const id of dirty) {
+        const source = id === contactsOfficeId ? supportEmails : (supportEmailsByDept[id] ?? [])
+        patch[id] = normalizeSupportEmailLines(
+          source.map((row) => ({
+            label: row.label,
+            email: normalizeSupportEmail(row.email),
+          })),
+          { fallbackToDefault: false },
+        )
+      }
+      const saved = await window.spravochnik.setSupportEmails({
+        emails: patch,
+        departmentIds: [...dirty],
+      })
       setSupportEmailsByDept(normalizeSupportEmails(saved))
+      emailsDirtyRef.current = new Set()
       setContactsEmailsReorder(false)
       setInfo('Почты сохранены')
     } catch (e) {
@@ -1036,19 +1299,25 @@ export function SettingsPage({
     setError(null)
     setInfo(null)
     try {
-      const draft: SupportPhonesByDepartment = { ...supportPhonesByDept }
-      const lines = normalizeSupportPhoneLines(
-        supportPhones.map((row) => ({
-          label: row.label,
-          tel: normalizeTelDigits(row.tel),
-        })),
-        { fallbackToDefault: false },
-      )
-      if (lines.length === 0) delete draft[contactsOfficeId]
-      else draft[contactsOfficeId] = lines
-      const prepared = normalizeSupportPhones(draft)
-      const saved = await window.spravochnik.setSupportPhones({ phones: prepared })
+      const dirty = new Set(phonesDirtyRef.current)
+      dirty.add(contactsOfficeId)
+      const patch: SupportPhonesByDepartment = {}
+      for (const id of dirty) {
+        const source = id === contactsOfficeId ? supportPhones : (supportPhonesByDept[id] ?? [])
+        patch[id] = normalizeSupportPhoneLines(
+          source.map((row) => ({
+            label: row.label,
+            tel: normalizeTelDigits(row.tel),
+          })),
+          { fallbackToDefault: false },
+        )
+      }
+      const saved = await window.spravochnik.setSupportPhones({
+        phones: patch,
+        departmentIds: [...dirty],
+      })
       setSupportPhonesByDept(normalizeSupportPhones(saved))
+      phonesDirtyRef.current = new Set()
       setContactsPhonesReorder(false)
       setInfo('Телефоны сохранены')
     } catch (e) {
@@ -1101,9 +1370,6 @@ export function SettingsPage({
 
       <div className="settings-page__scroll">
         <div className="settings-page__content">
-        {error && <div className="form-error">{error}</div>}
-        {info && <div className="form-info">{info}</div>}
-
         <section className="settings-section">
           <h2>Подключение</h2>
           <p className="settings-sync-status">
@@ -1365,6 +1631,7 @@ export function SettingsPage({
                   value={sectionsOfficeId}
                   disabled={
                     sectionsReorderMode ||
+                    sectionsReorderPreparing ||
                     (!actorIsOwner && topicSectionsDepartments.length <= 1)
                   }
                   onChange={(e) => {
@@ -1387,22 +1654,23 @@ export function SettingsPage({
                 className={`btn btn-secondary contacts-settings__reorder${
                   sectionsReorderMode ? ' contacts-settings__reorder--active' : ''
                 }`}
-                disabled={!canReorderTopicSections || savingSection}
+                disabled={!canReorderTopicSections || savingSection || sectionsReorderPreparing}
                 onClick={() => {
-                  setSectionsReorderMode((v) => {
-                    if (!v) {
-                      setAddingNewSection(false)
-                      setAddingSubsectionParty(null)
-                      setEditingSectionId(null)
-                      setEditingPartySectionId(null)
-                    }
-                    return !v
-                  })
+                  void handleToggleSectionsReorder()
                 }}
               >
-                {sectionsReorderMode ? 'Готово' : 'Изменить порядок'}
+                {sectionsReorderPreparing
+                  ? 'Загрузка порядка…'
+                  : sectionsReorderMode
+                    ? 'Готово'
+                    : 'Изменить порядок'}
               </button>
             </div>
+            {sectionsOrderBanner ? (
+              <p className="form-error" role="alert">
+                {sectionsOrderBanner}
+              </p>
+            ) : null}
             {sectionsReorderMode ? (
               <p className="muted settings-section__hint">
                 Перетащите раздел или подраздел за маркер ⋮⋮. Подразделы перемещаются только внутри
@@ -1983,6 +2251,9 @@ export function SettingsPage({
                     value={contactsOfficeId}
                     disabled={
                       contactsEmailsReorder ||
+                      contactsPhonesReorder ||
+                      emailsReorderPreparing ||
+                      phonesReorderPreparing ||
                       (!actorIsOwner && topicSectionsDepartments.length <= 1)
                     }
                     onChange={(e) => setContactsOfficeId(e.target.value as WorkDepartmentId)}
@@ -2000,12 +2271,23 @@ export function SettingsPage({
                   className={`btn btn-secondary contacts-settings__reorder${
                     contactsEmailsReorder ? ' contacts-settings__reorder--active' : ''
                   }`}
-                  disabled={supportEmails.length < 2}
-                  onClick={() => setContactsEmailsReorder((v) => !v)}
+                  disabled={supportEmails.length < 2 || emailsReorderPreparing}
+                  onClick={() => {
+                    void handleToggleEmailsReorder()
+                  }}
                 >
-                  {contactsEmailsReorder ? 'Готово' : 'Изменить порядок'}
+                  {emailsReorderPreparing
+                    ? 'Загрузка порядка…'
+                    : contactsEmailsReorder
+                      ? 'Готово'
+                      : 'Изменить порядок'}
                 </button>
               </div>
+              {emailsOrderBanner ? (
+                <p className="form-error" role="alert">
+                  {emailsOrderBanner}
+                </p>
+              ) : null}
               {!actorIsOwner && topicSectionsDepartments.length === 1 ? (
                 <p className="muted settings-section__hint">
                   Администратор настраивает почты только своего отдела (
@@ -2067,7 +2349,10 @@ export function SettingsPage({
                   <select
                     value={contactsOfficeId}
                     disabled={
+                      contactsEmailsReorder ||
                       contactsPhonesReorder ||
+                      emailsReorderPreparing ||
+                      phonesReorderPreparing ||
                       (!actorIsOwner && topicSectionsDepartments.length <= 1)
                     }
                     onChange={(e) => setContactsOfficeId(e.target.value as WorkDepartmentId)}
@@ -2085,12 +2370,23 @@ export function SettingsPage({
                   className={`btn btn-secondary contacts-settings__reorder${
                     contactsPhonesReorder ? ' contacts-settings__reorder--active' : ''
                   }`}
-                  disabled={supportPhones.length < 2}
-                  onClick={() => setContactsPhonesReorder((v) => !v)}
+                  disabled={supportPhones.length < 2 || phonesReorderPreparing}
+                  onClick={() => {
+                    void handleTogglePhonesReorder()
+                  }}
                 >
-                  {contactsPhonesReorder ? 'Готово' : 'Изменить порядок'}
+                  {phonesReorderPreparing
+                    ? 'Загрузка порядка…'
+                    : contactsPhonesReorder
+                      ? 'Готово'
+                      : 'Изменить порядок'}
                 </button>
               </div>
+              {phonesOrderBanner ? (
+                <p className="form-error" role="alert">
+                  {phonesOrderBanner}
+                </p>
+              ) : null}
               {!actorIsOwner && topicSectionsDepartments.length === 1 ? (
                 <p className="muted settings-section__hint">
                   Администратор настраивает телефоны только своего отдела (
@@ -2500,6 +2796,15 @@ export function SettingsPage({
           </div>
         </div>
       )}
+
+      {statusMessage ? (
+        <div
+          className={`settings-page__status${error ? ' settings-page__status--error' : ' settings-page__status--info'}`}
+          role={error ? 'alert' : 'status'}
+        >
+          {statusMessage}
+        </div>
+      ) : null}
     </div>
   )
 }

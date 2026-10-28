@@ -165,6 +165,12 @@ contextBridge.exposeInMainWorld('spravochnik', {
   prepareTopicReorder: (departmentId: string) =>
     ipcRenderer.invoke('prepare-topic-reorder', departmentId),
 
+  lockSettingsOrder: (payload: unknown) => ipcRenderer.invoke('settings-order:lock', payload),
+
+  unlockSettingsOrder: (payload: unknown) => ipcRenderer.invoke('settings-order:unlock', payload),
+
+  renewSettingsOrderLock: (payload: unknown) => ipcRenderer.invoke('settings-order:renew', payload),
+
   onSyncStatus: (callback: (status: unknown) => void) => {
 
     const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)

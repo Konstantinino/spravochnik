@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { SupportEmailLine } from '../lib/supportEmails'
 import { normalizeSupportEmail } from '../lib/supportEmails'
 import type { SupportPhoneLine } from '../lib/supportPhones'
@@ -36,19 +36,19 @@ export function SupportContactSettingsList(props: SupportContactSettingsListProp
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
-  useEffect(() => {
-    if (scopeRef.current !== props.scopeKey) {
-      scopeRef.current = props.scopeKey
-      rowKeysRef.current = []
-    }
-    const keys = rowKeysRef.current
-    while (keys.length < rows.length) {
-      keys.push(`${kind}-${crypto.randomUUID()}`)
-    }
-    if (keys.length > rows.length) {
-      keys.splice(rows.length)
-    }
-  }, [kind, props.scopeKey, rows.length])
+  // Assign row keys during render so the first keystroke does not change React keys
+  // (useEffect ran after paint and remounted inputs on the next update).
+  if (scopeRef.current !== props.scopeKey) {
+    scopeRef.current = props.scopeKey
+    rowKeysRef.current = []
+  }
+  const rowKeys = rowKeysRef.current
+  while (rowKeys.length < rows.length) {
+    rowKeys.push(`${kind}-${crypto.randomUUID()}`)
+  }
+  if (rowKeys.length > rows.length) {
+    rowKeys.splice(rows.length)
+  }
 
   function commitReorder(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return
@@ -96,7 +96,7 @@ export function SupportContactSettingsList(props: SupportContactSettingsListProp
         const dragOver = reorderMode && dragOverIndex === index
         return (
           <li
-            key={rowKeysRef.current[index] ?? `${kind}-row-${index}`}
+            key={rowKeys[index]}
             className={`support-phones-settings__row${dragging ? ' is-dragging' : ''}${
               dragOver ? ' is-drag-over' : ''
             }`}

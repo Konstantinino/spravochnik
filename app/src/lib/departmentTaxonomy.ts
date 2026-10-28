@@ -11,7 +11,7 @@ import { deptTopLevelSections } from './deptTopicSections'
 export function departmentUsesPartyTopicModel(
   departmentId: DepartmentId,
   subsections: DepartmentSubsection[],
-  supportSections: SupportTopicSection[] = [],
+  _supportSections: SupportTopicSection[] = [],
 ): boolean {
   if (departmentId === 'support') return true
   return deptTopLevelSections(subsections, departmentId).length > 0

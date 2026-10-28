@@ -302,6 +302,8 @@ export interface GuideItem {
   archived?: boolean
   /** Custom order among siblings (same parent_id). Lower = higher in list. */
   sort_index?: number
+  /** Server topic version (sync / conflict detection). */
+  version?: number
   /** Техподдержка, категория «Администратор»: id клиентской темы (Поставщик/Заказчик/Ошибки). */
   client_topic_id?: number | null
   photo?: string

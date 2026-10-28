@@ -8,6 +8,7 @@ app/dist-electron/
 
 # Установщик и распакованная сборка (тяжёлые файлы)
 app/release/
+app/release-staging/
 
 # Логи и служебное
 *.log

@@ -53,8 +53,11 @@ export function SupportContactSettingsList(props: SupportContactSettingsListProp
   function commitReorder(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return
     rowKeysRef.current = moveArrayItem(rowKeysRef.current, fromIndex, toIndex)
-    const next = moveArrayItem(rows, fromIndex, toIndex)
-    props.onReorder(next)
+    if (props.kind === 'email') {
+      props.onReorder(moveArrayItem(props.rows, fromIndex, toIndex))
+    } else {
+      props.onReorder(moveArrayItem(props.rows, fromIndex, toIndex))
+    }
   }
 
   function handleDragStart(e: React.DragEvent, index: number) {
@@ -133,7 +136,7 @@ export function SupportContactSettingsList(props: SupportContactSettingsListProp
                 <span className="support-phones-settings__label">E-mail</span>
                 <input
                   type="email"
-                  value={row.email}
+                  value={(row as SupportEmailLine).email}
                   disabled={reorderMode}
                   onChange={(e) =>
                     props.onUpdate(index, { email: normalizeSupportEmail(e.target.value) })
@@ -147,13 +150,13 @@ export function SupportContactSettingsList(props: SupportContactSettingsListProp
                 <span className="support-phones-settings__label">Номер (цифры)</span>
                 <input
                   type="text"
-                  value={row.tel}
+                  value={(row as SupportPhoneLine).tel}
                   disabled={reorderMode}
                   onChange={(e) =>
                     props.onUpdate(index, {
                       tel: normalizeTelDigits(e.target.value),
                       display: formatSupportPhoneDisplay(e.target.value),
-                    })
+                    } as Partial<SupportPhoneLine>)
                   }
                   inputMode="numeric"
                   placeholder="83472468072"

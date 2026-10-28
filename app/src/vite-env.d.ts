@@ -1,10 +1,5 @@
 /// <reference types="vite/client" />
 
-/** true in web/vite build; false in Electron app build. */
-declare const __REST_INFO_WEB__: boolean
-
-
-
 import type {
 
   GuideItem,
@@ -477,13 +472,12 @@ export interface SpravochnikApi {
 
 
 declare global {
+  /** true in web/vite build; false in Electron app build. */
+  const __REST_INFO_WEB__: boolean
 
   interface Window {
-
     spravochnik: SpravochnikApi
-
   }
-
 }
 
 

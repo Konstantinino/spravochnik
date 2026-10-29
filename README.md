@@ -79,7 +79,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```
 docker-compose.yml
 server/                     REST API, миграции, import
-app/                        Electron + React (v1.5.0)
+app/                        Electron + React (v1.5.1)
 web/                        Browser SPA (cookie-auth)
 docs/                       документация + scripts.md
 scripts/                    pull/push yandex export (разово)

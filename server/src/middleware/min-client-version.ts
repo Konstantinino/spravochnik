@@ -5,14 +5,20 @@ import {
   parseClientVersionHeader,
   requiredClientVersion,
 } from '../lib/app-version.js'
+import { requestHasWebSessionCookie } from '../lib/web-session.js'
 
-/** Reject writes from clients older than latest app_releases (or MIN_CLIENT_VERSION). */
+/** Reject writes from desktop clients older than latest app_releases (or MIN_CLIENT_VERSION). Web SPA is exempt (single deploy, always current). */
 export async function requireCurrentClientVersion(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   if (process.env.SKIP_MIN_CLIENT_VERSION === '1') {
+    next()
+    return
+  }
+
+  if (requestHasWebSessionCookie(req)) {
     next()
     return
   }

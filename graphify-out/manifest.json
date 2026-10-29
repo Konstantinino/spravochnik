@@ -216,8 +216,8 @@
     "semantic_hash": "e49407587c24719df40c18ab01af2168"
   },
   "app/src/lib/textInsert.ts": {
-    "mtime": 1793177874.6580164,
-    "seen": 1793179931.9893053,
+    "mtime": 1793247146.019033,
+    "seen": 1793247453.1861866,
     "ast_hash": "aeb7d723130fdd765f5bee8e68181f02",
     "semantic_hash": ""
   },
@@ -288,9 +288,9 @@
     "semantic_hash": "5ab518c19a1fece2b2becb0ae07bf8a2"
   },
   "AGENTS.md": {
-    "mtime": 1793190214.8173425,
-    "seen": 1793190224.6200514,
-    "ast_hash": "26c9288c9586c05c86331ffe820b5ccd",
+    "mtime": 1793247397.3188937,
+    "seen": 1793247453.1862848,
+    "ast_hash": "480bab645236a45525ae80ab2613a089",
     "semantic_hash": ""
   },
   "README.md": {
@@ -510,9 +510,9 @@
     "semantic_hash": ""
   },
   "docs/PROJECT-STATUS.md": {
-    "mtime": 1793190211.5252373,
-    "seen": 1793190224.620062,
-    "ast_hash": "bbc5f105632f104e5c5b0842cc4e6439",
+    "mtime": 1793247445.7558422,
+    "seen": 1793247453.1862948,
+    "ast_hash": "9d73cfb7ed44fbee320374a9094a114e",
     "semantic_hash": ""
   },
   "docs/legacy-yandex-disk.md": {
@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "docs/testing-checklist.md": {
-    "mtime": 1793190216.0089493,
-    "seen": 1793190224.6200724,
-    "ast_hash": "e7fc813c39c5705997ed1c540a8f28c8",
+    "mtime": 1793247392.9022262,
+    "seen": 1793247453.1863043,
+    "ast_hash": "09842879d686c58d2fb1e3de26431a17",
     "semantic_hash": ""
   },
   "server/README.md": {
@@ -726,14 +726,14 @@
     "semantic_hash": ""
   },
   "server/migrations/006_topic_party_additional.sql": {
-    "mtime": 1793177874.6580164,
-    "seen": 1793179931.989336,
+    "mtime": 1793247146.011029,
+    "seen": 1793247453.1862183,
     "ast_hash": "981df17f2405bc9ac79b2aa9a958982b",
     "semantic_hash": ""
   },
   "server/migrations/007_topic_order_locks.sql": {
-    "mtime": 1793177874.6580164,
-    "seen": 1793179931.9893372,
+    "mtime": 1793247146.020028,
+    "seen": 1793247453.1862195,
     "ast_hash": "0cf063646302479ea42d9e98ea62865f",
     "semantic_hash": ""
   },
@@ -780,9 +780,9 @@
     "semantic_hash": ""
   },
   "server/src/middleware/min-client-version.ts": {
-    "mtime": 1793018884.1199095,
-    "seen": 1793076351.8951406,
-    "ast_hash": "d9aaac02bf9f4fe2f89c28e532fe0f0c",
+    "mtime": 1793247388.1857278,
+    "seen": 1793247453.186261,
+    "ast_hash": "99f99118965f588731dbe49d7bc39db6",
     "semantic_hash": ""
   },
   "app/electron/departments-store.ts": {
@@ -918,9 +918,9 @@
     "semantic_hash": ""
   },
   "server/src/lib/web-session.ts": {
-    "mtime": 1793076381.688789,
-    "seen": 1793076387.2424064,
-    "ast_hash": "9515417e20e0fe12eda4ef5b443e27bc",
+    "mtime": 1793247387.3927488,
+    "seen": 1793247453.1862583,
+    "ast_hash": "632d4d4d0c50602783b8e9c802a70bdc",
     "semantic_hash": ""
   },
   "web/package.json": {
@@ -936,9 +936,9 @@
     "semantic_hash": ""
   },
   "web/src/platform/api-client.ts": {
-    "mtime": 1793077935.6054006,
-    "seen": 1793078036.5867994,
-    "ast_hash": "aabac7d533fbc2bff42812e116f8d927",
+    "mtime": 1793247388.4404676,
+    "seen": 1793247453.1862762,
+    "ast_hash": "97ce5936e6a401d6fd7c9ccb3dcff948",
     "semantic_hash": ""
   },
   "web/src/platform/browser-spravochnik.ts": {

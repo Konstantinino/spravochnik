@@ -1,6 +1,21 @@
-import type { CookieOptions, Response } from 'express'
+import type { CookieOptions, Request, Response } from 'express'
 
 export const SESSION_COOKIE = 'rest_info_session'
+
+/** Browser SPA: httpOnly session cookie. Electron uses Bearer only — never both for API writes. */
+export function requestHasWebSessionCookie(req: Request): boolean {
+  if (req.headers.authorization?.startsWith('Bearer ')) return false
+  const cookies = req.cookies as Record<string, string | undefined> | undefined
+  if (cookies?.[SESSION_COOKIE]) return true
+  const raw = req.headers.cookie
+  if (!raw) return false
+  const prefix = `${SESSION_COOKIE}=`
+  for (const part of raw.split(';')) {
+    const trimmed = part.trim()
+    if (trimmed.startsWith(prefix)) return true
+  }
+  return false
+}
 
 export function sessionCookieOptions(): CookieOptions {
   const secure = process.env.COOKIE_SECURE !== 'false'

@@ -1,6 +1,6 @@
 import { getApiBase, getStoredServerUrl, normalizeServerUrl } from './server-url'
 
-/** Keep ≥ latest desktop release so write gate (`min-client-version`) accepts the SPA. */
+/** Sent for diagnostics; web writes skip min-client-version (cookie session on server). */
 export const WEB_CLIENT_VERSION = '1.5.0'
 const CLIENT_VERSION_HEADER = 'X-Rest-Info-Client-Version'
 

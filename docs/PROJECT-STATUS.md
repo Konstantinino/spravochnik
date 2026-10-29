@@ -1,18 +1,18 @@
 # REST INFO — статус проекта (handoff)
 
-Обновлено: 2026-10-28
+Обновлено: 2026-10-29
 
 ## Текущая фаза
 
 **v2 реализована.** Яндекс.Диск выведен из основного потока (sync + updates).
 
-**Ожидается production-deploy (28 окт.):** миграция **`016_unified_party_and_dept_archive`**, пересборка API (SPA + server в образе), Setup **1.5.0** с унификацией party/архива. Инструкция: [server/migrations/DEPLOY_016.md](../server/migrations/DEPLOY_016.md).
+**Production-deploy:** миграция **`016_unified_party_and_dept_archive`**, пересборка API (SPA + gate версии только для десктопа), публикация Setup **1.5.1**. Инструкция: [server/migrations/DEPLOY_016.md](../server/migrations/DEPLOY_016.md).
 
 **Веб-клиент (`web/`)** в `main` и на production (**https://info.r-est.ru**): Vite SPA + cookie-auth; UI общий с десктопом (`@app`). SPA **вшита в образ API** (`WEB_DIST=/data/web`, без bind-mount `./web/dist`). Без офлайна. Dev: [web/README.md](../web/README.md).
 
 Данные восстановлены на Яндекс.Диск из `REST-INFO-export/` (аварийно, 2 сент.). Production — импорт в PostgreSQL через `import-from-json.js`.
 
-Локально на Windows (28 окт.): клиент **1.5.0**; Setup пересобран (`app/release-staging/`, party/archive — в `main`). **`web/dist`** в git, вшивается в образ API при `docker compose build api`. **Production web (27 окт.):** медиа URL `/media/media/…`, buffered GET + `/media/status`; favicon R на красном; lock порядка с **`clientId`**; копирование текста в просмотре. Миграции **004–015** в коде; **016** — unified party + per-dept archive (деploy на prod — по чеклисту DEPLOY_016). Host nginx → `:3000`; `CORS_ORIGIN` / `COOKIE_SECURE`.
+Локально на Windows (**29 окт.**): клиент **1.5.1**; Setup собран `app/release/REST-INFO-Setup-1.5.1.exe` (+ blockmap). **`web/dist`** в git, вшивается в образ API при `docker compose build api`. **Production web (27 окт.):** медиа URL `/media/media/…`, buffered GET + `/media/status`; favicon R на красном; lock порядка с **`clientId`**; копирование текста в просмотре. Миграции **004–015** в коде; **016** — unified party + per-dept archive (деploy на prod — по чеклисту DEPLOY_016). Host nginx → `:3000`; `CORS_ORIGIN` / `COOKIE_SECURE`.
 
 **Важно:** локальный `127.0.0.1:3000` ≠ production-данные. Клиент с кэшем основного сервера при URL localhost получит «тема не найдена» при сохранении.
 
@@ -30,7 +30,7 @@
 - [x] App updates: `GET /app/update`, download Setup.exe; **`GET /app/updates/*`** — static `latest.yml` + blockmap для electron-updater (1.4.0+)
 - [x] Admin: users, роли **owner / admin / editor / user**, whitelist, releases, **PUT /admin/users/:id**, **POST /admin/transfer-ownership**, **GET /admin/storage-stats** (только owner)
 - [x] Миграции `002`–`007` + **`008_client_topic_link.sql`** (`client_topic_id` для admin-тем)
-- [x] **`middleware/min-client-version.ts`** — блок POST/PUT/DELETE, если версия клиента старее последнего релиза (`lib/app-version.ts`)
+- [x] **`middleware/min-client-version.ts`** — gate версии для **десктопа (Bearer)**; **веб** (httpOnly cookie без Bearer) **не проверяется** — SPA всегда с текущим деплоем (`requestHasWebSessionCookie` в `web-session.ts`)
 - [x] **`PUT /departments/:dept/topic-order`** — сохранение `sort_index` (reorder; требует lock + тот же `clientId`)
 - [x] **`POST /departments/:dept/topic-order/lock|unlock|renew-lock`** — body `{ clientId }` (миграция **014**); один аккаунт не может держать порядок сразу в вебе и в десктопе
 - [x] SPA из `web/dist` в Docker-образе API; `GET /health` → `web` / `media` / `build`; `GET /media/status` (+ `?file=`)
@@ -100,6 +100,7 @@
 - [x] **`departments-store.ts`**, **`subsections-store.ts`** — локальный кэш + sync
 - [x] **Общие фото:** ссылка на файл другой темы (`resolve-image-storage-ref`), вставка из буфера, копирование из редактора; orphan cleanup по всем темам
 - [x] Reorder: не раскрывает все папки — только ручное раскрытие, как в обычном режиме
+- [x] Клиент **1.5.1** (`REST-INFO-Setup-1.5.1.exe`): patch после 1.5.0; gate версии на API не для веб-cookie
 - [x] Клиент **1.5.0** (`REST-INFO-Setup-1.5.0.exe`): веб в `main` + cookie-auth; Setup собран
 - [x] Клиент **1.4.9** (`REST-INFO-Setup-1.4.9.exe`): курсор совпадает с текстом при вставке ссылки на фото — глифы рисует сам textarea
 - [x] Клиент **1.4.8** (`REST-INFO-Setup-1.4.8.exe`): курсор в редакторе совпадает с видимым текстом (подсветка и textarea — одна раскладка)
@@ -133,6 +134,7 @@
 - [x] `docs/testing-checklist.md`
 - [x] `docs/fix-media-paths.md` — инструкция по разовому fix legacy-путей медиа
 - [x] `AGENTS.md`, `PROJECT-STATUS.md` (в т.ч. правила **graphify** и «ключевые файлы» для агентов)
+- [x] `.cursor/rules/pc-web-sync.mdc` — ПК и веб развиваются синхронно (общий `@app`, исключения — платформенный код)
 - [x] `graphify-out/` — карта кода (commit `9f9d1b4+`; не участвует в runtime)
 
 ### Исправления в ходе dev
@@ -155,6 +157,7 @@
 - [x] Кнопка «Удаление…» в Viewer: сброс состояния в `finally`
 - [x] Диагностика sync 404: на production (`info.r-est.ru`) ~107 записей `media_files` с путём `media/images/*`, файлы на диске — `media/support/{id}/images/*`
 - [x] **Production (9 сент.):** `fix-media-paths.js --apply` — обновлено **107** путей в `media_files`, `global_version` bumped; sync «media/images/…» 404 устранён
+- [x] **29 окт.:** min-client-version не для веб-cookie; правило агента **pc-web-sync**
 
 ---
 
@@ -163,8 +166,8 @@
 | Задача | Приоритет | Кто |
 |---|---|---|
 | Production web **info.r-est.ru** (SPA в образе API) | **Сделано** | — |
-| **`git pull` + миграция 016 + `docker compose build --no-cache api && up -d api`** | **Высокий** | Программист |
-| Setup **1.5.0** (party/archive) + `latest.yml` + blockmap на `/app/updates/` | **Высокий** | Админ |
+| **`git pull` + миграция 016 + rebuild API** (в т.ч. gate версии только для десктопа) | **Высокий** | Программист |
+| Setup **1.5.1** + `latest.yml` + blockmap на `/app/updates/` (`upload-release.js`) | **Высокий** | Админ |
 | E2E: разделы/party/архив/«Из архива»/удаление раздела (см. testing-checklist) | Средний | QA |
 | Git tag `v1.yandex-disk` | Низкий | Вручную |
 | Wire remaining whitelist IPC напрямую на server API (не queue) | Низкий | Dev |
@@ -192,7 +195,7 @@
 
 ```
 spravochnik-repo/
-├── app/                    # Electron клиент (v1.5.0)
+├── app/                    # Electron клиент (v1.5.1)
 ├── web/                    # Браузерный SPA (cookie-auth)
 ├── server/                 # REST API (v1.0.0)
 ├── docker-compose.yml
@@ -215,7 +218,7 @@ spravochnik-repo/
 ## Следующие шаги (для администратора)
 
 1. После деплоя программистом: https://info.r-est.ru — проверить фильтры/архив в non-support отделах
-2. Залить Setup **1.5.0** (`upload-release.js`) и раздать пользователям; URL: `https://info.r-est.ru`
+2. Залить Setup **1.5.1** (`upload-release.js`) и раздать пользователям; URL: `https://info.r-est.ru`
 3. Отозвать OAuth-токен Яндекс.Диска (больше не нужен)
 
 ---

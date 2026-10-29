@@ -111,7 +111,7 @@ graphify update .
 | `lib/topic-party.ts` | `resolveRootTopicPartyForWrite` (party = id верхнего раздела) |
 | `lib/move-topics-to-lost.ts` | перенос тем в отдел `lost` при удалении **отдела** (009) |
 | `routes/topics.ts` | CRUD тем, архив с bucket subsection, party на write, topic-order + **`clientId`** |
-| `middleware/min-client-version.ts` | запись на API только с актуальной версией клиента (см. `lib/app-version.ts`) |
+| `middleware/min-client-version.ts` | gate версии для **Electron (Bearer)**; веб cookie-сессия пропускается (`web-session.ts`) |
 | `routes/sync.ts` | GET /sync/changes, GET /sync/status; в changes: **`departments`**, **`subsections`** |
 | `lib/media-layout.ts` | канонические пути медиа, миграция на диске при старте API |
 | `routes/media.ts` | upload/download по `originalUrl`; `GET /media/status`; `updates/*` → UPDATES_DIR; лимит 120 МБ |
@@ -211,7 +211,7 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.5.0.exe
+# → app/release/REST-INFO-Setup-1.5.1.exe
 ```
 
 ## Владелец / bootstrap
@@ -235,7 +235,7 @@ npm run dist:ascii
 10. **Reorder + party categories:** на production нужны миграции **004–007**; **008** — `client_topic_id` (admin↔client).
 11. **Reorder:** порядок на сервер уходит только при «Завершить редактирование»; перед входом — pull порядка + lock; unlock после успешного PUT.
 12. **Первый вход в reorder:** локально проставляет `sort_index` по текущему порядку (без push до «Завершить»).
-13. **Минимальная версия клиента:** API отклоняет запись (426), если `X-Rest-Info-Client-Version` старее последнего `app_releases`; без записи в `app_releases` проверка выключена.
+13. **Минимальная версия клиента (только десктоп):** запись с **Bearer** отклоняется (426), если `X-Rest-Info-Client-Version` старее последнего `app_releases`. **Веб** (httpOnly cookie, без Bearer) — gate не применяется. Без записи в `app_releases` проверка выключена.
 14. **Admin↔client link:** пока production API без **008**, связь держится локально после push; для общей БД — деплой **008** + клиент с заголовком версии.
 15. **Терминология UI:** **отдел** = support/СПП/юристы (шапка); **раздел** = группировка тем внутри отдела (`department_subsections`, поле `subsection_id` в JSON/API). Не путать с CRUD `/admin/departments` (отдельные JSON-справочники на диске; в настройках не редактируются).
 16. **«Потерялись»:** отдел `lost` (009) в шапке только при наличии тем. **Разделы тем:** **010**; **016** — party + архивные подразделы в каждом рабочем отделе; без **016** на prod — рассинхрон party/архива с клиентом 1.5.0.
@@ -274,6 +274,6 @@ npm run dist:ascii
 
 ## Версии
 
-- Клиент: **1.5.0** (`app/package.json`)
+- Клиент: **1.5.1** (`app/package.json`)
 - Сервер: **1.0.0** (`server/package.json`)
 - Git tag `v1.yandex-disk` — **не создан** (нужно вручную при необходимости)

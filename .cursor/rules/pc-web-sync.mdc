@@ -19,6 +19,8 @@ alwaysApply: true
 
 Один релиз функций = правки `@app` + деплой образа с `web/dist`; Setup — когда нужен новый десктоп.
 
+**Десктоп-релиз (auto-update):** `npm run dist:ascii` → **`publish-release.ps1`** (Setup + `latest.yml` + blockmap на сервер). Только exe или только `POST /admin/releases` — недостаточно для кнопки «Обновить».
+
 ## Исключения (только одна платформа)
 
 | Только ПК | Только веб |
@@ -30,8 +32,26 @@ alwaysApply: true
 
 Если фича **логически общая** (темы, sync, locks, настройки, медиа, reorder) — реализовать в `@app` + обе платформы должны её видеть одинаково.
 
+## Commit и push (по запросу пользователя)
+
+Production-веб = **`web/dist`** в git, вшивается в Docker-образ API. Push **без** свежего `dist` веб на сервере **не обновится**.
+
+Если пользователь просит **закоммитить и/или запушить**:
+
+1. Есть изменения в **`app/src/`**, **`web/src/`** или общем UI/API-клиенте → **обязательно** перед commit:
+   ```powershell
+   cd web
+   npm run build
+   ```
+   и в commit включить **`web/dist/`** (вместе с исходниками).
+2. Только **`server/`**, миграции, docs без UI → пересборка `web/dist` не нужна.
+3. Не исключать `web/dist` из commit «как артеfact» — для деплоя SPA это часть релиза.
+
+Setup (`npm run dist:ascii`) — по-прежнему только когда нужен новый десктоп; commit/push UI-фиксов **всё равно** требует `web/dist`.
+
 ## Чеклист агента
 
 1. Изменил `app/src` или клиентский API — проверил `web/src/platform/` и dev-сценарий веба.
 2. Новая IPC-only возможность — либо stub/no-op в `browser-spravochnik.ts` с понятным UX, либо эквивалент через HTTP.
 3. Поднял версию — синхронизировал `package.json` и `WEB_CLIENT_VERSION`.
+4. Пользователь просит commit/push после UI — выполнил `web/npm run build` и добавил `web/dist` в commit.

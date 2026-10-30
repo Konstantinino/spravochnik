@@ -150,14 +150,16 @@ export function rootSubsectionIdForSave(selectValue: string): string | null {
   return id ? id : null
 }
 
-/** Корневая тема (без родителя) — для неё показывается выбор подраздела, если они настроены. */
+/**
+ * Показывать select раздела/подраздела: тема сохраняется без родителя.
+ * Зависит от галочки «Сделать подтемой», а не от parent_id до правки (edit подтемы → снять галочку = корень).
+ */
 export function isEditableRootTopic(
   attachParent: boolean,
-  mode: 'add' | 'edit',
-  initialParentId: number | null | undefined,
+  _mode: 'add' | 'edit',
+  _initialParentId: number | null | undefined,
 ): boolean {
-  if (mode === 'add') return !attachParent
-  return initialParentId == null && !attachParent
+  return !attachParent
 }
 
 /** Псевдо-раздел sidebar «Архив» не должен попадать в `<select>` редактора. */

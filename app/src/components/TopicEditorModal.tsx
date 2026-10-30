@@ -34,7 +34,6 @@ import {
   editorPartyForSave,
   editorPartySelectValue,
   editorSubsectionsForDepartment,
-  firstSupportSubsectionIdForParty,
   isEditableRootTopic,
   showSubsectionNoneSelectOption,
   rootTopicSubsectionPayloadForSave,
@@ -195,23 +194,10 @@ export function TopicEditorModal({
     !showParty && isRootTopic && !deptHasNestedLayout && targetDeptSubsections.length > 0
   const showNestedSubsectionPicker =
     !showParty && isRootTopic && deptHasNestedLayout && nestedUnderEditorSection.length > 0
-  const noneOptionForSupportSubsection = showSubsectionNoneSelectOption({
-    departmentId: 'support',
-    subsections,
-    nestedSubsectionPicker: true,
-    party,
-  })
-  const noneOptionForFlatSection = showSubsectionNoneSelectOption({
-    departmentId: targetDept,
-    subsections,
-    nestedSubsectionPicker: false,
-    party,
-  })
-  const noneOptionForNestedSubsection = showSubsectionNoneSelectOption({
-    departmentId: targetDept,
-    subsections,
-    nestedSubsectionPicker: true,
-    party,
+  const showSupportSubsectionPicker =
+    showParty && isRootTopic && targetDeptSubsections.length > 0
+  const showSubsectionNoneOption = showSubsectionNoneSelectOption({
+    nestedSubsectionPicker: showSupportSubsectionPicker || showNestedSubsectionPicker,
   })
 
   const partySelectOptions = useMemo(
@@ -357,8 +343,7 @@ export function TopicEditorModal({
     setParty(next)
     setAttachParent(false)
     setSelectedParentId(null)
-    const firstSub = firstSupportSubsectionIdForParty(subsections, next)
-    setTargetSubsectionId(firstSub ?? SUBSECTION_NONE_SELECT_VALUE)
+    setTargetSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
     if (next !== 'additional') {
       setAttachClientLink(false)
       setSelectedClientTopicId(null)
@@ -521,8 +506,6 @@ export function TopicEditorModal({
       setError(sectionValidation)
       return
     }
-    const showSupportSubsectionPicker =
-      showParty && isRootTopic && targetDeptSubsections.length > 0
     const sectionPayload = rootTopicSubsectionPayloadForSave(targetDept, subsections, {
       isRootTopic,
       showParty,
@@ -679,9 +662,9 @@ export function TopicEditorModal({
             </label>
           )}
 
-          {(showParty
-            ? isRootTopic && targetDeptSubsections.length > 0
-            : showFlatDeptSectionPicker || showNestedSubsectionPicker) && (
+          {(showSupportSubsectionPicker ||
+            showFlatDeptSectionPicker ||
+            showNestedSubsectionPicker) && (
             <label className="field">
               <span>
                 {targetDept === 'support' || showNestedSubsectionPicker
@@ -690,18 +673,10 @@ export function TopicEditorModal({
               </span>
               <select
                 value={targetSubsectionId}
-                required
+                required={!showSubsectionNoneOption}
                 onChange={(e) => setTargetSubsectionId(e.target.value)}
               >
-                {(showParty
-                  ? noneOptionForSupportSubsection ||
-                    (mode === 'edit' && !targetSubsectionId.trim())
-                  : showNestedSubsectionPicker
-                    ? noneOptionForNestedSubsection ||
-                      (mode === 'edit' &&
-                        targetSubsectionId === SUBSECTION_NONE_SELECT_VALUE)
-                    : noneOptionForFlatSection ||
-                      (mode === 'edit' && !targetSubsectionId.trim())) ? (
+                {showSubsectionNoneOption ? (
                   <option value={SUBSECTION_NONE_SELECT_VALUE}>
                     {SUBSECTION_NONE_OPTION_LABEL}
                   </option>

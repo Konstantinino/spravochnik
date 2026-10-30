@@ -64,7 +64,6 @@ import {
   SUBSECTION_NONE_SELECT_VALUE,
   defaultSubsectionSelectForNewRootTopic,
   departmentHasRootTopicSections,
-  firstSupportSubsectionIdForParty,
   showSubsectionNoneSelectOption,
   editorPartyForSave,
   editorSubsectionsForDepartment,
@@ -486,23 +485,8 @@ export function Viewer({
     !showParty && isRootTopic && deptHasNestedLayout && nestedUnderEditorSection.length > 0
   const showSupportSubsectionPicker =
     showParty && isRootTopic && targetDeptSubsections.length > 0
-  const noneOptionForSupportSubsection = showSubsectionNoneSelectOption({
-    departmentId: 'support',
-    subsections,
-    nestedSubsectionPicker: true,
-    party,
-  })
-  const noneOptionForFlatSection = showSubsectionNoneSelectOption({
-    departmentId,
-    subsections,
-    nestedSubsectionPicker: false,
-    party,
-  })
-  const noneOptionForNestedSubsection = showSubsectionNoneSelectOption({
-    departmentId,
-    subsections,
-    nestedSubsectionPicker: true,
-    party,
+  const showSubsectionNoneOption = showSubsectionNoneSelectOption({
+    nestedSubsectionPicker: showSupportSubsectionPicker || showNestedSubsectionPicker,
   })
 
   const partySelectOptions = useMemo(
@@ -520,8 +504,7 @@ export function Viewer({
     setParty(next)
     setAttachParent(false)
     setParentId(null)
-    const firstSub = firstSupportSubsectionIdForParty(subsections, next)
-    setSubsectionId(firstSub ?? SUBSECTION_NONE_SELECT_VALUE)
+    setSubsectionId(SUBSECTION_NONE_SELECT_VALUE)
     if (next !== 'additional') {
       setAttachClientLink(false)
       setClientTopicId(null)
@@ -1442,17 +1425,10 @@ export function Viewer({
               </span>
               <select
                 value={subsectionId}
-                required
+                required={!showSubsectionNoneOption}
                 onChange={(e) => setSubsectionId(e.target.value)}
               >
-                {(showSupportSubsectionPicker
-                  ? noneOptionForSupportSubsection ||
-                    !subsectionId.trim()
-                  : showNestedSubsectionPicker
-                    ? noneOptionForNestedSubsection ||
-                      subsectionId === SUBSECTION_NONE_SELECT_VALUE
-                    : noneOptionForFlatSection ||
-                      !subsectionId.trim()) ? (
+                {showSubsectionNoneOption ? (
                   <option value={SUBSECTION_NONE_SELECT_VALUE}>
                     {SUBSECTION_NONE_OPTION_LABEL}
                   </option>

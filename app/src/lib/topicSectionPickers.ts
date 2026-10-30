@@ -104,11 +104,10 @@ export function defaultSubsectionSelectForNewRootTopic(
   departmentId: DepartmentId,
   subsections: DepartmentSubsection[],
   deptSectionId: string | null,
-  party: string,
+  _party: string,
 ): string {
   if (departmentId === 'support') {
-    const first = firstSupportSubsectionIdForParty(subsections, party)
-    return first ?? SUBSECTION_NONE_SELECT_VALUE
+    return SUBSECTION_NONE_SELECT_VALUE
   }
   const section =
     deptSectionId?.trim() ||
@@ -117,36 +116,18 @@ export function defaultSubsectionSelectForNewRootTopic(
   if (!section) return SUBSECTION_NONE_SELECT_VALUE
   if (departmentHasNestedSubsections(subsections, departmentId)) {
     const nested = deptNestedSubsections(subsections, departmentId, section)
-    if (nested.length > 0) return nested[0]!.id
+    if (nested.length > 0) return SUBSECTION_NONE_SELECT_VALUE
     return section
   }
   return section
 }
 
-/**
- * «- без подраздела -» / пустой раздел — только если в отделе нет настроенных разделов
- * (для support — нет подразделов у выбранного party).
- */
+/** «- без подраздела -» в поле «Подраздел» (корень выбранного раздела / party). */
 export function showSubsectionNoneSelectOption(params: {
-  departmentId: DepartmentId
-  subsections: DepartmentSubsection[]
-  /** support-подраздел или подраздел внутри раздела отдела */
+  /** true — показан отдельный select «Подраздел», не плоский «Раздел». */
   nestedSubsectionPicker: boolean
-  party?: string
 }): boolean {
-  if (params.departmentId === 'support') {
-    if (!params.nestedSubsectionPicker) return false
-    const subs = editorSubsectionsForDepartment(
-      params.subsections,
-      'support',
-      params.party ?? 'supplier',
-    )
-    return subs.length === 0
-  }
-  if (departmentHasRootTopicSections(params.departmentId, params.subsections)) {
-    return false
-  }
-  return true
+  return params.nestedSubsectionPicker
 }
 
 /** Значение для выпадающего списка при редактировании корневой темы. */

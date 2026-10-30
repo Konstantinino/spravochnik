@@ -206,13 +206,20 @@ docker compose exec api node dist/import-from-json.js /import/REST-INFO-export
 
 Фраза **«обнови ключевые файлы»** — см. раздел [«Ключевые файлы проекта»](#ключевые-файлы-проекта-handoff-и-агенты) (это **не** «пересобрать весь код», а handoff + инструкции для агентов). Setup — только по явной просьбе.
 
-### Сборка установщика
+### Сборка и публикация установщика
+
+`latest.yml` и `.blockmap` **не в Git** (`app/release/` в gitignore) — их создаёт **electron-builder** рядом с Setup. В GitHub уходит только исходники; на production — через скрипт.
 
 ```powershell
 cd app
 npm run dist:ascii
-# → app/release/REST-INFO-Setup-1.5.1.exe
+# → release/REST-INFO-Setup-x.y.z.exe + latest.yml + .blockmap
+
+# Обязательно для кнопки «Обновить» в клиенте (нужен .env.deploy в корне репо):
+.\scripts\publish-release.ps1
 ```
+
+Агент: после **`dist:ascii` по просьбе пользователя** — если есть `.env.deploy`, **сразу** запустить `publish-release.ps1`; иначе явно напомнить, что без upload `latest.yml` автообновление не заработает (даже если релиз зарегистрирован вручную).
 
 ## Владелец / bootstrap
 
@@ -242,7 +249,7 @@ npm run dist:ascii
 17. **Телефоны в шапке:** блок справа (`supportPhonesUi.ts` → `header`); копирование форматированного номера.
 18. **Разделы тем (настройки):** `canManageTopicSectionsForDepartment` — owner все отделы, admin только `departmentId` пользователя (UI + `admin.ts` + IPC `admin:*-subsection` / `admin:*-support-section`).
 19. **Список «Все»:** `groupRootsByParty` для всех отделов; non-support — плашки `department_subsections`; support — party + подразделы.
-20. **Редактор темы:** корневая тема — обязательный раздел (`topicSectionPickers.ts`, `TopicEditorModal`, `Viewer`); client link только support / party `additional`.
+20. **Редактор темы:** корневая тема — обязательный **раздел** (верхний уровень, все отделы с настроенными разделами); **подраздел** — select только если у выбранного раздела есть записи-подразделы; в select всегда **«- без подраздела -»** (корень раздела); без подразделов в разделе поле скрыто → тема в корне автоматически (`topicSectionPickers.ts`, `TopicEditorModal`, `Viewer`). Client link только support / party `additional`. Имена `showSupportSubsectionPicker` / party-модель — legacy: то же для СПП и др., не только support.
 
 ## Ключевые файлы проекта (handoff и агенты)
 

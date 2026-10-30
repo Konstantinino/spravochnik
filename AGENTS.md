@@ -36,7 +36,7 @@
 
 ## graphify — навигация по коду (не часть runtime)
 
-Graphify **не участвует** в сборке, Docker, API и клиенте. Это карта связей (код + доки) для людей и агентов: `graphify-out/graph.json`, `graph.html`, `GRAPH_REPORT.md`. Папки `graphify-out/20XX-…/` — архивные снимки; `graphify-out/cache/` — локальный кэш AST.
+Graphify **не участвует** в сборке, Docker, API и клиенте. Это карта связей (код + доки) для людей и агентов: только **корень** `graphify-out/` (`graph.json`, `graph.html`, `GRAPH_REPORT.md`). `graphify-out/cache/` и `graphify-out/20XX-…/` — локально, **не в git**.
 
 ### Когда агент **обязан** вспомнить про graphify
 
@@ -60,18 +60,22 @@ graphify query "<краткий вопрос по-русски или по те�
 - Точный поиск: `grep` / `rg` по имени функции, IPC-каналу, `016_unified_party`.
 - Проверка поведения: только чтение кода и при необходимости запуск команд.
 
-**Не** делать `graphify update` после каждого мелкого патча.
+**Не** делать `graphify update` после каждого мелкого патча **во время работы** — только перед **git commit** (см. ниже).
 
 ### Когда обновлять граф в git
 
-После **законченной серии** изменений структуры/связей (новые модули, перенос логики между файлами, крупный рефакторинг):
+**Перед каждым commit** (любые правки в репо), из корня:
 
 ```powershell
 cd spravochnik-repo
 graphify update .
 ```
 
-Затем commit `graphify-out/` (корневые `graph.json`, `graph.html`, `GRAPH_REPORT.md`, при необходимости labels) — **если пользователь просил обновить ключевые файлы** или явно graphify. Hook на `git commit` может пересобрать граф в фоне, но **не коммитит** — не полагаться на него.
+Stage только корень `graphify-out/` (`graph.json`, `graph.html`, `GRAPH_REPORT.md`, `manifest.json`, labels при изменении). **Не** stage `graphify-out/cache/` и `graphify-out/20XX-…/`. Подробно: `.cursor/rules/graphify-commit.mdc`.
+
+Проверка: `Built from commit:` в `GRAPH_REPORT.md` = `git rev-parse HEAD`. Hook на `git commit` может пересобрать граф в фоне, но **не коммитит** — не полагаться на него.
+
+Дополнительно вне commit: после **крупной** серии изменений структуры/связей или по запросу «обнови ключевые файлы» — тот же `graphify update .` + commit по правилу выше.
 
 Опционально: `graphify label` — если communities переименовались и нужны свежие LLM-названия (нужен API key).
 
@@ -268,7 +272,6 @@ npm run dist:ascii
 
 - **`npm run dist`** (Setup) — только если явно просят установщик/десктоп-релиз.
 - **Commit/push по запросу пользователя** после правок UI (`app/src`, `web/src`): перед commit **`cd web && npm run build`**, в git — **`web/dist/`** (иначе production-веб не меняется). См. `.cursor/rules/pc-web-sync.mdc`.
-- Массовое обновление `graphify-out/20XX-…/` архивов — не обязательно.
 - Правка бизнес-логики без запроса «обнови ключевые» — только код задачи.
 
 ## Правила для агента
@@ -277,7 +280,7 @@ npm run dist:ascii
 - Коммиты — только по явной просьбе пользователя; при commit/push UI-изменений — всегда свежий **`web/dist`** в том же commit
 - Работать только в `spravochnik-repo/`
 - Не коммитить `.env`, токены, `REST-INFO-export/`
-- **Graphify:** обзорная задача без адреса в коде → сначала `graphify query`; после крупной серии правок или по запросу «ключевые файлы» → `graphify update .` (см. раздел graphify выше)
+- **Graphify:** обзорная задача без адреса в коде → `graphify query`; **перед каждым commit** → `graphify update .` и stage по `.cursor/rules/graphify-commit.mdc`
 - **«Обнови ключевые файлы»** → раздел [«Ключевые файлы проекта»](#ключевые-файлы-проекта-handoff-и-агенты)
 
 ## Версии

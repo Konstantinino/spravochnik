@@ -288,9 +288,9 @@
     "semantic_hash": "5ab518c19a1fece2b2becb0ae07bf8a2"
   },
   "AGENTS.md": {
-    "mtime": 1793338204.088464,
-    "seen": 1793338212.1250057,
-    "ast_hash": "a3dc7e177f5cf2ec2aaf6879a2563d34",
+    "mtime": 1793342563.478142,
+    "seen": 1793342571.8235774,
+    "ast_hash": "2b622cf5b03dc08a41227cdfbbd76295",
     "semantic_hash": ""
   },
   "README.md": {
@@ -876,9 +876,9 @@
     "semantic_hash": ""
   },
   "app/src/lib/topicSectionPickers.ts": {
-    "mtime": 1793337989.0985022,
-    "seen": 1793338212.1249065,
-    "ast_hash": "6ca92560dbe8474c4e9e503f53466e04",
+    "mtime": 1793338630.5289495,
+    "seen": 1793339214.132871,
+    "ast_hash": "a064600ce5ecc12d356e0142f5136ac1",
     "semantic_hash": ""
   },
   "app/src/components/SupportContactBars.tsx": {

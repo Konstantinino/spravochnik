@@ -1,7 +1,7 @@
 # Graph Report - spravochnik-repo  (2026-10-30)
 
 ## Corpus Check
-- 180 files · ~129,912 words
+- 180 files · ~129,978 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1e3fd6b5`
+- Built from commit: `9858ec8c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

@@ -23,7 +23,9 @@ Thumbs.db
 # Временная ASCII-сборка
 C:/spravochnik-build/
 
-# graphify (локальные артефакты; graphify-out/ коммитится для карты кода)
+# graphify (в git только корень graphify-out/ — актуальная карта под проду)
+graphify-out/cache/
+graphify-out/20*/
 graphify-out/cost.json
 graphify-out/.graphify_python
 

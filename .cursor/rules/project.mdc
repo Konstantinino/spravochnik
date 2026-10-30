@@ -22,6 +22,6 @@ alwaysApply: true
 ## Важно
 
 - Не коммитить: `.env`, `REST-INFO-export/`, токены
-- Коммиты — только по запросу пользователя
+- Коммиты — только по запросу пользователя; перед commit — `graphify update .` и stage graphify по правилу `graphify-commit.mdc`
 - Production deploy — см. `docs/DEPLOY-FOR-PROGRAMMER.md`
 - Bootstrap admin: `kostya.alone18@yandex.ru`

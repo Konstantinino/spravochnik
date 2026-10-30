@@ -1,0 +1,48 @@
+---
+description: Graphify update before git commit; what to stage in graphify-out/
+alwaysApply: true
+---
+
+# Graphify — перед каждым commit
+
+Когда пользователь просит **сделать commit** (или вы готовите commit после правок кода/доков в `spravochnik-repo/`):
+
+## 1. Обновить граф
+
+Из корня репозитория:
+
+```powershell
+cd spravochnik-repo
+graphify update .
+```
+
+Проверка свежести: в `graphify-out/GRAPH_REPORT.md` строка `Built from commit:` должна совпадать с **`git rev-parse HEAD`** (тот же commit, который коммитите). Если не совпадает — повторить `graphify update .` или не коммитить graphify, пока не совпадёт.
+
+## 2. Что stage / commit в `graphify-out/`
+
+**Коммитить (только корень `graphify-out/`, актуальная карта):**
+
+- `graph.json`, `graph.html`, `GRAPH_REPORT.md`, `manifest.json`
+- при изменении после update: `.graphify_labels.json`, `.graphify_labels.json.sig`
+- опционально: `.graphify_analysis.json`, `.graphify_root` — только если изменились и нужны для команды
+
+**Не коммитить и не stage:**
+
+- **`graphify-out/cache/**`** — локальный AST-кэш (не `git add graphify-out/` целиком)
+- **`graphify-out/cost.json`**, **`.graphify_python`** — в `.gitignore`
+- **`graphify-out/20XX-…/`** — локальные бэкапы graphify; в git **не хранить** (`.gitignore`); не stage даже если папка появилась после `graphify update`
+
+Пример безопасного add:
+
+```powershell
+git add graphify-out/graph.json graphify-out/graph.html graphify-out/GRAPH_REPORT.md graphify-out/manifest.json
+# + .graphify_labels.json(.sig) если менялись
+```
+
+Перед commit: `git status graphify-out/` — в staged **не должно** быть `graphify-out/cache/`.
+
+## 3. Согласованность с origin
+
+В одном commit: код + обновлённый **корневой** graphify под тот же HEAD. Не оставлять в origin код на `92dba31`, а graphify на старом `Built from commit`.
+
+`graphify label` (LLM, API) — **не** запускать перед каждым commit; только по запросу пользователя.

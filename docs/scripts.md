@@ -49,16 +49,30 @@ npm run dist:ascii
 ```powershell
 cd app
 npm run dist:ascii
-
-$env:RESTINFO_SERVER_URL = "https://restinfo.example.com"
-$env:RESTINFO_ADMIN_TOKEN = "<JWT админа>"
-node scripts/upload-release.js release/REST-INFO-Setup-1.5.0.exe
+.\scripts\upload-release-login.ps1 release\REST-INFO-Setup-1.5.1.exe
 ```
 
-**Что делает:**
-1. Загружает `.exe`, `latest.yml`, `.blockmap` в `updates/*` (`POST /media/upload`)
+**Вручную (логин + upload):** в папке `release/` рядом с Setup должны лежать **`latest.yml`** и **`REST-INFO-Setup-x.y.z.exe.blockmap`** (создаёт `dist:ascii`). Скрипт `upload-release.js` заливает **все три** файла, затем регистрирует релиз.
+
+```powershell
+$env:Path = "C:\Program Files\nodejs;" + $env:Path
+Set-Location "...\spravochnik-repo\app"
+
+# Если dist:ascii не скопировал yml/blockmap (EPERM на release/) — подтянуть из ASCII-сборки:
+Copy-Item C:\spravochnik-build\app\release\latest.yml release\ -Force
+Copy-Item C:\spravochnik-build\app\release\REST-INFO-Setup-1.5.1.exe.blockmap release\ -Force
+
+$body = '{"email":"...","password":"..."}'
+$r = Invoke-RestMethod -Uri "https://info.r-est.ru/auth/login" -Method POST -ContentType "application/json" -Body $body
+$env:RESTINFO_ADMIN_TOKEN = $r.token
+$env:RESTINFO_SERVER_URL = "https://info.r-est.ru"
+node scripts/upload-release.js release/REST-INFO-Setup-1.5.1.exe
+```
+
+**Что делает `upload-release.js`:**
+1. Загружает `.exe`, `.blockmap`, **`latest.yml` (последним)** в `updates/*` (`POST /media/upload`)
 2. Регистрирует версию (`POST /admin/releases`)
-3. Клиенты с `serverUrl` при **наличии сети** проверяют обновления и скачивают установщик с сервера
+3. Клиент **1.4.0+** смотрит **`/app/updates/latest.yml`** (кнопка «Обновить» в профиле); без yml на сервере — только ручная установка через `/app/update`
 
 Скрипт отправляет заголовок `X-Rest-Info-Client-Version` (версия из имени Setup или `app/package.json`). На сервере загрузка в `updates/*` для admin/owner **не** блокируется проверкой минимальной версии клиента (остальные upload — по-прежнему с 426 для старых клиентов).
 

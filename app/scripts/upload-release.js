@@ -75,22 +75,29 @@ async function uploadUpdateFile(relativeName, localPath) {
 }
 
 async function main() {
+  const blockmap = fileName.replace(/\.exe$/i, '.exe.blockmap')
+  const latestYml = path.join(releaseDir, 'latest.yml')
+  if (!fs.existsSync(latestYml)) {
+    console.error(
+      'Missing latest.yml next to Setup (electron-builder creates it with dist:ascii). Auto-update will not work without it.',
+    )
+    process.exit(1)
+  }
+
   await uploadUpdateFile(fileName, setupPath)
 
-  const extras = ['latest.yml']
-  const blockmap = fileName.replace(/\.exe$/i, '.exe.blockmap')
-  if (fs.existsSync(path.join(releaseDir, blockmap))) {
-    extras.push(blockmap)
+  const blockmapPath = path.join(releaseDir, blockmap)
+  if (!fs.existsSync(blockmapPath)) {
+    console.error(
+      `Missing ${blockmap} next to Setup (electron-builder creates it with dist:ascii).`,
+    )
+    process.exit(1)
   }
 
-  for (const name of extras) {
-    const localPath = path.join(releaseDir, name)
-    if (!fs.existsSync(localPath)) {
-      console.warn(`Skip (not found): ${name}`)
-      continue
-    }
-    await uploadUpdateFile(name, localPath)
-  }
+  await uploadUpdateFile(blockmap, blockmapPath)
+
+  // Upload manifest last so clients never see a new version before the .exe is complete.
+  await uploadUpdateFile('latest.yml', latestYml)
 
   const releaseRes = await fetch(`${serverUrl}/admin/releases`, {
     method: 'POST',
@@ -107,7 +114,9 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`Release ${version} uploaded: ${fileName}`)
+  console.log(
+    `Release ${version} on server: ${fileName}, ${blockmap}, latest.yml (+ app_releases)`,
+  )
 }
 
 main().catch((err) => {

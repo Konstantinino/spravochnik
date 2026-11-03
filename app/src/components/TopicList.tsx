@@ -554,6 +554,7 @@ export function TopicList({
         setCtxMenu(null)
         return
       }
+      if (e.type === 'mousedown' && (e as MouseEvent).button !== 0) return
       const target = e.target
       if (target instanceof Node && ctxMenuRef.current?.contains(target)) return
       setCtxMenu(null)

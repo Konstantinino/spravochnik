@@ -1,7 +1,7 @@
 # Graph Report - spravochnik-repo  (2026-11-03)
 
 ## Corpus Check
-- 180 files · ~130,234 words
+- 180 files · ~130,297 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3b899cb5`
+- Built from commit: `f5d90f35`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -102,20 +102,20 @@
 - reloadDepartmentsConfig
 - electron/media-layout.ts
 - browser-spravochnik.ts
+- DepartmentSubsection
+- support-phones.ts
 - REST INFO — веб-клиент
 - clearDeptSubsectionLocally
 - topicImageRelativePath
 - web/vite.config.ts
 - main.ts
 - pending-media.ts
-- DepartmentSubsection
+- SupportContactSettingsList.tsx
 - lib/fix-media-paths.ts
 - support-emails.ts
-- support-phones.ts
-- session-log.ts
-- SupportContactSettingsList.tsx
-- cleanupTopicFileOrphans
 - sync-base.ts
+- session-log.ts
+- cleanupTopicFileOrphans
 - media-download.ts
 
 ## God Nodes (most connected - your core abstractions)
@@ -459,6 +459,14 @@ Nodes (14): resolveImageOwner(), absFromRoot(), canonicalizeMediaRelativePath(),
 Cohesion: 0.08
 Nodes (28): isUserRole(), parseUserRole(), api, appendLog(), basenameFromPath(), fileExtFromName(), httpUrlFromResolvedMediaSrc(), imageExtFromName() (+20 more)
 
+### Community 103 - "DepartmentSubsection"
+Cohesion: 0.24
+Nodes (10): Search(), SearchProps, SettingsPageProps, TopicEditorModalProps, TopicListProps, Department, DepartmentSubsection, SupportTopicSection (+2 more)
+
+### Community 104 - "support-phones.ts"
+Cohesion: 0.29
+Nodes (10): DEFAULT_SUPPORT_PHONES, formatSupportPhoneDisplay(), normalizeSupportPhoneLines(), normalizeSupportPhones(), normalizeTelDigits(), readSupportPhonesFromDb(), SUPPORT_PHONES_SYNC_KEY, SupportPhoneLine (+2 more)
+
 ### Community 105 - "REST INFO — веб-клиент"
 Cohesion: 0.40
 Nodes (5): Dev (Windows), Production, REST INFO — веб-клиент, Решения, Сборка
@@ -479,9 +487,9 @@ Nodes (70): normalizeServerUrl(), saveWindowBounds(), setServerUrl(), applyClien
 Cohesion: 0.44
 Nodes (10): hasPendingMedia(), normalizeRel(), PendingMedia, pendingPath(), queueMediaRemoteDelete(), queueMediaUpload(), readPendingMedia(), rewritePendingMediaPaths() (+2 more)
 
-### Community 111 - "DepartmentSubsection"
-Cohesion: 0.24
-Nodes (10): Search(), SearchProps, SettingsPageProps, TopicEditorModalProps, TopicListProps, Department, DepartmentSubsection, SupportTopicSection (+2 more)
+### Community 111 - "SupportContactSettingsList.tsx"
+Cohesion: 0.27
+Nodes (5): SupportContactSettingsList(), commitReorder(), handleDrop(), SupportContactSettingsListProps, moveArrayItem()
 
 ### Community 112 - "lib/fix-media-paths.ts"
 Cohesion: 0.29
@@ -491,25 +499,17 @@ Nodes (9): main(), printLine(), DbRow, DiscoveredFile, fixMediaPaths(), FixMedia
 Cohesion: 0.29
 Nodes (10): DEFAULT_SUPPORT_EMAILS, isPlausibleSupportEmail(), normalizeSupportEmail(), normalizeSupportEmailLines(), normalizeSupportEmails(), readSupportEmailsFromDb(), SUPPORT_EMAILS_SYNC_KEY, SupportEmailLine (+2 more)
 
-### Community 114 - "support-phones.ts"
-Cohesion: 0.29
-Nodes (10): DEFAULT_SUPPORT_PHONES, formatSupportPhoneDisplay(), normalizeSupportPhoneLines(), normalizeSupportPhones(), normalizeTelDigits(), readSupportPhonesFromDb(), SUPPORT_PHONES_SYNC_KEY, SupportPhoneLine (+2 more)
+### Community 114 - "sync-base.ts"
+Cohesion: 0.52
+Nodes (6): DATA_FILES, baseDir(), basePathFor(), writeAllGuideBasesFromLocal(), writeBaseFromLocalFile(), writeBaseGuide()
 
 ### Community 115 - "session-log.ts"
 Cohesion: 0.22
 Nodes (8): clearSessionLogs(), entries, getSessionLogs(), listeners, notify(), onSessionLog(), SessionLogEntry, SessionLogLevel
 
-### Community 116 - "SupportContactSettingsList.tsx"
-Cohesion: 0.27
-Nodes (5): SupportContactSettingsList(), commitReorder(), handleDrop(), SupportContactSettingsListProps, moveArrayItem()
-
 ### Community 117 - "cleanupTopicFileOrphans"
 Cohesion: 0.36
 Nodes (9): topicFileRelativePath(), cleanupTopicFileOrphans(), collectAllReferencedFileStoragePaths(), collectReferencedFileBasenames(), extractFileRefsFromMarkdown(), filesBasename(), isReferencedFileOnDisk(), isReservedMediaBasename() (+1 more)
-
-### Community 119 - "sync-base.ts"
-Cohesion: 0.52
-Nodes (6): DATA_FILES, baseDir(), basePathFor(), writeAllGuideBasesFromLocal(), writeBaseFromLocalFile(), writeBaseGuide()
 
 ### Community 120 - "media-download.ts"
 Cohesion: 0.70
@@ -523,7 +523,7 @@ Nodes (4): downloadMediaImage(), IMAGE_EXTENSIONS, localPathFromSpravochnikUrl()
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `GuideItem` connect `data.ts` to `TopicList.tsx`, `App.tsx`, `Viewer.tsx`, `browser-spravochnik.ts`, `TopicEditorModal.tsx`, `main.ts`, `DepartmentSubsection`, `guide-store.ts`, `textInsert.ts`, `types.ts`?**
+- **Why does `GuideItem` connect `data.ts` to `TopicList.tsx`, `App.tsx`, `Viewer.tsx`, `browser-spravochnik.ts`, `DepartmentSubsection`, `TopicEditorModal.tsx`, `main.ts`, `guide-store.ts`, `textInsert.ts`, `types.ts`?**
   _High betweenness centrality (0.030) - this node is a cross-community bridge._
 - **Why does `Viewer()` connect `Viewer` to `App.tsx`, `Viewer.tsx`, `data.ts`, `TopicEditorModal.tsx`, `textInsert.ts`, `usePreserveTextareaFocus`?**
   _High betweenness centrality (0.024) - this node is a cross-community bridge._

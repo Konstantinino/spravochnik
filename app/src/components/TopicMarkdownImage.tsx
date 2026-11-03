@@ -157,8 +157,16 @@ export function TopicMarkdownImage({
         setLoadFailed(false)
       }}
       onError={() => void handleError()}
-      onClick={() => onOpenLightbox(openSrc)}
-      onContextMenu={(e) => onContextMenu(e, markdownKey, openSrc, downloadSrc)}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onOpenLightbox(openSrc)
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onContextMenu(e, markdownKey, openSrc, downloadSrc)
+      }}
     />
   )
 }

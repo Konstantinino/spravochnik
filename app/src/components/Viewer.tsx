@@ -265,6 +265,8 @@ export function Viewer({
   const [findCount, setFindCount] = useState(0)
   const findInputRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const imgMenuRef = useRef<HTMLDivElement>(null)
+  const topicMenuRef = useRef<HTMLDivElement>(null)
 
   const [imgMenu, setImgMenu] = useState<ImgMenuState | null>(null)
   const [topicMenu, setTopicMenu] = useState<{ x: number; y: number } | null>(null)
@@ -430,7 +432,13 @@ export function Viewer({
 
   useEffect(() => {
     if (!imgMenu && !topicMenu) return
-    function close() {
+    function close(e: MouseEvent) {
+      if (e.button !== 0) return
+      const target = e.target
+      if (target instanceof Node) {
+        if (imgMenuRef.current?.contains(target)) return
+        if (topicMenuRef.current?.contains(target)) return
+      }
       setImgMenu(null)
       setTopicMenu(null)
     }
@@ -1097,9 +1105,13 @@ export function Viewer({
         <a
           href={href}
           className="viewer-topic-link"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => {
             e.preventDefault()
             onNavigateToTopic(topicId)
+          }}
+          onAuxClick={(e) => {
+            if (e.button === 1) e.preventDefault()
           }}
         >
           {linkChildren}
@@ -1596,6 +1608,7 @@ export function Viewer({
 
       {topicMenu && (
         <div
+          ref={topicMenuRef}
           className="image-ctx-menu"
           style={{ left: topicMenu.x, top: topicMenu.y }}
           role="menu"
@@ -1614,6 +1627,7 @@ export function Viewer({
 
       {imgMenu && (
         <div
+          ref={imgMenuRef}
           className="image-ctx-menu"
           style={{ left: imgMenu.x, top: imgMenu.y }}
           role="menu"

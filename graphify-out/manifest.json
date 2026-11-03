@@ -168,15 +168,15 @@
     "semantic_hash": ""
   },
   "app/src/components/TopicList.tsx": {
-    "mtime": 1793189298.933076,
-    "seen": 1793189304.5001385,
-    "ast_hash": "ce89626e568a9c9dcc9d6b146994563f",
+    "mtime": 1793704585.4773695,
+    "seen": 1793705181.356825,
+    "ast_hash": "e5288ec85f7ec6900187a4c8e6100698",
     "semantic_hash": ""
   },
   "app/src/components/Viewer.tsx": {
-    "mtime": 1793704307.36641,
-    "seen": 1793704351.2777019,
-    "ast_hash": "08953b4896752fe0445f0cc22c8ee93c",
+    "mtime": 1793704585.0352426,
+    "seen": 1793705181.3568292,
+    "ast_hash": "1429e8f2f2353fcb02752d932545ad31",
     "semantic_hash": ""
   },
   "app/src/lib/data.ts": {
@@ -744,9 +744,9 @@
     "semantic_hash": ""
   },
   "app/src/components/TopicMarkdownImage.tsx": {
-    "mtime": 1793704306.359677,
-    "seen": 1793704351.277699,
-    "ast_hash": "a4241e4773181de106092f47d8fea849",
+    "mtime": 1793704582.9633393,
+    "seen": 1793705181.3568268,
+    "ast_hash": "d1d2db920101e7143fb2a7fd5a226fab",
     "semantic_hash": ""
   },
   "app/src/lib/supportPhones.ts": {

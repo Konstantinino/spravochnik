@@ -14,7 +14,12 @@ interface TopicMarkdownImageProps {
   departmentId: DepartmentId
   displayMap: ImageDisplayMap | undefined
   onOpenLightbox: (resolvedSrc: string) => void
-  onContextMenu: (e: React.MouseEvent, markdownKey: string, resolvedSrc: string) => void
+  onContextMenu: (
+    e: React.MouseEvent,
+    markdownKey: string,
+    displaySrc: string,
+    downloadSrc: string,
+  ) => void
 }
 
 export function TopicMarkdownImage({
@@ -125,6 +130,9 @@ export function TopicMarkdownImage({
 
   const showScale = scaled && loaded && !loadFailed
   const openSrc = displaySrc || protocolSrc
+  const downloadSrc = isRemote
+    ? rawSrc.trim()
+    : mediaSrcFromMarkdownUrl(storagePath ?? displayRef, topicId, departmentId)
 
   return (
     <img
@@ -150,7 +158,7 @@ export function TopicMarkdownImage({
       }}
       onError={() => void handleError()}
       onClick={() => onOpenLightbox(openSrc)}
-      onContextMenu={(e) => onContextMenu(e, markdownKey, openSrc)}
+      onContextMenu={(e) => onContextMenu(e, markdownKey, openSrc, downloadSrc)}
     />
   )
 }

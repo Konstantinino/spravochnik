@@ -75,6 +75,71 @@ function resolveMediaHttpUrl(
   return mediaAbsoluteUrl(cleaned)
 }
 
+function basenameFromPath(pathLike: string): string {
+  const cleaned = pathLike.replace(/\\/g, '/').split(/[?#]/)[0] ?? ''
+  const parts = cleaned.split('/').filter(Boolean)
+  return parts[parts.length - 1] ?? ''
+}
+
+function suggestedDownloadFilename(resolvedSrc: string, suggestedName?: string): string {
+  const fromArg = suggestedName?.trim()
+  if (fromArg && !fromArg.includes('..')) {
+    const base = basenameFromPath(fromArg)
+    if (base) return base
+  }
+  if (resolvedSrc.startsWith('spravochnik://')) {
+    const base = basenameFromPath(resolvedSrc.replace(/^spravochnik:\/\//, ''))
+    if (base) return base
+  }
+  if (resolvedSrc.startsWith('media/')) {
+    const base = basenameFromPath(resolvedSrc)
+    if (base) return base
+  }
+  try {
+    const base = basenameFromPath(new URL(resolvedSrc).pathname)
+    if (base) return base
+  } catch {
+    /* ignore */
+  }
+  return 'download'
+}
+
+function httpUrlFromResolvedMediaSrc(resolvedSrc: string): string {
+  const trimmed = resolvedSrc.trim()
+  if (trimmed.startsWith('spravochnik://')) {
+    return mediaAbsoluteUrl(trimmed.replace(/^spravochnik:\/\//, ''))
+  }
+  if (trimmed.startsWith('media/')) {
+    return mediaAbsoluteUrl(trimmed)
+  }
+  return trimmed
+}
+
+/** Same-origin or blob — cookie auth works on navigation; must trigger click before await (user gesture). */
+function canTriggerDirectBrowserDownload(href: string): boolean {
+  if (href.startsWith('blob:')) return true
+  if (href.startsWith('/')) return true
+  try {
+    return new URL(href, window.location.href).origin === window.location.origin
+  } catch {
+    return false
+  }
+}
+
+function triggerBrowserDownload(href: string, filename: string, revokeObjectUrl?: string): void {
+  const a = document.createElement('a')
+  a.href = href
+  a.download = filename
+  a.rel = 'noopener'
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  window.setTimeout(() => {
+    a.remove()
+    if (revokeObjectUrl) URL.revokeObjectURL(revokeObjectUrl)
+  }, 60_000)
+}
+
 const REORDER_CLIENT_STORAGE_KEY = 'rest-info-topic-order-client-id'
 
 function getTopicOrderClientId(): string {
@@ -458,19 +523,29 @@ const api: SpravochnikApi = {
   },
 
   downloadMediaImage: async (resolvedSrc, suggestedName) => {
+    const trimmed = resolvedSrc.trim()
+    if (!trimmed) {
+      return { ok: false, error: 'Пустой адрес файла' }
+    }
+    const filename = suggestedDownloadFilename(trimmed, suggestedName)
+
+    if (trimmed.startsWith('blob:')) {
+      triggerBrowserDownload(trimmed, filename)
+      return { ok: true }
+    }
+
+    const httpUrl = httpUrlFromResolvedMediaSrc(trimmed)
+    if (canTriggerDirectBrowserDownload(httpUrl)) {
+      triggerBrowserDownload(httpUrl, filename)
+      return { ok: true }
+    }
+
     try {
-      let url = resolvedSrc
-      if (url.startsWith('spravochnik://')) {
-        url = mediaAbsoluteUrl(url.replace(/^spravochnik:\/\//, ''))
-      }
-      const res = await fetch(url, { credentials: 'include' })
+      const res = await fetch(httpUrl, { credentials: 'include' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const blob = await res.blob()
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = suggestedName ?? 'image'
-      a.click()
-      URL.revokeObjectURL(a.href)
+      const blobUrl = URL.createObjectURL(blob)
+      triggerBrowserDownload(blobUrl, filename, blobUrl)
       return { ok: true }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'Ошибка скачивания' }

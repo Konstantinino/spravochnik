@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "app/src/components/Viewer.tsx": {
-    "mtime": 1793337980.1187515,
-    "seen": 1793338212.1248786,
-    "ast_hash": "e69d7750e325d3fa392f61c668c65087",
+    "mtime": 1793704307.36641,
+    "seen": 1793704351.2777019,
+    "ast_hash": "08953b4896752fe0445f0cc22c8ee93c",
     "semantic_hash": ""
   },
   "app/src/lib/data.ts": {
@@ -216,8 +216,8 @@
     "semantic_hash": "e49407587c24719df40c18ab01af2168"
   },
   "app/src/lib/textInsert.ts": {
-    "mtime": 1793336769.4322326,
-    "seen": 1793338212.124903,
+    "mtime": 1793704233.7901633,
+    "seen": 1793704351.2777255,
     "ast_hash": "aeb7d723130fdd765f5bee8e68181f02",
     "semantic_hash": ""
   },
@@ -726,14 +726,14 @@
     "semantic_hash": ""
   },
   "server/migrations/006_topic_party_additional.sql": {
-    "mtime": 1793336769.4322326,
-    "seen": 1793338212.124935,
+    "mtime": 1793704233.7901633,
+    "seen": 1793704351.2777565,
     "ast_hash": "981df17f2405bc9ac79b2aa9a958982b",
     "semantic_hash": ""
   },
   "server/migrations/007_topic_order_locks.sql": {
-    "mtime": 1793336769.433233,
-    "seen": 1793338212.1249359,
+    "mtime": 1793704233.7901633,
+    "seen": 1793704351.2777576,
     "ast_hash": "0cf063646302479ea42d9e98ea62865f",
     "semantic_hash": ""
   },
@@ -744,9 +744,9 @@
     "semantic_hash": ""
   },
   "app/src/components/TopicMarkdownImage.tsx": {
-    "mtime": 1793093609.7346587,
-    "seen": 1793093647.1964934,
-    "ast_hash": "966c86a2dd5bbc46bbbe1f11697d97fb",
+    "mtime": 1793704306.359677,
+    "seen": 1793704351.277699,
+    "ast_hash": "a4241e4773181de106092f47d8fea849",
     "semantic_hash": ""
   },
   "app/src/lib/supportPhones.ts": {
@@ -942,9 +942,9 @@
     "semantic_hash": ""
   },
   "web/src/platform/browser-spravochnik.ts": {
-    "mtime": 1793186084.6511688,
-    "seen": 1793186429.4347887,
-    "ast_hash": "eabf8534e00bdb1913f68daf6a683a8a",
+    "mtime": 1793704302.9962108,
+    "seen": 1793704351.2778134,
+    "ast_hash": "4a3a3a8c2583c6d279f492abc9e7d1e4",
     "semantic_hash": ""
   },
   "web/src/platform/guide-store.ts": {

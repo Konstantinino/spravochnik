@@ -121,6 +121,7 @@ type ImgMenuState = {
   y: number
   markdownKey: string
   resolvedSrc: string
+  downloadSrc: string
 }
 
 type ScaleEditorState = {
@@ -929,7 +930,12 @@ export function Viewer({
     setFindIndex((i) => (i + dir + findCount) % findCount)
   }
 
-  function openImageMenu(e: React.MouseEvent, markdownKey: string, resolvedSrc: string) {
+  function openImageMenu(
+    e: React.MouseEvent,
+    markdownKey: string,
+    displaySrc: string,
+    downloadSrc: string,
+  ) {
     e.preventDefault()
     e.stopPropagation()
     setTopicMenu(null)
@@ -937,7 +943,8 @@ export function Viewer({
       x: e.clientX,
       y: e.clientY,
       markdownKey: normalizeImageDisplayKey(markdownKey),
-      resolvedSrc,
+      resolvedSrc: displaySrc,
+      downloadSrc,
     })
   }
 
@@ -1656,7 +1663,7 @@ export function Viewer({
             type="button"
             className="image-ctx-menu__item"
             role="menuitem"
-            onClick={() => void downloadImage(imgMenu.resolvedSrc)}
+            onClick={() => void downloadImage(imgMenu.downloadSrc)}
           >
             Скачать
           </button>

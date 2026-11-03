@@ -84,7 +84,9 @@ export function TopicMarkdownImage({
     })()
     return () => {
       cancelled = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
+      if (objectUrl && !__REST_INFO_WEB__) {
+        URL.revokeObjectURL(objectUrl)
+      }
     }
   }, [rawSrc, topicId, departmentId, storagePath, isRemote, protocolSrc])
 

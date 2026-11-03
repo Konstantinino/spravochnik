@@ -42,8 +42,13 @@ import {
 } from './guide-store'
 import { getStoredServerUrl, mediaAbsoluteUrl, setStoredServerUrl } from './server-url'
 
+/** Session cache: remounting markdown images must not refetch/revoke blobs (avoids flash + scroll jump). */
+const mediaObjectUrlCache = new Map<string, string>()
+
 /** API media requires auth; <img src> cannot rely on cookies — load via fetch + blob URL. */
 async function fetchMediaObjectUrl(httpPath: string): Promise<string> {
+  const cached = mediaObjectUrlCache.get(httpPath)
+  if (cached) return cached
   const res = await fetch(httpPath, { credentials: 'include' })
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
@@ -52,7 +57,9 @@ async function fetchMediaObjectUrl(httpPath: string): Promise<string> {
   if (!blob.size) {
     throw new Error('Empty media response')
   }
-  return URL.createObjectURL(blob)
+  const objectUrl = URL.createObjectURL(blob)
+  mediaObjectUrlCache.set(httpPath, objectUrl)
+  return objectUrl
 }
 
 function resolveMediaHttpUrl(

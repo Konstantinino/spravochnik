@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
@@ -35,14 +35,11 @@ import { applyFindHighlights, clearFindHighlights } from '../lib/findHighlight'
 import { releaseStaleFocus, restoreAppFocus } from '../lib/restoreAppFocus'
 import {
   IMAGE_SCALE_DEFAULT,
-  getImageScaleForTopicImage,
-  normalizeImageDisplayKey,
   withImageScale,
 } from '../lib/imageDisplay'
 import {
   formatFileMarkdownLink,
   formatSharedImageMarkdown,
-  formatTopicMarkdownLink,
   parseImageRefFromClipboard,
   markdownForDisplay,
   markdownForEdit,
@@ -76,6 +73,7 @@ import { usePreserveTextareaFocus } from '../hooks/usePreserveTextareaFocus'
 import { useTopicLinkPicker } from '../hooks/useTopicLinkPicker'
 import { ImageScaleDialog } from './ImageScaleDialog'
 import { TopicMarkdownImage } from './TopicMarkdownImage'
+import { ViewerOverlays, type ViewerOverlayHandle } from './ViewerOverlays'
 import { ParentTopicField } from './ParentTopicField'
 import { TopicLinkPicker } from './TopicLinkPicker'
 
@@ -114,14 +112,6 @@ interface ViewerProps {
   supportSections?: SupportTopicSection[]
   subsections?: DepartmentSubsection[]
   sidebarListFilter?: TopicViewFilter
-}
-
-type ImgMenuState = {
-  x: number
-  y: number
-  markdownKey: string
-  resolvedSrc: string
-  downloadSrc: string
 }
 
 type ScaleEditorState = {
@@ -265,15 +255,13 @@ export function Viewer({
   const [findCount, setFindCount] = useState(0)
   const findInputRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
-  const imgMenuRef = useRef<HTMLDivElement>(null)
-  const topicMenuRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<ViewerOverlayHandle>(null)
 
-  const [imgMenu, setImgMenu] = useState<ImgMenuState | null>(null)
-  const [topicMenu, setTopicMenu] = useState<{ x: number; y: number } | null>(null)
   const [scaleEditor, setScaleEditor] = useState<ScaleEditorState | null>(null)
   const [localDisplay, setLocalDisplay] = useState<ImageDisplayMap | undefined>(undefined)
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
   const displayDirtyRef = useRef(false)
+
+  const remarkPlugins = useMemo(() => [remarkGfm], [])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -331,11 +319,9 @@ export function Viewer({
     setFindQuery('')
     setFindIndex(0)
     setFindCount(0)
-    setImgMenu(null)
-    setTopicMenu(null)
+    overlayRef.current?.closeAll()
     clearPicker()
     setScaleEditor(null)
-    setLightboxSrc(null)
     displayDirtyRef.current = false
     if (!item) {
       setLocalDisplay(undefined)
@@ -378,7 +364,7 @@ export function Viewer({
 
   useEffect(() => {
     if (!editing) {
-      setTopicMenu(null)
+      overlayRef.current?.closeMenus()
       clearPicker()
     }
   }, [editing, clearPicker])
@@ -429,22 +415,6 @@ export function Viewer({
     if (!item || displayDirtyRef.current || scaleEditor) return
     setLocalDisplay(item.image_display)
   }, [item?.image_display, item, scaleEditor])
-
-  useEffect(() => {
-    if (!imgMenu && !topicMenu) return
-    function close(e: MouseEvent) {
-      if (e.button !== 0) return
-      const target = e.target
-      if (target instanceof Node) {
-        if (imgMenuRef.current?.contains(target)) return
-        if (topicMenuRef.current?.contains(target)) return
-      }
-      setImgMenu(null)
-      setTopicMenu(null)
-    }
-    window.addEventListener('mousedown', close)
-    return () => window.removeEventListener('mousedown', close)
-  }, [imgMenu, topicMenu])
 
   const showParty = departmentUsesPartyTopicModel(departmentId, subsections, supportSections)
 
@@ -628,16 +598,12 @@ export function Viewer({
         closeFind()
         return
       }
-      if (lightboxSrc) {
-        setLightboxSrc(null)
+      if (overlayRef.current?.hasLightbox()) {
+        overlayRef.current.closeLightbox()
         return
       }
-      if (imgMenu) {
-        setImgMenu(null)
-        return
-      }
-      if (topicMenu) {
-        setTopicMenu(null)
+      if (overlayRef.current?.hasContextMenu()) {
+        overlayRef.current.closeMenus()
         return
       }
       if (editing) {
@@ -659,15 +625,201 @@ export function Viewer({
     linkPicker,
     scaleEditor,
     findOpen,
-    lightboxSrc,
-    imgMenu,
-    topicMenu,
     editing,
     canGoBack,
     onBack,
     onClose,
     item,
   ])
+
+  const handleOpenLightbox = useCallback((src: string) => {
+    overlayRef.current?.openLightbox(src)
+  }, [])
+
+  const handleImageContextMenu = useCallback(
+    (e: React.MouseEvent, markdownKey: string, displaySrc: string, downloadSrc: string) => {
+      overlayRef.current?.openImageMenu(e, markdownKey, displaySrc, downloadSrc)
+    },
+    [],
+  )
+
+  const handleDownloadImage = useCallback(async (resolvedSrc: string, suggestedName?: string) => {
+    overlayRef.current?.closeMenus()
+    setError(null)
+    try {
+      const result = await window.spravochnik.downloadMediaImage(resolvedSrc, suggestedName)
+      if (result.error && !result.canceled) {
+        setError(result.error)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось скачать файл')
+    }
+  }, [])
+
+  const handleRequestScaleEditor = useCallback((payload: ScaleEditorState) => {
+    setScaleEditor(payload)
+  }, [])
+
+  const openAttachedFile = useCallback(
+    async (resolvedSrc: string, displayName: string) => {
+      setError(null)
+      try {
+        const result = await window.spravochnik.openMediaFile(resolvedSrc)
+        if (result.ok) return
+        await handleDownloadImage(resolvedSrc, displayName)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Не удалось открыть файл')
+      }
+    },
+    [handleDownloadImage],
+  )
+
+  const contextTopicId = item?.id ?? 0
+
+  const markdownComponents = useMemo(
+    () => ({
+      img: ({ src, alt }: { src?: string; alt?: string }) => {
+        const raw = src ?? ''
+        if (parseFileAttachmentHref(raw)) {
+          const parsed = parseFileAttachmentHref(raw)
+          const name = (alt || '').trim() || parsed?.storedName || 'Файл'
+          const resolved = mediaSrcFromMarkdownUrl(raw, contextTopicId, departmentId)
+          const ext = fileExtLabel(name)
+          return (
+            <span className="topic-file">
+              <button
+                type="button"
+                className="topic-file__main"
+                title={`Открыть «${name}»`}
+                onClick={() => void openAttachedFile(resolved, name)}
+              >
+                <span className="topic-file__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="22" height="22">
+                    <path
+                      fill="currentColor"
+                      d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 2.5 3.5 3.5H14zM8 13h8v1.5H8zm0 3h8v1.5H8zM8 10h4v1.5H8z"
+                    />
+                  </svg>
+                </span>
+                <span className="topic-file__meta">
+                  <span className="topic-file__name">{name}</span>
+                  <span className="topic-file__ext">{ext}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="topic-file__download"
+                title="Скачать"
+                aria-label={`Скачать «${name}»`}
+                onClick={() => void handleDownloadImage(resolved, name)}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M12 3v10.2l3.3-3.3 1.4 1.4L12 16.4 7.3 11.3l1.4-1.4 3.3 3.3V3zM5 19h14v2H5z"
+                  />
+                </svg>
+              </button>
+            </span>
+          )
+        }
+        if (!isAllowedMarkdownImageSrc(raw)) {
+          return null
+        }
+        return (
+          <TopicMarkdownImage
+            rawSrc={raw}
+            alt={alt || ''}
+            topicId={contextTopicId}
+            departmentId={departmentId}
+            displayMap={localDisplay}
+            onOpenLightbox={handleOpenLightbox}
+            onContextMenu={handleImageContextMenu}
+          />
+        )
+      },
+      a: ({ href, children: linkChildren }: { href?: string; children?: ReactNode }) => {
+        if (parseFileAttachmentHref(href)) {
+          const parsed = parseFileAttachmentHref(href)
+          const name = nodeText(linkChildren).trim() || parsed?.storedName || 'Файл'
+          const resolved = mediaSrcFromMarkdownUrl(href ?? '', contextTopicId, departmentId)
+          const ext = fileExtLabel(name)
+          return (
+            <span className="topic-file">
+              <button
+                type="button"
+                className="topic-file__main"
+                title={`Открыть «${name}»`}
+                onClick={() => void openAttachedFile(resolved, name)}
+              >
+                <span className="topic-file__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="22" height="22">
+                    <path
+                      fill="currentColor"
+                      d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 2.5 3.5 3.5H14zM8 13h8v1.5H8zm0 3h8v1.5H8zM8 10h4v1.5H8z"
+                    />
+                  </svg>
+                </span>
+                <span className="topic-file__meta">
+                  <span className="topic-file__name">{name}</span>
+                  <span className="topic-file__ext">{ext}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="topic-file__download"
+                title="Скачать"
+                aria-label={`Скачать «${name}»`}
+                onClick={() => void handleDownloadImage(resolved, name)}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M12 3v10.2l3.3-3.3 1.4 1.4L12 16.4 7.3 11.3l1.4-1.4 3.3 3.3V3zM5 19h14v2H5z"
+                  />
+                </svg>
+              </button>
+            </span>
+          )
+        }
+        const topicId = parseTopicLinkHref(href)
+        if (topicId != null && allItems.some((entry) => entry.id === topicId)) {
+          return (
+            <a
+              href={href}
+              className="viewer-topic-link"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.preventDefault()
+                onNavigateToTopic(topicId)
+              }}
+              onAuxClick={(e) => {
+                if (e.button === 1) e.preventDefault()
+              }}
+            >
+              {linkChildren}
+            </a>
+          )
+        }
+        return (
+          <a href={href} target="_blank" rel="noreferrer">
+            {linkChildren}
+          </a>
+        )
+      },
+    }),
+    [
+      allItems,
+      contextTopicId,
+      departmentId,
+      handleDownloadImage,
+      handleImageContextMenu,
+      handleOpenLightbox,
+      localDisplay,
+      onNavigateToTopic,
+      openAttachedFile,
+    ],
+  )
 
   if (!item) {
     return (
@@ -938,38 +1090,6 @@ export function Viewer({
     setFindIndex((i) => (i + dir + findCount) % findCount)
   }
 
-  function openImageMenu(
-    e: React.MouseEvent,
-    markdownKey: string,
-    displaySrc: string,
-    downloadSrc: string,
-  ) {
-    e.preventDefault()
-    e.stopPropagation()
-    setTopicMenu(null)
-    setImgMenu({
-      x: e.clientX,
-      y: e.clientY,
-      markdownKey: normalizeImageDisplayKey(markdownKey),
-      resolvedSrc: displaySrc,
-      downloadSrc,
-    })
-  }
-
-  function openTopicMenu(e: React.MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation()
-    const rect = e.currentTarget.getBoundingClientRect()
-    setImgMenu(null)
-    setTopicMenu((prev) =>
-      prev
-        ? null
-        : {
-            x: Math.min(rect.left, window.innerWidth - 230),
-            y: rect.bottom + 4,
-          },
-    )
-  }
-
   function handleAnswerCopy(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const ta = e.currentTarget
     const selected = ta.value.slice(ta.selectionStart, ta.selectionEnd)
@@ -997,72 +1117,6 @@ export function Viewer({
         el.remove()
       }
     })()
-  }
-
-  async function copyImageLink(rawSrc: string) {
-    setImgMenu(null)
-    const canonical = /^https?:\/\//i.test(rawSrc.trim())
-      ? rawSrc.trim()
-      : await window.spravochnik.resolveImageStorageRef({
-          departmentId,
-          ref: rawSrc,
-          contextTopicId: current.id,
-        })
-    const snippet = formatSharedImageMarkdown(canonical)
-    try {
-      await navigator.clipboard.writeText(snippet)
-    } catch {
-      const el = document.createElement('textarea')
-      el.value = snippet
-      document.body.appendChild(el)
-      el.select()
-      document.execCommand('copy')
-      el.remove()
-    }
-  }
-
-  async function copyTopicLink() {
-    setTopicMenu(null)
-    const snippet = formatTopicMarkdownLink(current.id, current.question)
-    try {
-      await navigator.clipboard.writeText(snippet)
-    } catch {
-      const el = document.createElement('textarea')
-      el.value = snippet
-      document.body.appendChild(el)
-      el.select()
-      document.execCommand('copy')
-      el.remove()
-    }
-  }
-
-  function openLightbox(resolvedSrc: string) {
-    setLightboxSrc(resolvedSrc)
-    setImgMenu(null)
-  }
-
-  async function downloadImage(resolvedSrc: string, suggestedName?: string) {
-    setImgMenu(null)
-    setError(null)
-    try {
-      const result = await window.spravochnik.downloadMediaImage(resolvedSrc, suggestedName)
-      if (result.error && !result.canceled) {
-        setError(result.error)
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось скачать файл')
-    }
-  }
-
-  async function openAttachedFile(resolvedSrc: string, displayName: string) {
-    setError(null)
-    try {
-      const result = await window.spravochnik.openMediaFile(resolvedSrc)
-      if (result.ok) return
-      await downloadImage(resolvedSrc, displayName)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось открыть файл')
-    }
   }
 
   function applyDraftScale(nextScale: number) {
@@ -1093,94 +1147,6 @@ export function Viewer({
     setLocalDisplay(map)
     setScaleEditor(null)
     await persistDisplay(map)
-  }
-
-  function renderTopicLink(href: string | undefined, linkChildren: ReactNode) {
-    if (parseFileAttachmentHref(href)) {
-      return renderTopicFile(href ?? '', nodeText(linkChildren))
-    }
-    const topicId = parseTopicLinkHref(href)
-    if (topicId != null && allItems.some((entry) => entry.id === topicId)) {
-      return (
-        <a
-          href={href}
-          className="viewer-topic-link"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.preventDefault()
-            onNavigateToTopic(topicId)
-          }}
-          onAuxClick={(e) => {
-            if (e.button === 1) e.preventDefault()
-          }}
-        >
-          {linkChildren}
-        </a>
-      )
-    }
-    return (
-      <a href={href} target="_blank" rel="noreferrer">
-        {linkChildren}
-      </a>
-    )
-  }
-
-  function renderTopicFile(rawHref: string, displayName: string) {
-    const parsed = parseFileAttachmentHref(rawHref)
-    const name = displayName.trim() || parsed?.storedName || 'Файл'
-    const resolved = mediaSrcFromMarkdownUrl(rawHref, current.id, departmentId)
-    const ext = fileExtLabel(name)
-    return (
-      <span className="topic-file">
-        <button
-          type="button"
-          className="topic-file__main"
-          title={`Открыть «${name}»`}
-          onClick={() => void openAttachedFile(resolved, name)}
-        >
-          <span className="topic-file__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="22" height="22">
-              <path
-                fill="currentColor"
-                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 2.5 3.5 3.5H14zM8 13h8v1.5H8zm0 3h8v1.5H8zM8 10h4v1.5H8z"
-              />
-            </svg>
-          </span>
-          <span className="topic-file__meta">
-            <span className="topic-file__name">{name}</span>
-            <span className="topic-file__ext">{ext}</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          className="topic-file__download"
-          title="Скачать"
-          aria-label={`Скачать «${name}»`}
-          onClick={() => void downloadImage(resolved, name)}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path
-              fill="currentColor"
-              d="M12 3v10.2l3.3-3.3 1.4 1.4L12 16.4 7.3 11.3l1.4-1.4 3.3 3.3V3zM5 19h14v2H5z"
-            />
-          </svg>
-        </button>
-      </span>
-    )
-  }
-
-  function renderTopicImage(rawSrc: string, alt: string) {
-    return (
-      <TopicMarkdownImage
-        rawSrc={rawSrc}
-        alt={alt}
-        topicId={current.id}
-        departmentId={departmentId}
-        displayMap={localDisplay}
-        onOpenLightbox={openLightbox}
-        onContextMenu={openImageMenu}
-      />
-    )
   }
 
   return (
@@ -1322,9 +1288,8 @@ export function Viewer({
             title="Действия с темой"
             aria-label="Действия с темой"
             aria-haspopup="menu"
-            aria-expanded={topicMenu != null}
             onMouseDown={(e) => e.stopPropagation()}
-            onClick={openTopicMenu}
+            onClick={(e) => overlayRef.current?.openTopicMenu(e)}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <circle cx="12" cy="5" r="2" fill="currentColor" />
@@ -1567,22 +1532,7 @@ export function Viewer({
 
           <div className="viewer__body markdown-body" ref={bodyRef}>
           {current.answer?.trim() ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                img: ({ src, alt }) => {
-                  const raw = src ?? ''
-                  if (parseFileAttachmentHref(raw)) {
-                    return renderTopicFile(raw, alt || '')
-                  }
-                  if (!isAllowedMarkdownImageSrc(raw)) {
-                    return null
-                  }
-                  return renderTopicImage(raw, alt || '')
-                },
-                a: ({ href, children: linkChildren }) => renderTopicLink(href, linkChildren),
-              }}
-            >
+            <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
               {markdownForDisplay(current.answer)}
             </ReactMarkdown>
           ) : (
@@ -1596,7 +1546,17 @@ export function Viewer({
           {localLegacy.length > 0 && (
             <div className="viewer__legacy-photos">
               {localLegacy.map((src) => (
-                <span key={src}>{renderTopicImage(src, '')}</span>
+                <span key={src}>
+                  <TopicMarkdownImage
+                    rawSrc={src}
+                    alt=""
+                    topicId={current.id}
+                    departmentId={departmentId}
+                    displayMap={localDisplay}
+                    onOpenLightbox={handleOpenLightbox}
+                    onContextMenu={handleImageContextMenu}
+                  />
+                </span>
               ))}
             </div>
           )}
@@ -1606,83 +1566,15 @@ export function Viewer({
         </article>
       </div>
 
-      {topicMenu && (
-        <div
-          ref={topicMenuRef}
-          className="image-ctx-menu"
-          style={{ left: topicMenu.x, top: topicMenu.y }}
-          role="menu"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            className="image-ctx-menu__item"
-            role="menuitem"
-            onClick={() => void copyTopicLink()}
-          >
-            Скопировать ссылку
-          </button>
-        </div>
-      )}
-
-      {imgMenu && (
-        <div
-          ref={imgMenuRef}
-          className="image-ctx-menu"
-          style={{ left: imgMenu.x, top: imgMenu.y }}
-          role="menu"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {canEdit && (
-            <button
-              type="button"
-              className="image-ctx-menu__item"
-              role="menuitem"
-              onClick={() => {
-                const scale = getImageScaleForTopicImage(
-                  localDisplay,
-                  imgMenu.markdownKey,
-                  current.id,
-                  departmentId,
-                )
-                setScaleEditor({
-                  markdownKey: imgMenu.markdownKey,
-                  left: Math.min(imgMenu.x, window.innerWidth - 280),
-                  top: Math.min(imgMenu.y, window.innerHeight - 160),
-                  draftScale: scale,
-                })
-                setImgMenu(null)
-              }}
-            >
-              Регулировка размера
-            </button>
-          )}
-          <button
-            type="button"
-            className="image-ctx-menu__item"
-            role="menuitem"
-            onClick={() => void copyImageLink(imgMenu.markdownKey)}
-          >
-            Скопировать ссылку на фото
-          </button>
-          <button
-            type="button"
-            className="image-ctx-menu__item"
-            role="menuitem"
-            onClick={() => openLightbox(imgMenu.resolvedSrc)}
-          >
-            Открыть фото на весь экран
-          </button>
-          <button
-            type="button"
-            className="image-ctx-menu__item"
-            role="menuitem"
-            onClick={() => void downloadImage(imgMenu.downloadSrc)}
-          >
-            Скачать
-          </button>
-        </div>
-      )}
+      <ViewerOverlays
+        ref={overlayRef}
+        canEdit={canEdit}
+        topic={current}
+        departmentId={departmentId}
+        localDisplay={localDisplay}
+        onRequestScaleEditor={handleRequestScaleEditor}
+        onDownloadImage={(src, name) => void handleDownloadImage(src, name)}
+      />
 
       {scaleEditor && canEdit && (
         <ImageScaleDialog
@@ -1765,30 +1657,6 @@ export function Viewer({
         </div>
       )}
 
-      {lightboxSrc && (
-        <div
-          className="image-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Просмотр фото"
-          onClick={() => setLightboxSrc(null)}
-        >
-          <button
-            type="button"
-            className="image-lightbox__close"
-            onClick={() => setLightboxSrc(null)}
-            aria-label="Закрыть"
-          >
-            ✕
-          </button>
-          <img
-            src={lightboxSrc}
-            alt=""
-            className="image-lightbox__img"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
     </div>
   )
 }

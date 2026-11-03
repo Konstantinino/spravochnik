@@ -72,7 +72,7 @@ ON CONFLICT (id) DO UPDATE SET
   is_archive_archived = false,
   label = 'Потерянные';
 
--- Архивные темы не-support → bucket «Архивированные».
+-- Архивные темы не-support -> bucket «Архивированные».
 UPDATE topics t
 SET subsection_id = t.department_id || '__archive__archived'
 WHERE t.archived = true

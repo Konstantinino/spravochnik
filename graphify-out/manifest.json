@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "app/src/components/Viewer.tsx": {
-    "mtime": 1793704585.0352426,
-    "seen": 1793705181.3568292,
-    "ast_hash": "1429e8f2f2353fcb02752d932545ad31",
+    "mtime": 1793705540.234796,
+    "seen": 1793705731.4641294,
+    "ast_hash": "e06b4db40fc7397b1f90388cc2ebc8a6",
     "semantic_hash": ""
   },
   "app/src/lib/data.ts": {
@@ -744,9 +744,9 @@
     "semantic_hash": ""
   },
   "app/src/components/TopicMarkdownImage.tsx": {
-    "mtime": 1793704582.9633393,
-    "seen": 1793705181.3568268,
-    "ast_hash": "d1d2db920101e7143fb2a7fd5a226fab",
+    "mtime": 1793705546.6418827,
+    "seen": 1793705731.464126,
+    "ast_hash": "93e0842538452294eab143c680a3e52f",
     "semantic_hash": ""
   },
   "app/src/lib/supportPhones.ts": {
@@ -930,9 +930,9 @@
     "semantic_hash": ""
   },
   "web/src/main.tsx": {
-    "mtime": 1793076381.6947882,
-    "seen": 1793076387.2424245,
-    "ast_hash": "2a2e4b217742159aa4afe9bb99d07bef",
+    "mtime": 1793705547.4448404,
+    "seen": 1793705731.464246,
+    "ast_hash": "fb95d70fc21e5fb1ce1f84da82a2ff5c",
     "semantic_hash": ""
   },
   "web/src/platform/api-client.ts": {
@@ -942,9 +942,9 @@
     "semantic_hash": ""
   },
   "web/src/platform/browser-spravochnik.ts": {
-    "mtime": 1793704302.9962108,
-    "seen": 1793704351.2778134,
-    "ast_hash": "4a3a3a8c2583c6d279f492abc9e7d1e4",
+    "mtime": 1793705547.14222,
+    "seen": 1793705731.4642484,
+    "ast_hash": "2e07fbb5e829e93342d5eb613df2fbf0",
     "semantic_hash": ""
   },
   "web/src/platform/guide-store.ts": {
@@ -1092,9 +1092,9 @@
     "semantic_hash": ""
   },
   "server/migrations/016_unified_party_and_dept_archive.sql": {
-    "mtime": 1793188993.5192373,
-    "seen": 1793189201.0315948,
-    "ast_hash": "7f5b07f0d12e875120fd1f6e205ad861",
+    "mtime": 1793705573.4574726,
+    "seen": 1793705731.4642007,
+    "ast_hash": "1b21475c5530532ed4defcb2457ce826",
     "semantic_hash": ""
   },
   "server/src/lib/department-archive.ts": {
@@ -1125,6 +1125,12 @@
     "mtime": 1793249324.395169,
     "seen": 1793338212.1248538,
     "ast_hash": "ce647b420055b6c4bca51f692ae66de7",
+    "semantic_hash": ""
+  },
+  "app/src/components/ViewerOverlays.tsx": {
+    "mtime": 1793705506.7248445,
+    "seen": 1793705731.464131,
+    "ast_hash": "86b3b46df858fe059c0ffd424fd128e7",
     "semantic_hash": ""
   }
 }
